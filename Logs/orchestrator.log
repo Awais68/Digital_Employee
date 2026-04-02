@@ -244,3 +244,427 @@
 [2026-04-02 23:40:15] [INFO    ] 📭 No approved files to process
 [2026-04-02 23:40:15] [INFO    ] 📈 Metrics saved
 [2026-04-02 23:40:15] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 23:58:26] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 23:58:26] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 23:58:26] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 23:58:26] [INFO    ] 📂 Directory ready: done
+[2026-04-02 23:58:26] [INFO    ] 📂 Directory ready: rejected
+[2026-04-02 23:58:26] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 23:58:26] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 23:58:26] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 23:58:26] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 23:58:26] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 23:58:26] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 23:58:26] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-04-02 23:58:26] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-04-02 23:58:26] [INFO    ] ✅ Processing approval workflow...
+[2026-04-02 23:58:26] [INFO    ] ✅ Found 2 approved file(s) to process
+[2026-04-02 23:58:26] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:58:26] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_234015.md
+[2026-04-02 23:58:26] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_234015.md - Could not extract email data from approval file
+[2026-04-02 23:58:26] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:58:26] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_233511.md
+[2026-04-02 23:58:26] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_233511.md - Could not extract email data from approval file
+[2026-04-02 23:58:26] [INFO    ] ❌ Found 2 rejected file(s) to archive
+[2026-04-02 23:58:26] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:58:26] [WARNING ] 🗑️ Archiving Rejected: REPLY_20260402_222713_email_you_have_1_notification_about_hassan_and_ai_employ.md
+[2026-04-02 23:58:26] [INFO    ] 📁 Rejected file archived: REJECTED_REPLY_20260402_222713_email_you_have_1_notification_about_hassan_and_ai_employ.md
+[2026-04-02 23:58:26] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:58:26] [WARNING ] 🗑️ Archiving Rejected: REPLY_test_saas_email.md
+[2026-04-02 23:58:26] [INFO    ] 📁 Rejected file archived: REJECTED_REPLY_test_saas_email.md
+[2026-04-02 23:58:26] [INFO    ] ⏳ Found 1 pending approval(s)
+[2026-04-02 23:58:26] [INFO    ] ⏳ File remains in Pending_Approval: APPROVAL_TEST_REPLY.md
+[2026-04-02 23:58:26] [INFO    ] ⏳ `APPROVAL_TEST_REPLY.md` - Pending review since 2026-04-02 23:57
+[2026-04-02 23:59:15] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 23:59:15] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 23:59:15] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 23:59:15] [INFO    ] 📂 Directory ready: done
+[2026-04-02 23:59:15] [INFO    ] 📂 Directory ready: rejected
+[2026-04-02 23:59:15] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 23:59:15] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 23:59:15] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 23:59:15] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 23:59:15] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 23:59:15] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 23:59:15] [INFO    ] 📥 Found 1 file(s) to process
+[2026-04-02 23:59:15] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:59:15] [INFO    ] Processing: 20260402_235852_email_security_alert.md
+[2026-04-02 23:59:15] [INFO    ] 📄 Read 1490 characters
+[2026-04-02 23:59:15] [INFO    ] 🎯 Detected task type: Email
+[2026-04-02 23:59:15] [INFO    ] 📧 Email detected: Security alert
+[2026-04-02 23:59:15] [SUCCESS ] ✅ Created plan: PLAN_20260402_235852_email_security_alert.md
+[2026-04-02 23:59:15] [SUCCESS ] ✅ Created approval file: REPLY_20260402_235852_email_security_alert.md
+[2026-04-02 23:59:15] [SUCCESS ] ✅ Created approval request: REPLY_20260402_235852_email_security_alert.md
+[2026-04-02 23:59:15] [SUCCESS ] 📦 Moved: 20260402_235852_email_security_alert.md → Done/
+[2026-04-02 23:59:15] [SUCCESS ] ✓ Completed: 20260402_235852_email_security_alert.md (0.00s)
+[2026-04-02 23:59:15] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-02 23:59:15] [INFO    ] ✅ Processing approval workflow...
+[2026-04-02 23:59:15] [INFO    ] ✅ Found 2 approved file(s) to process
+[2026-04-02 23:59:15] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:59:15] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_234015.md
+[2026-04-02 23:59:15] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_234015.md - Could not extract email data from approval file
+[2026-04-02 23:59:15] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:59:15] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_233511.md
+[2026-04-02 23:59:15] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_233511.md - Could not extract email data from approval file
+[2026-04-02 23:59:15] [INFO    ] 📭 No rejected files to archive
+[2026-04-02 23:59:15] [INFO    ] ⏳ Found 2 pending approval(s)
+[2026-04-02 23:59:15] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260402_235852_email_security_alert.md
+[2026-04-02 23:59:15] [INFO    ] ⏳ File remains in Pending_Approval: APPROVAL_TEST_REPLY.md
+[2026-04-02 23:59:15] [INFO    ] ⏳ `REPLY_20260402_235852_email_security_alert.md` - Pending review since 2026-04-02 23:59
+[2026-04-02 23:59:15] [INFO    ] ⏳ `APPROVAL_TEST_REPLY.md` - Pending review since 2026-04-02 23:57
+[2026-04-02 23:59:15] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-02 23:59:15] [INFO    ] 📊 Approval Workflow Results:
+[2026-04-02 23:59:15] [INFO    ]    ✅ Emails Sent: 0
+[2026-04-02 23:59:15] [INFO    ]    ❌ Rejected: 0
+[2026-04-02 23:59:15] [INFO    ]    ⏳ Pending: 2
+[2026-04-02 23:59:15] [INFO    ]    🐛 Errors: 2
+[2026-04-02 23:59:15] [INFO    ] 📈 Metrics saved
+[2026-04-02 23:59:15] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-03 00:07:37] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-03 00:07:37] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-03 00:07:37] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-03 00:07:37] [INFO    ] 📂 Directory ready: done
+[2026-04-03 00:07:37] [INFO    ] 📂 Directory ready: rejected
+[2026-04-03 00:07:37] [INFO    ] 📂 Directory ready: plans
+[2026-04-03 00:07:37] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-03 00:07:37] [INFO    ] 📂 Directory ready: approved
+[2026-04-03 00:07:37] [INFO    ] 📂 Directory ready: logs
+[2026-04-03 00:07:37] [INFO    ] 📂 Directory ready: metrics
+[2026-04-03 00:07:37] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-03 00:07:37] [INFO    ] 📥 Found 1 file(s) to process
+[2026-04-03 00:07:37] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:07:37] [INFO    ] Processing: 20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:07:37] [INFO    ] 📄 Read 1103 characters
+[2026-04-03 00:07:37] [INFO    ] 🎯 Detected task type: Email
+[2026-04-03 00:07:37] [INFO    ] 📧 Email detected: Re: Agent Testing
+[2026-04-03 00:07:37] [SUCCESS ] ✅ Created plan: PLAN_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:07:37] [SUCCESS ] ✅ Created approval file: REPLY_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:07:37] [SUCCESS ] ✅ Created approval request: REPLY_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:07:37] [SUCCESS ] 📦 Moved: 20260403_000457_email_re_agent_testing.md → Done/
+[2026-04-03 00:07:37] [SUCCESS ] ✓ Completed: 20260403_000457_email_re_agent_testing.md (0.00s)
+[2026-04-03 00:07:37] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:07:37] [INFO    ] ✅ Processing approval workflow...
+[2026-04-03 00:07:37] [INFO    ] ✅ Found 3 approved file(s) to process
+[2026-04-03 00:07:37] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:07:37] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_234015.md
+[2026-04-03 00:07:37] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_234015.md - Could not extract email data from approval file
+[2026-04-03 00:07:37] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:07:37] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_233511.md
+[2026-04-03 00:07:37] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_233511.md - Could not extract email data from approval file
+[2026-04-03 00:07:37] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:07:37] [SUCCESS ] 🎉 Processing Approved: APPROVAL_TEST_REPLY.md
+[2026-04-03 00:07:37] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:07:37] [INFO    ]    To: noreply@notifications.example.com
+[2026-04-03 00:07:37] [INFO    ]    Subject: AI Powered SaaS Required
+[2026-04-03 00:07:37] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:07:37] [ERROR   ] ❌ Failed to process: APPROVAL_TEST_REPLY.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:07:37] [INFO    ] 📭 No rejected files to archive
+[2026-04-03 00:07:37] [INFO    ] ⏳ Found 2 pending approval(s)
+[2026-04-03 00:07:37] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:07:37] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260402_235852_email_security_alert.md
+[2026-04-03 00:07:37] [INFO    ] ⏳ `REPLY_20260403_000457_email_re_agent_testing.md` - Pending review since 2026-04-03 00:07
+[2026-04-03 00:07:37] [INFO    ] ⏳ `REPLY_20260402_235852_email_security_alert.md` - Pending review since 2026-04-02 23:59
+[2026-04-03 00:07:37] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:07:37] [INFO    ] 📊 Approval Workflow Results:
+[2026-04-03 00:07:37] [INFO    ]    ✅ Emails Sent: 0
+[2026-04-03 00:07:37] [INFO    ]    ❌ Rejected: 0
+[2026-04-03 00:07:37] [INFO    ]    ⏳ Pending: 2
+[2026-04-03 00:07:37] [INFO    ]    🐛 Errors: 3
+[2026-04-03 00:07:37] [INFO    ] 📈 Metrics saved
+[2026-04-03 00:07:37] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-03 00:17:35] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-03 00:17:35] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-03 00:17:35] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-03 00:17:35] [INFO    ] 📂 Directory ready: done
+[2026-04-03 00:17:35] [INFO    ] 📂 Directory ready: rejected
+[2026-04-03 00:17:35] [INFO    ] 📂 Directory ready: plans
+[2026-04-03 00:17:35] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-03 00:17:35] [INFO    ] 📂 Directory ready: approved
+[2026-04-03 00:17:35] [INFO    ] 📂 Directory ready: logs
+[2026-04-03 00:17:35] [INFO    ] 📂 Directory ready: metrics
+[2026-04-03 00:17:35] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-03 00:17:35] [INFO    ] 📥 Found 2 file(s) to process
+[2026-04-03 00:17:35] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:17:35] [INFO    ] Processing: test_silver_linkedin.md
+[2026-04-03 00:17:35] [INFO    ] 📄 Read 620 characters
+[2026-04-03 00:17:35] [INFO    ] 🎯 Detected task type: Linkedin
+[2026-04-03 00:17:35] [INFO    ] 📱 LinkedIn trigger detected - generating post draft...
+[2026-04-03 00:17:35] [SUCCESS ] ✅ Created LinkedIn post draft: LINKEDIN_POST_20260403_001735.md
+[2026-04-03 00:17:35] [INFO    ] 📍 Saved to: /Pending_Approval/LINKEDIN_POST_20260403_001735.md
+[2026-04-03 00:17:35] [SUCCESS ] 📦 Moved: test_silver_linkedin.md → Done/
+[2026-04-03 00:17:35] [SUCCESS ] ✓ Completed: test_silver_linkedin.md (0.00s)
+[2026-04-03 00:17:35] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:17:35] [INFO    ] Processing: test_silver_email.md
+[2026-04-03 00:17:35] [INFO    ] 📄 Read 828 characters
+[2026-04-03 00:17:35] [INFO    ] 🎯 Detected task type: Email
+[2026-04-03 00:17:35] [INFO    ] 📧 Email detected: Silver Tier Test - AI Integration Meeting
+[2026-04-03 00:17:35] [SUCCESS ] ✅ Created plan: PLAN_test_silver_email.md
+[2026-04-03 00:17:35] [SUCCESS ] ✅ Created approval file: REPLY_test_silver_email.md
+[2026-04-03 00:17:35] [SUCCESS ] ✅ Created approval request: REPLY_test_silver_email.md
+[2026-04-03 00:17:35] [SUCCESS ] 📦 Moved: test_silver_email.md → Done/
+[2026-04-03 00:17:35] [SUCCESS ] ✓ Completed: test_silver_email.md (0.00s)
+[2026-04-03 00:17:35] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:17:35] [INFO    ] 📱 LinkedIn posts generated: 1
+[2026-04-03 00:17:35] [INFO    ] ✅ Processing approval workflow...
+[2026-04-03 00:17:35] [INFO    ] ✅ Found 3 approved file(s) to process
+[2026-04-03 00:17:35] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:17:35] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_234015.md
+[2026-04-03 00:17:35] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_234015.md - Could not extract email data from approval file
+[2026-04-03 00:17:35] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:17:35] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_233511.md
+[2026-04-03 00:17:35] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_233511.md - Could not extract email data from approval file
+[2026-04-03 00:17:35] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:17:35] [SUCCESS ] 🎉 Processing Approved: APPROVAL_TEST_REPLY.md
+[2026-04-03 00:17:35] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:17:35] [INFO    ]    To: noreply@notifications.example.com
+[2026-04-03 00:17:35] [INFO    ]    Subject: AI Powered SaaS Required
+[2026-04-03 00:17:35] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:17:35] [ERROR   ] ❌ Failed to process: APPROVAL_TEST_REPLY.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:17:35] [INFO    ] 📭 No rejected files to archive
+[2026-04-03 00:17:35] [INFO    ] ⏳ Found 4 pending approval(s)
+[2026-04-03 00:17:35] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:17:35] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260402_235852_email_security_alert.md
+[2026-04-03 00:17:35] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_test_silver_email.md
+[2026-04-03 00:17:35] [INFO    ] ⏳ File remains in Pending_Approval: LINKEDIN_POST_20260403_001735.md
+[2026-04-03 00:17:35] [INFO    ] ⏳ `REPLY_20260403_000457_email_re_agent_testing.md` - Pending review since 2026-04-03 00:07
+[2026-04-03 00:17:35] [INFO    ] ⏳ `REPLY_20260402_235852_email_security_alert.md` - Pending review since 2026-04-02 23:59
+[2026-04-03 00:17:35] [INFO    ] ⏳ `REPLY_test_silver_email.md` - Pending review since 2026-04-03 00:17
+[2026-04-03 00:17:35] [INFO    ] ⏳ `LINKEDIN_POST_20260403_001735.md` - Pending review since 2026-04-03 00:17
+[2026-04-03 00:17:35] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:17:35] [INFO    ] 📊 Approval Workflow Results:
+[2026-04-03 00:17:35] [INFO    ]    ✅ Emails Sent: 0
+[2026-04-03 00:17:35] [INFO    ]    ❌ Rejected: 0
+[2026-04-03 00:17:35] [INFO    ]    ⏳ Pending: 4
+[2026-04-03 00:17:35] [INFO    ]    🐛 Errors: 3
+[2026-04-03 00:17:35] [INFO    ] 📈 Metrics saved
+[2026-04-03 00:17:35] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-03 00:18:17] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-03 00:18:17] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-03 00:18:17] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-03 00:18:17] [INFO    ] 📂 Directory ready: done
+[2026-04-03 00:18:17] [INFO    ] 📂 Directory ready: rejected
+[2026-04-03 00:18:17] [INFO    ] 📂 Directory ready: plans
+[2026-04-03 00:18:17] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-03 00:18:17] [INFO    ] 📂 Directory ready: approved
+[2026-04-03 00:18:17] [INFO    ] 📂 Directory ready: logs
+[2026-04-03 00:18:17] [INFO    ] 📂 Directory ready: metrics
+[2026-04-03 00:18:17] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-03 00:18:17] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-04-03 00:18:17] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-04-03 00:18:17] [INFO    ] ✅ Processing approval workflow...
+[2026-04-03 00:18:17] [INFO    ] ✅ Found 4 approved file(s) to process
+[2026-04-03 00:18:17] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:18:17] [SUCCESS ] 🎉 Processing Approved: REPLY_test_silver_email.md
+[2026-04-03 00:18:17] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:18:17] [INFO    ]    To: "John Smith" <john.smith@example.com>
+[2026-04-03 00:18:17] [INFO    ]    Subject: Silver Tier Test - AI Integration Meeting
+[2026-04-03 00:18:17] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:18:17] [ERROR   ] ❌ Failed to process: REPLY_test_silver_email.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:18:17] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:18:17] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_234015.md
+[2026-04-03 00:18:17] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_234015.md - Could not extract email data from approval file
+[2026-04-03 00:18:17] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:18:17] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_233511.md
+[2026-04-03 00:18:17] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_233511.md - Could not extract email data from approval file
+[2026-04-03 00:18:17] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:18:17] [SUCCESS ] 🎉 Processing Approved: APPROVAL_TEST_REPLY.md
+[2026-04-03 00:18:17] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:18:17] [INFO    ]    To: noreply@notifications.example.com
+[2026-04-03 00:18:17] [INFO    ]    Subject: AI Powered SaaS Required
+[2026-04-03 00:18:17] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:18:17] [ERROR   ] ❌ Failed to process: APPROVAL_TEST_REPLY.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:18:17] [INFO    ] 📭 No rejected files to archive
+[2026-04-03 00:18:17] [INFO    ] ⏳ Found 3 pending approval(s)
+[2026-04-03 00:18:17] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:18:17] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260402_235852_email_security_alert.md
+[2026-04-03 00:18:17] [INFO    ] ⏳ File remains in Pending_Approval: LINKEDIN_POST_20260403_001735.md
+[2026-04-03 00:18:17] [INFO    ] ⏳ `REPLY_20260403_000457_email_re_agent_testing.md` - Pending review since 2026-04-03 00:07
+[2026-04-03 00:18:17] [INFO    ] ⏳ `REPLY_20260402_235852_email_security_alert.md` - Pending review since 2026-04-02 23:59
+[2026-04-03 00:18:17] [INFO    ] ⏳ `LINKEDIN_POST_20260403_001735.md` - Pending review since 2026-04-03 00:17
+[2026-04-03 00:18:17] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:18:17] [INFO    ] 📊 Approval Workflow Results:
+[2026-04-03 00:18:17] [INFO    ]    ✅ Emails Sent: 0
+[2026-04-03 00:18:17] [INFO    ]    ❌ Rejected: 0
+[2026-04-03 00:18:17] [INFO    ]    ⏳ Pending: 3
+[2026-04-03 00:18:17] [INFO    ]    🐛 Errors: 4
+[2026-04-03 00:18:17] [INFO    ] 📈 Metrics saved
+[2026-04-03 00:18:17] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-03 00:35:49] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-03 00:35:49] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-03 00:35:49] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-03 00:35:49] [INFO    ] 📂 Directory ready: done
+[2026-04-03 00:35:49] [INFO    ] 📂 Directory ready: rejected
+[2026-04-03 00:35:49] [INFO    ] 📂 Directory ready: plans
+[2026-04-03 00:35:49] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-03 00:35:49] [INFO    ] 📂 Directory ready: approved
+[2026-04-03 00:35:49] [INFO    ] 📂 Directory ready: logs
+[2026-04-03 00:35:49] [INFO    ] 📂 Directory ready: metrics
+[2026-04-03 00:35:49] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-03 00:35:49] [INFO    ] 📥 Found 1 file(s) to process
+[2026-04-03 00:35:49] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:35:49] [INFO    ] Processing: 20260403_003519_email_test_reply.md
+[2026-04-03 00:35:49] [INFO    ] 📄 Read 794 characters
+[2026-04-03 00:35:49] [INFO    ] 🎯 Detected task type: Email
+[2026-04-03 00:35:49] [INFO    ] 📧 Email detected: Test Reply
+[2026-04-03 00:35:49] [SUCCESS ] ✅ Created plan: PLAN_20260403_003519_email_test_reply.md
+[2026-04-03 00:35:49] [SUCCESS ] ✅ Created approval file: REPLY_20260403_003519_email_test_reply.md
+[2026-04-03 00:35:49] [SUCCESS ] ✅ Created approval request: REPLY_20260403_003519_email_test_reply.md
+[2026-04-03 00:35:49] [SUCCESS ] 📦 Moved: 20260403_003519_email_test_reply.md → Done/
+[2026-04-03 00:35:49] [SUCCESS ] ✓ Completed: 20260403_003519_email_test_reply.md (0.00s)
+[2026-04-03 00:35:49] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:35:49] [INFO    ] ✅ Processing approval workflow...
+[2026-04-03 00:35:49] [INFO    ] ✅ Found 4 approved file(s) to process
+[2026-04-03 00:35:49] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:35:49] [SUCCESS ] 🎉 Processing Approved: REPLY_test_silver_email.md
+[2026-04-03 00:35:49] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:35:49] [INFO    ]    To: "John Smith" <john.smith@example.com>
+[2026-04-03 00:35:49] [INFO    ]    Subject: Silver Tier Test - AI Integration Meeting
+[2026-04-03 00:35:49] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:35:49] [ERROR   ] ❌ Failed to process: REPLY_test_silver_email.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:35:49] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:35:49] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_234015.md
+[2026-04-03 00:35:49] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_234015.md - Could not extract email data from approval file
+[2026-04-03 00:35:49] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:35:49] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_233511.md
+[2026-04-03 00:35:49] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_233511.md - Could not extract email data from approval file
+[2026-04-03 00:35:49] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:35:49] [SUCCESS ] 🎉 Processing Approved: APPROVAL_TEST_REPLY.md
+[2026-04-03 00:35:49] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:35:49] [INFO    ]    To: noreply@notifications.example.com
+[2026-04-03 00:35:49] [INFO    ]    Subject: AI Powered SaaS Required
+[2026-04-03 00:35:49] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:35:49] [ERROR   ] ❌ Failed to process: APPROVAL_TEST_REPLY.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:35:49] [INFO    ] 📭 No rejected files to archive
+[2026-04-03 00:35:49] [INFO    ] ⏳ Found 4 pending approval(s)
+[2026-04-03 00:35:49] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:35:49] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260403_003519_email_test_reply.md
+[2026-04-03 00:35:49] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260402_235852_email_security_alert.md
+[2026-04-03 00:35:49] [INFO    ] ⏳ File remains in Pending_Approval: LINKEDIN_POST_20260403_001735.md
+[2026-04-03 00:35:49] [INFO    ] ⏳ `REPLY_20260403_000457_email_re_agent_testing.md` - Pending review since 2026-04-03 00:07
+[2026-04-03 00:35:49] [INFO    ] ⏳ `REPLY_20260403_003519_email_test_reply.md` - Pending review since 2026-04-03 00:35
+[2026-04-03 00:35:49] [INFO    ] ⏳ `REPLY_20260402_235852_email_security_alert.md` - Pending review since 2026-04-02 23:59
+[2026-04-03 00:35:49] [INFO    ] ⏳ `LINKEDIN_POST_20260403_001735.md` - Pending review since 2026-04-03 00:17
+[2026-04-03 00:35:49] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:35:49] [INFO    ] 📊 Approval Workflow Results:
+[2026-04-03 00:35:49] [INFO    ]    ✅ Emails Sent: 0
+[2026-04-03 00:35:49] [INFO    ]    ❌ Rejected: 0
+[2026-04-03 00:35:49] [INFO    ]    ⏳ Pending: 4
+[2026-04-03 00:35:49] [INFO    ]    🐛 Errors: 4
+[2026-04-03 00:35:49] [INFO    ] 📈 Metrics saved
+[2026-04-03 00:35:49] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-03 00:37:10] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-03 00:37:10] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-03 00:37:10] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-03 00:37:10] [INFO    ] 📂 Directory ready: done
+[2026-04-03 00:37:10] [INFO    ] 📂 Directory ready: rejected
+[2026-04-03 00:37:10] [INFO    ] 📂 Directory ready: plans
+[2026-04-03 00:37:10] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-03 00:37:10] [INFO    ] 📂 Directory ready: approved
+[2026-04-03 00:37:10] [INFO    ] 📂 Directory ready: logs
+[2026-04-03 00:37:10] [INFO    ] 📂 Directory ready: metrics
+[2026-04-03 00:37:10] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-03 00:37:10] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-04-03 00:37:10] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-04-03 00:37:10] [INFO    ] ✅ Processing approval workflow...
+[2026-04-03 00:37:10] [INFO    ] ✅ Found 5 approved file(s) to process
+[2026-04-03 00:37:10] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:37:10] [SUCCESS ] 🎉 Processing Approved: REPLY_20260403_003519_email_test_reply.md
+[2026-04-03 00:37:10] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:37:10] [INFO    ]    To: funter boy <bfunter87@gmail.com>
+[2026-04-03 00:37:10] [INFO    ]    Subject: Test Reply
+[2026-04-03 00:37:10] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:37:10] [ERROR   ] ❌ Failed to process: REPLY_20260403_003519_email_test_reply.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:37:10] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:37:10] [SUCCESS ] 🎉 Processing Approved: REPLY_test_silver_email.md
+[2026-04-03 00:37:10] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:37:10] [INFO    ]    To: "John Smith" <john.smith@example.com>
+[2026-04-03 00:37:10] [INFO    ]    Subject: Silver Tier Test - AI Integration Meeting
+[2026-04-03 00:37:10] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:37:10] [ERROR   ] ❌ Failed to process: REPLY_test_silver_email.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:37:10] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:37:10] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_234015.md
+[2026-04-03 00:37:10] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_234015.md - Could not extract email data from approval file
+[2026-04-03 00:37:10] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:37:10] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_233511.md
+[2026-04-03 00:37:10] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_233511.md - Could not extract email data from approval file
+[2026-04-03 00:37:10] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:37:10] [SUCCESS ] 🎉 Processing Approved: APPROVAL_TEST_REPLY.md
+[2026-04-03 00:37:10] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:37:10] [INFO    ]    To: noreply@notifications.example.com
+[2026-04-03 00:37:10] [INFO    ]    Subject: AI Powered SaaS Required
+[2026-04-03 00:37:10] [ERROR   ] ❌ Email send failed: Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:37:10] [ERROR   ] ❌ Failed to process: APPROVAL_TEST_REPLY.md - Email credentials not configured. Set SENDER_EMAIL and EMAIL_PASSWORD in .env
+[2026-04-03 00:37:10] [INFO    ] 📭 No rejected files to archive
+[2026-04-03 00:37:10] [INFO    ] ⏳ Found 3 pending approval(s)
+[2026-04-03 00:37:10] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:37:10] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260402_235852_email_security_alert.md
+[2026-04-03 00:37:10] [INFO    ] ⏳ File remains in Pending_Approval: LINKEDIN_POST_20260403_001735.md
+[2026-04-03 00:37:10] [INFO    ] ⏳ `REPLY_20260403_000457_email_re_agent_testing.md` - Pending review since 2026-04-03 00:07
+[2026-04-03 00:37:10] [INFO    ] ⏳ `REPLY_20260402_235852_email_security_alert.md` - Pending review since 2026-04-02 23:59
+[2026-04-03 00:37:10] [INFO    ] ⏳ `LINKEDIN_POST_20260403_001735.md` - Pending review since 2026-04-03 00:17
+[2026-04-03 00:37:10] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:37:10] [INFO    ] 📊 Approval Workflow Results:
+[2026-04-03 00:37:10] [INFO    ]    ✅ Emails Sent: 0
+[2026-04-03 00:37:10] [INFO    ]    ❌ Rejected: 0
+[2026-04-03 00:37:10] [INFO    ]    ⏳ Pending: 3
+[2026-04-03 00:37:10] [INFO    ]    🐛 Errors: 5
+[2026-04-03 00:37:10] [INFO    ] 📈 Metrics saved
+[2026-04-03 00:37:10] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-03 00:44:32] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-03 00:44:32] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-03 00:44:32] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-03 00:44:32] [INFO    ] 📂 Directory ready: done
+[2026-04-03 00:44:32] [INFO    ] 📂 Directory ready: rejected
+[2026-04-03 00:44:32] [INFO    ] 📂 Directory ready: plans
+[2026-04-03 00:44:32] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-03 00:44:32] [INFO    ] 📂 Directory ready: approved
+[2026-04-03 00:44:32] [INFO    ] 📂 Directory ready: logs
+[2026-04-03 00:44:32] [INFO    ] 📂 Directory ready: metrics
+[2026-04-03 00:44:32] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-03 00:44:32] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-04-03 00:44:32] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-04-03 00:44:32] [INFO    ] ✅ Processing approval workflow...
+[2026-04-03 00:44:32] [INFO    ] ✅ Found 5 approved file(s) to process
+[2026-04-03 00:44:32] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:44:32] [SUCCESS ] 🎉 Processing Approved: REPLY_20260403_003519_email_test_reply.md
+[2026-04-03 00:44:32] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:44:32] [INFO    ]    To: funter boy <bfunter87@gmail.com>
+[2026-04-03 00:44:32] [INFO    ]    Subject: Test Reply
+[2026-04-03 00:44:36] [SUCCESS ] ✅ Email sent successfully to funter boy <bfunter87@gmail.com>
+[2026-04-03 00:44:36] [SUCCESS ] 📦 Moved: REPLY_20260403_003519_email_test_reply.md → Done/
+[2026-04-03 00:44:36] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:44:36] [SUCCESS ] 🎉 Processing Approved: REPLY_test_silver_email.md
+[2026-04-03 00:44:36] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:44:36] [INFO    ]    To: "John Smith" <john.smith@example.com>
+[2026-04-03 00:44:36] [INFO    ]    Subject: Silver Tier Test - AI Integration Meeting
+[2026-04-03 00:44:39] [SUCCESS ] ✅ Email sent successfully to "John Smith" <john.smith@example.com>
+[2026-04-03 00:44:39] [SUCCESS ] 📦 Moved: REPLY_test_silver_email.md → Done/
+[2026-04-03 00:44:39] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:44:39] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_234015.md
+[2026-04-03 00:44:39] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_234015.md - Could not extract email data from approval file
+[2026-04-03 00:44:39] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:44:39] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260402_233511.md
+[2026-04-03 00:44:39] [ERROR   ] ❌ Failed to process: LINKEDIN_POST_20260402_233511.md - Could not extract email data from approval file
+[2026-04-03 00:44:39] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-03 00:44:39] [SUCCESS ] 🎉 Processing Approved: APPROVAL_TEST_REPLY.md
+[2026-04-03 00:44:39] [INFO    ] 📧 Sending email via email_mcp.py:
+[2026-04-03 00:44:39] [INFO    ]    To: noreply@notifications.example.com
+[2026-04-03 00:44:39] [INFO    ]    Subject: AI Powered SaaS Required
+[2026-04-03 00:44:42] [SUCCESS ] ✅ Email sent successfully to noreply@notifications.example.com
+[2026-04-03 00:44:42] [SUCCESS ] 📦 Moved: APPROVAL_TEST_REPLY.md → Done/
+[2026-04-03 00:44:42] [INFO    ] 📭 No rejected files to archive
+[2026-04-03 00:44:42] [INFO    ] ⏳ Found 3 pending approval(s)
+[2026-04-03 00:44:42] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260403_000457_email_re_agent_testing.md
+[2026-04-03 00:44:42] [INFO    ] ⏳ File remains in Pending_Approval: REPLY_20260402_235852_email_security_alert.md
+[2026-04-03 00:44:42] [INFO    ] ⏳ File remains in Pending_Approval: LINKEDIN_POST_20260403_001735.md
+[2026-04-03 00:44:42] [INFO    ] ⏳ `REPLY_20260403_000457_email_re_agent_testing.md` - Pending review since 2026-04-03 00:07
+[2026-04-03 00:44:42] [INFO    ] ⏳ `REPLY_20260402_235852_email_security_alert.md` - Pending review since 2026-04-02 23:59
+[2026-04-03 00:44:42] [INFO    ] ⏳ `LINKEDIN_POST_20260403_001735.md` - Pending review since 2026-04-03 00:17
+[2026-04-03 00:44:42] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-03 00:44:42] [INFO    ] 📊 Approval Workflow Results:
+[2026-04-03 00:44:42] [INFO    ]    ✅ Emails Sent: 3
+[2026-04-03 00:44:42] [INFO    ]    ❌ Rejected: 0
+[2026-04-03 00:44:42] [INFO    ]    ⏳ Pending: 3
+[2026-04-03 00:44:42] [INFO    ]    🐛 Errors: 2
+[2026-04-03 00:44:42] [INFO    ] 📈 Metrics saved
+[2026-04-03 00:44:42] [INFO    ] ✨ Orchestrator run complete.
