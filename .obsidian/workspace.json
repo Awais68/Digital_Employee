@@ -1,0 +1,239 @@
+{
+  "main": {
+    "id": "5ba0445929676d08",
+    "type": "split",
+    "children": [
+      {
+        "id": "5976c4fd10b200c8",
+        "type": "tabs",
+        "dimension": 27.284263959390863,
+        "children": [
+          {
+            "id": "9b895aea367c06f2",
+            "type": "leaf",
+            "state": {
+              "type": "empty",
+              "state": {},
+              "icon": "lucide-file",
+              "title": "New tab"
+            }
+          }
+        ]
+      },
+      {
+        "id": "2137678e5c107e4a",
+        "type": "tabs",
+        "dimension": 72.71573604060913,
+        "children": [
+          {
+            "id": "9d94bd0d0c2919bb",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "8fded4f9a2dbeb05",
+    "type": "split",
+    "children": [
+      {
+        "id": "9fa4b0e74a43c9ad",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "29f4ebec41975e71",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "d139cdfe80821a1a",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "0a18d3bdf1e9ff59",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "e84625abe77b894a",
+    "type": "split",
+    "children": [
+      {
+        "id": "7aee0ca62782d2ee",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "0b1e1a3c4970bfc6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Welcome.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Welcome"
+            }
+          },
+          {
+            "id": "43f800b87288b6ce",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Welcome.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Welcome"
+            }
+          },
+          {
+            "id": "983efe327cb34360",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "9ceeba48c5e29f28",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "ea392f6a594bb4a1",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Welcome.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Welcome"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "9d94bd0d0c2919bb",
+  "lastOpenFiles": [
+    "Done/20260402_004847_email_OpenAI_Dev_News_GPT_54_Plugins_in_Codex_and_ot.md",
+    "Plans/PLAN_20260402_004847_email_OpenAI_Dev_News_GPT_54_Plugins_in_Codex_and_ot.md",
+    "Done/20260402_004846_email_Security_alert.md",
+    "Plans/PLAN_20260402_004846_email_Security_alert.md",
+    "Done/20260402_004847_email_New_login_to_Instagram_from_Chrome_on_Linux.md",
+    "Plans/PLAN_20260402_004847_email_New_login_to_Instagram_from_Chrome_on_Linux.md",
+    "Needs_Action/20260402_004847_email_New_login_to_Instagram_from_Chrome_on_Linux.md",
+    "Needs_Action/20260402_004847_email_OpenAI_Dev_News_GPT_54_Plugins_in_Codex_and_ot.md",
+    "Needs_Action/20260402_004846_email_Security_alert.md",
+    "token.json",
+    "Plans/SILVER_TIER_STATUS.md",
+    "Skills/linkedin_auto_post.md",
+    "Skills/linkedin_post_draft.md",
+    "Done/GMAIL_NEW_EMAIL_ALERT.md",
+    "Pending_Approval/APPROVAL_GMAIL_NEW_EMAIL_ALERT.md",
+    "Plans/PLAN_GMAIL_NEW_EMAIL_ALERT.md",
+    "Done/LINKEDIN_DAILY_POST.md",
+    "Pending_Approval/APPROVAL_LINKEDIN_DAILY_POST.md",
+    "Plans/PLAN_LINKEDIN_DAILY_POST.md",
+    "Needs_Action/GMAIL_NEW_EMAIL_ALERT.md",
+    "Logs/gmail_watcher_20260402.log",
+    "__pycache__/gmail_watcher.cpython-313.pyc",
+    "Plans/GMAIL_WATCHER_SETUP.md",
+    "gmail_watcher.py",
+    "email_mcp.py",
+    "Needs_Action/LINKEDIN_DAILY_POST.md",
+    "Agent_Skills/SKILL_LinkedIn_Posting.md",
+    "Plans/PLAN_SILVER_TIER.md",
+    "Approved",
+    "Pending_Approval",
+    "orchestrator.py",
+    "credentials.json",
+    "client_secret_399422081165-m12it0lois9sjl2kqkn8niq2kgilqtpj.apps.googleusercontent.com.json",
+    "Done/20260402_000856_abc.md",
+    "Plans/PLAN_20260402_000856_abc.md",
+    "Done/20260402_000856_abc.meta.md"
+  ]
+}

@@ -1,0 +1,246 @@
+[2026-04-02 20:48:01] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 20:48:01] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 20:48:01] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 20:48:01] [INFO    ] 📂 Directory ready: done
+[2026-04-02 20:48:01] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 20:48:01] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 20:48:01] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 20:48:01] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 20:48:01] [INFO    ] 📁 Created directory: metrics
+[2026-04-02 20:48:01] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 20:48:01] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-04-02 20:48:01] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-04-02 20:48:01] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 20:48:01] [INFO    ] 📭 No approved files to process
+[2026-04-02 20:48:01] [INFO    ] 📈 Metrics saved to orchestrator_metrics.json
+[2026-04-02 20:48:01] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 21:00:38] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 21:00:38] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 21:00:38] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 21:00:38] [INFO    ] 📂 Directory ready: done
+[2026-04-02 21:00:38] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 21:00:38] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 21:00:38] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 21:00:38] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 21:00:38] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 21:00:38] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 21:00:38] [INFO    ] 📥 Found 1 file(s) to process
+[2026-04-02 21:00:38] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 21:00:38] [INFO    ] Processing: test_email_task.md
+[2026-04-02 21:00:38] [INFO    ] 📄 Read 236 characters
+[2026-04-02 21:00:38] [INFO    ] 🎯 Detected task type: Email
+[2026-04-02 21:00:38] [SUCCESS ] ✅ Created plan: PLAN_test_email_task.md
+[2026-04-02 21:00:38] [INFO    ] 📊 Dashboard updated: test_email_task.md
+[2026-04-02 21:00:38] [SUCCESS ] 📦 Moved: test_email_task.md → Done/
+[2026-04-02 21:00:38] [SUCCESS ] ✓ Completed: test_email_task.md (0.00s)
+[2026-04-02 21:00:38] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 21:00:38] [INFO    ] 📭 No approved files to process
+[2026-04-02 21:00:38] [INFO    ] 📈 Metrics saved to orchestrator_metrics.json
+[2026-04-02 21:00:38] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 21:07:20] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 21:07:20] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 21:07:20] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 21:07:20] [INFO    ] 📂 Directory ready: done
+[2026-04-02 21:07:20] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 21:07:20] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 21:07:20] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 21:07:20] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 21:07:20] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 21:07:20] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 21:07:20] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-04-02 21:07:20] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-04-02 21:07:20] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 21:07:20] [INFO    ] 📭 No approved files to process
+[2026-04-02 21:07:20] [INFO    ] 📈 Metrics saved to orchestrator_metrics.json
+[2026-04-02 21:07:20] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 21:29:16] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 21:29:16] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 21:29:16] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 21:29:16] [INFO    ] 📂 Directory ready: done
+[2026-04-02 21:29:16] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 21:29:16] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 21:29:16] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 21:29:16] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 21:29:16] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 21:29:16] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 21:29:16] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-04-02 21:29:16] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-04-02 21:29:16] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 21:29:16] [INFO    ] 📭 No approved files to process
+[2026-04-02 21:29:16] [INFO    ] 📈 Metrics saved to orchestrator_metrics.json
+[2026-04-02 21:29:16] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 21:34:17] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 21:34:17] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 21:34:17] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 21:34:17] [INFO    ] 📂 Directory ready: done
+[2026-04-02 21:34:17] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 21:34:17] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 21:34:17] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 21:34:17] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 21:34:17] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 21:34:17] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 21:34:17] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-04-02 21:34:17] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-04-02 21:34:17] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 21:34:17] [INFO    ] 📭 No approved files to process
+[2026-04-02 21:34:17] [INFO    ] 📈 Metrics saved to orchestrator_metrics.json
+[2026-04-02 21:34:17] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 21:38:45] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 21:38:45] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 21:38:45] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 21:38:45] [INFO    ] 📂 Directory ready: done
+[2026-04-02 21:38:45] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 21:38:45] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 21:38:45] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 21:38:45] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 21:38:45] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 21:38:45] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 21:38:45] [INFO    ] 📥 Found 2 file(s) to process
+[2026-04-02 21:38:45] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 21:38:45] [INFO    ] Processing: 20260402_213815_email_re_ai_powered_saas_required.md
+[2026-04-02 21:38:45] [INFO    ] 📄 Read 1147 characters
+[2026-04-02 21:38:45] [INFO    ] 🎯 Detected task type: Email
+[2026-04-02 21:38:45] [SUCCESS ] ✅ Created plan: PLAN_20260402_213815_email_re_ai_powered_saas_required.md
+[2026-04-02 21:38:45] [INFO    ] 📊 Dashboard updated: 20260402_213815_email_re_ai_powered_saas_required.md
+[2026-04-02 21:38:45] [SUCCESS ] 📦 Moved: 20260402_213815_email_re_ai_powered_saas_required.md → Done/
+[2026-04-02 21:38:45] [SUCCESS ] ✓ Completed: 20260402_213815_email_re_ai_powered_saas_required.md (0.00s)
+[2026-04-02 21:38:45] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 21:38:45] [INFO    ] Processing: 20260402_213815_email_agent_testing.md
+[2026-04-02 21:38:45] [INFO    ] 📄 Read 990 characters
+[2026-04-02 21:38:45] [INFO    ] 🎯 Detected task type: Email
+[2026-04-02 21:38:45] [SUCCESS ] ✅ Created plan: PLAN_20260402_213815_email_agent_testing.md
+[2026-04-02 21:38:45] [INFO    ] 📊 Dashboard updated: 20260402_213815_email_agent_testing.md
+[2026-04-02 21:38:45] [SUCCESS ] 📦 Moved: 20260402_213815_email_agent_testing.md → Done/
+[2026-04-02 21:38:45] [SUCCESS ] ✓ Completed: 20260402_213815_email_agent_testing.md (0.00s)
+[2026-04-02 21:38:45] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 21:38:45] [INFO    ] 📭 No approved files to process
+[2026-04-02 21:38:45] [INFO    ] 📈 Metrics saved to orchestrator_metrics.json
+[2026-04-02 21:38:45] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 23:32:16] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 23:32:16] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 23:32:16] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 23:32:16] [INFO    ] 📂 Directory ready: done
+[2026-04-02 23:32:16] [INFO    ] 📁 Created directory: rejected
+[2026-04-02 23:32:16] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 23:32:16] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 23:32:16] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 23:32:16] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 23:32:16] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 23:32:16] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 23:32:16] [INFO    ] 📥 Found 2 file(s) to process
+[2026-04-02 23:32:16] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:32:16] [INFO    ] Processing: 20260402_222713_email_you_have_1_notification_about_hassan_and_ai_employ.md
+[2026-04-02 23:32:16] [INFO    ] 📄 Read 2448 characters
+[2026-04-02 23:32:16] [INFO    ] 🎯 Detected task type: Email
+[2026-04-02 23:32:16] [INFO    ] 📧 Email detected: You have 1 notification about Hassan and Ai Employee
+[2026-04-02 23:32:16] [SUCCESS ] ✅ Created plan: PLAN_20260402_222713_email_you_have_1_notification_about_hassan_and_ai_employ.md
+[2026-04-02 23:32:16] [SUCCESS ] ✅ Created approval file: REPLY_20260402_222713_email_you_have_1_notification_about_hassan_and_ai_employ.md
+[2026-04-02 23:32:16] [SUCCESS ] ✅ Created approval request: REPLY_20260402_222713_email_you_have_1_notification_about_hassan_and_ai_employ.md
+[2026-04-02 23:32:16] [SUCCESS ] 📦 Moved: 20260402_222713_email_you_have_1_notification_about_hassan_and_ai_employ.md → Done/
+[2026-04-02 23:32:16] [SUCCESS ] ✓ Completed: 20260402_222713_email_you_have_1_notification_about_hassan_and_ai_employ.md (0.00s)
+[2026-04-02 23:32:16] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:32:16] [INFO    ] Processing: 20260402_221724_solar.meta.md
+[2026-04-02 23:32:16] [INFO    ] 📄 Read 1296 characters
+[2026-04-02 23:32:16] [INFO    ] 🎯 Detected task type: File
+[2026-04-02 23:32:16] [SUCCESS ] ✅ Created plan: PLAN_20260402_221724_solar.meta.md
+[2026-04-02 23:32:16] [SUCCESS ] 📦 Moved: 20260402_221724_solar.meta.md → Done/
+[2026-04-02 23:32:16] [SUCCESS ] ✓ Completed: 20260402_221724_solar.meta.md (0.00s)
+[2026-04-02 23:32:16] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-02 23:32:16] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 23:32:16] [INFO    ] ✅ Found 2 approved file(s)
+[2026-04-02 23:32:16] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:32:16] [SUCCESS ] 🎉 Action Approved: APPROVAL_GMAIL_NEW_EMAIL_ALERT.md
+[2026-04-02 23:32:16] [INFO    ] 📧 Original file: N/A
+[2026-04-02 23:32:16] [INFO    ] 📬 Triggering email send via email_mcp.py...
+[2026-04-02 23:32:16] [INFO    ] ✅ Email would be sent here (integration pending)
+[2026-04-02 23:32:16] [SUCCESS ] 📦 Moved: APPROVAL_GMAIL_NEW_EMAIL_ALERT.md → Done/
+[2026-04-02 23:32:16] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:32:16] [SUCCESS ] 🎉 Action Approved: APPROVAL_LINKEDIN_DAILY_POST.md
+[2026-04-02 23:32:16] [INFO    ] 📧 Original file: N/A
+[2026-04-02 23:32:16] [INFO    ] 📬 Triggering email send via email_mcp.py...
+[2026-04-02 23:32:16] [INFO    ] ✅ Email would be sent here (integration pending)
+[2026-04-02 23:32:16] [SUCCESS ] 📦 Moved: APPROVAL_LINKEDIN_DAILY_POST.md → Done/
+[2026-04-02 23:32:16] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-02 23:32:16] [INFO    ] 📈 Metrics saved
+[2026-04-02 23:32:16] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 23:32:43] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 23:32:43] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 23:32:43] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 23:32:43] [INFO    ] 📂 Directory ready: done
+[2026-04-02 23:32:43] [INFO    ] 📂 Directory ready: rejected
+[2026-04-02 23:32:43] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 23:32:43] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 23:32:43] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 23:32:43] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 23:32:43] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 23:32:43] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 23:32:43] [INFO    ] 📥 Found 1 file(s) to process
+[2026-04-02 23:32:43] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:32:43] [INFO    ] Processing: test_saas_email.md
+[2026-04-02 23:32:43] [INFO    ] 📄 Read 1140 characters
+[2026-04-02 23:32:43] [INFO    ] 🎯 Detected task type: Email
+[2026-04-02 23:32:43] [INFO    ] 📧 Email detected: Re: AI Powered SaaS Required
+[2026-04-02 23:32:43] [SUCCESS ] ✅ Created plan: PLAN_test_saas_email.md
+[2026-04-02 23:32:43] [SUCCESS ] ✅ Created approval file: REPLY_test_saas_email.md
+[2026-04-02 23:32:43] [SUCCESS ] ✅ Created approval request: REPLY_test_saas_email.md
+[2026-04-02 23:32:43] [SUCCESS ] 📦 Moved: test_saas_email.md → Done/
+[2026-04-02 23:32:43] [SUCCESS ] ✓ Completed: test_saas_email.md (0.00s)
+[2026-04-02 23:32:43] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-02 23:32:43] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 23:32:43] [INFO    ] 📭 No approved files to process
+[2026-04-02 23:32:43] [INFO    ] 📈 Metrics saved
+[2026-04-02 23:32:43] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 23:35:11] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 23:35:11] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 23:35:11] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 23:35:11] [INFO    ] 📂 Directory ready: done
+[2026-04-02 23:35:11] [INFO    ] 📂 Directory ready: rejected
+[2026-04-02 23:35:11] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 23:35:11] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 23:35:11] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 23:35:11] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 23:35:11] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 23:35:11] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 23:35:11] [INFO    ] 📥 Found 1 file(s) to process
+[2026-04-02 23:35:11] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:35:11] [INFO    ] Processing: LINKEDIN_DAILY_POST.md
+[2026-04-02 23:35:11] [INFO    ] 📄 Read 1015 characters
+[2026-04-02 23:35:11] [INFO    ] 🎯 Detected task type: Linkedin
+[2026-04-02 23:35:11] [INFO    ] 📱 LinkedIn trigger detected - generating post draft...
+[2026-04-02 23:35:11] [SUCCESS ] ✅ Created LinkedIn post draft: LINKEDIN_POST_20260402_233511.md
+[2026-04-02 23:35:11] [INFO    ] 📍 Saved to: /Pending_Approval/LINKEDIN_POST_20260402_233511.md
+[2026-04-02 23:35:11] [SUCCESS ] 📦 Moved: LINKEDIN_DAILY_POST.md → Done/
+[2026-04-02 23:35:11] [SUCCESS ] ✓ Completed: LINKEDIN_DAILY_POST.md (0.00s)
+[2026-04-02 23:35:11] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-02 23:35:11] [INFO    ] 📱 LinkedIn posts generated: 1
+[2026-04-02 23:35:11] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 23:35:11] [INFO    ] 📭 No approved files to process
+[2026-04-02 23:35:11] [INFO    ] 📈 Metrics saved
+[2026-04-02 23:35:11] [INFO    ] ✨ Orchestrator run complete.
+[2026-04-02 23:40:15] [INFO    ] 🚀 Orchestrator starting...
+[2026-04-02 23:40:15] [INFO    ] ✅ Loaded .env file successfully
+[2026-04-02 23:40:15] [INFO    ] 📂 Directory ready: needs_action
+[2026-04-02 23:40:15] [INFO    ] 📂 Directory ready: done
+[2026-04-02 23:40:15] [INFO    ] 📂 Directory ready: rejected
+[2026-04-02 23:40:15] [INFO    ] 📂 Directory ready: plans
+[2026-04-02 23:40:15] [INFO    ] 📂 Directory ready: pending_approval
+[2026-04-02 23:40:15] [INFO    ] 📂 Directory ready: approved
+[2026-04-02 23:40:15] [INFO    ] 📂 Directory ready: logs
+[2026-04-02 23:40:15] [INFO    ] 📂 Directory ready: metrics
+[2026-04-02 23:40:15] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-04-02 23:40:15] [INFO    ] 📥 Found 1 file(s) to process
+[2026-04-02 23:40:15] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-04-02 23:40:15] [INFO    ] Processing: Linkedin_Daily_post.md
+[2026-04-02 23:40:15] [INFO    ] 📄 Read 53 characters
+[2026-04-02 23:40:15] [INFO    ] 🎯 Detected task type: Linkedin
+[2026-04-02 23:40:15] [INFO    ] 📱 LinkedIn trigger detected - generating post draft...
+[2026-04-02 23:40:15] [SUCCESS ] ✅ Created LinkedIn post draft: LINKEDIN_POST_20260402_234015.md
+[2026-04-02 23:40:15] [INFO    ] 📍 Saved to: /Pending_Approval/LINKEDIN_POST_20260402_234015.md
+[2026-04-02 23:40:15] [SUCCESS ] 📦 Moved: Linkedin_Daily_post.md → Done/
+[2026-04-02 23:40:15] [SUCCESS ] ✓ Completed: Linkedin_Daily_post.md (0.00s)
+[2026-04-02 23:40:15] [INFO    ] 📊 Dashboard updated with priority view
+[2026-04-02 23:40:15] [INFO    ] 📱 LinkedIn posts generated: 1
+[2026-04-02 23:40:15] [INFO    ] ✅ Checking approval workflow...
+[2026-04-02 23:40:15] [INFO    ] 📭 No approved files to process
+[2026-04-02 23:40:15] [INFO    ] 📈 Metrics saved
+[2026-04-02 23:40:15] [INFO    ] ✨ Orchestrator run complete.

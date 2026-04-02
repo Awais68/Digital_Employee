@@ -1,0 +1,19 @@
+# Digital Employee - Silver Tier Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+python-dotenv>=1.0.0
+
+# Google Gmail API (required for gmail_watcher.py)
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.0.0
+
+# Optional: Scheduler for automated orchestrator runs
+# schedule>=1.2.0
+
+# Optional: Enhanced YAML parsing
+# pyyaml>=6.0
+
+# Optional: Rich terminal output
+# rich>=13.0.0

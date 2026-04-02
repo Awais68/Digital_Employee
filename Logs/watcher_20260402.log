@@ -1,0 +1,41 @@
+2026-04-02 00:08:36,809 - INFO - ============================================================
+2026-04-02 00:08:36,809 - INFO - Bronze Tier Filesystem Watcher Starting
+2026-04-02 00:08:36,809 - INFO - ============================================================
+2026-04-02 00:08:36,809 - INFO - Vault Root: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee
+2026-04-02 00:08:36,809 - INFO - Monitoring: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Inbox
+2026-04-02 00:08:36,809 - INFO - Destination: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Needs_Action
+2026-04-02 00:08:36,810 - INFO - Log File: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Logs/watcher_20260402.log
+2026-04-02 00:08:36,810 - INFO - Watcher is now active. Press Ctrl+C to stop.
+2026-04-02 00:08:45,040 - INFO - Shutdown signal received
+2026-04-02 00:08:45,041 - INFO - Stopping observer...
+2026-04-02 00:08:45,041 - INFO - Filesystem watcher stopped
+2026-04-02 00:08:45,041 - INFO - ============================================================
+2026-04-02 00:11:16,799 - INFO - ============================================================
+2026-04-02 00:11:16,799 - INFO - Bronze Tier Filesystem Watcher Starting
+2026-04-02 00:11:16,799 - INFO - ============================================================
+2026-04-02 00:11:16,799 - INFO - Vault Root: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee
+2026-04-02 00:11:16,799 - INFO - Monitoring: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Inbox
+2026-04-02 00:11:16,799 - INFO - Destination: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Needs_Action
+2026-04-02 00:11:16,800 - INFO - Log File: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Logs/watcher_20260402.log
+2026-04-02 00:11:16,800 - INFO - Watcher is now active. Press Ctrl+C to stop.
+2026-04-02 22:16:35,954 - INFO - ============================================================
+2026-04-02 22:16:35,969 - INFO - Bronze Tier Filesystem Watcher Starting
+2026-04-02 22:16:35,969 - INFO - ============================================================
+2026-04-02 22:16:35,969 - INFO - Vault Root: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee
+2026-04-02 22:16:35,969 - INFO - Monitoring: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Inbox
+2026-04-02 22:16:35,969 - INFO - Destination: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Needs_Action
+2026-04-02 22:16:35,969 - INFO - Log File: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Logs/watcher_20260402.log
+2026-04-02 22:16:35,970 - INFO - Watcher is now active. Press Ctrl+C to stop.
+2026-04-02 22:17:24,644 - INFO - Processing new file: solar.pdf (event: created)
+2026-04-02 22:17:24,754 - INFO - Copied solar.pdf -> 20260402_221724_solar.pdf
+2026-04-02 22:17:24,790 - INFO - Created metadata: 20260402_221724_solar.meta.md
+2026-04-02 22:17:24,806 - INFO - Logged: FILE_PROCESSED - solar.pdf -> 20260402_221724_solar.pdf
+2026-04-02 22:17:24,816 - INFO - Removed original from Inbox: solar.pdf
+2026-04-02 23:47:08,229 - INFO - ============================================================
+2026-04-02 23:47:08,229 - INFO - Bronze Tier Filesystem Watcher Starting
+2026-04-02 23:47:08,229 - INFO - ============================================================
+2026-04-02 23:47:08,229 - INFO - Vault Root: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee
+2026-04-02 23:47:08,229 - INFO - Monitoring: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Inbox
+2026-04-02 23:47:08,229 - INFO - Destination: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Needs_Action
+2026-04-02 23:47:08,229 - INFO - Log File: /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Logs/watcher_20260402.log
+2026-04-02 23:47:08,230 - INFO - Watcher is now active. Press Ctrl+C to stop.

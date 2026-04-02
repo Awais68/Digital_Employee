@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(sleep *)",
+      "Bash(cat *)",
+      "Bash(pip3 install *)",
+      "Bash(timeout *)",
+      "Bash(true)",
+      "Bash(rm *)",
+      "Bash(sudo *)",
+      "Bash(tmux *)",
+      "Bash(echo *)",
+      "Bash(python *)",
+      "Bash(mkdir *)",
+      "Bash(pip install *)",
+      "Bash(chmod *)",
+      "Bash(ls *)"
+    ]
+  },
+  "$version": 3
+}
