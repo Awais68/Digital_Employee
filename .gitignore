@@ -1,7 +1,79 @@
-.env
+# =============================================================================
+# SECURITY - Sensitive Files (NEVER commit these)
+# =============================================================================
 
-token.json
+# Environment & Credentials
+.env
+.env.local
+.env.production
+.env.backup
+
+# OAuth & API Credentials
 credentials.json
+token.json
+service_account.json
+*.pem
+*.key
+
+# Logs (may contain sensitive data)
+Logs/
+*.log
 logs/
+
+# Editor & IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.obsidian/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Metrics (optional - may contain sensitive data)
+Metrics/
+metrics.json
+
+# Temporary files
+tmp/
+temp/
+*.tmp
 
 

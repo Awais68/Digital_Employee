@@ -1098,104 +1098,243 @@ def get_pending_approvals() -> List[Dict]:
     return approvals
 
 
+def get_daily_email_stats() -> Dict[str, int]:
+    """Get email statistics for today from logs."""
+    today = datetime.now().strftime("%Y%m%d")
+    log_file = FOLDERS["logs"] / f"email_log_{today}.md"
+
+    stats = {
+        "sent": 0,
+        "failed": 0,
+        "dry_run": 0,
+    }
+
+    if log_file.exists():
+        try:
+            content = log_file.read_text(encoding="utf-8")
+            stats["sent"] = content.count("✅ Sent")
+            stats["failed"] = content.count("❌ Failed")
+            stats["dry_run"] = content.count("🔍 Dry Run")
+        except Exception:
+            pass
+
+    return stats
+
+
+def get_today_completed() -> List[Dict]:
+    """Get files completed today from Done folder."""
+    completed = []
+    done_dir = FOLDERS["done"]
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    if not done_dir.exists():
+        return completed
+
+    for md_file in done_dir.glob("*.md"):
+        try:
+            mtime = datetime.fromtimestamp(md_file.stat().st_mtime)
+            if mtime.strftime("%Y-%m-%d") == today:
+                completed.append({
+                    "filename": md_file.name,
+                    "time": mtime.strftime("%H:%M"),
+                })
+        except Exception:
+            continue
+
+    # Return last 10 completed items, sorted by time (newest first)
+    return sorted(completed, key=lambda x: x["time"], reverse=True)[:10]
+
+
 def generate_colorful_dashboard() -> str:
-    """Generate a colorful, priority-based dashboard."""
+    """Generate a colorful, priority-based dashboard with instant status visibility."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     counts = get_folder_counts()
     priorities = get_priority_items()
     pending_approvals = get_pending_approvals()
+    email_stats = get_daily_email_stats()
+    today_completed = get_today_completed()
+
+    # Calculate today's stats
+    today_sent = email_stats["sent"] + email_stats["dry_run"]
+    today_pending = counts.get("pending_approval", 0)
+    today_rejected = counts.get("rejected", 0)
+    needs_action_count = counts.get("needs_action", 0)
+    approved_count = counts.get("approved", 0)
+
+    # Determine overall system status
+    if today_pending > 0 or needs_action_count > 0:
+        system_status = "🟡 Action Required"
+    elif approved_count > 0:
+        system_status = "🟢 Processing"
+    else:
+        system_status = "🟢 All Clear"
 
     # Build dashboard
     dashboard = f"""# 🎛️ Digital Employee Control Panel
 
-*Last Updated: {now}*
+*Last Updated: {now}* | **Status:** {system_status}
 
 ---
 
-## 📊 Live Summary
+## 📊 Quick Status Overview
 
-| Status | Count | Status | Count |
-|--------|-------|--------|-------|
-| 📥 Needs Action | **{counts.get('needs_action', 0)}** | ✅ Approved | **{counts.get('approved', 0)}** |
-| ⏳ Pending Approval | **{counts.get('pending_approval', 0)}** | 📁 Done | **{counts.get('done', 0)}** |
-| ❌ Rejected | **{counts.get('rejected', 0)}** | 📋 Plans | **{counts.get('plans', 0)}** |
+| 🔴 Needs Action | 🟠 Pending Approval | 🟡 Sent Today | 🟢 Completed Today |
+|:---------------:|:-------------------:|:-------------:|:------------------:|
+| **{needs_action_count}** | **{today_pending}** | **{today_sent}** | **{len(today_completed)}** |
 
 ---
 
-## 🚨 Today's Priorities
+## 📈 Today's Activity Summary
+
+| Metric | Count | Visual Status |
+|--------|-------|---------------|
+| **Emails Sent** | {today_sent} | {"🟢 Active" if today_sent > 0 else "⚪ None"} |
+| **Pending Review** | {today_pending} | {"🟡 Waiting" if today_pending > 0 else "🟢 Clear"} |
+| **Rejected** | {today_rejected} | {"🔴 Attention" if today_rejected > 0 else "🟢 None"} |
+| **Dry Run Mode** | {email_stats["dry_run"]} | {"🔍 Testing" if email_stats["dry_run"] > 0 else "✅ Live"} |
+
+---
 
 """
 
-    # High Priority (Red)
-    dashboard += "### 🔴 High Priority\n\n"
+    # 🔴 HIGH PRIORITY - Needs Action
+    dashboard += "## 🔴 High Priority - Needs Action\n\n"
     if priorities["high"]:
+        dashboard += "**Immediate attention required:**\n\n"
         for item in priorities["high"]:
-            dashboard += f"- [ ] **{item['subject']}** `({item['modified']})` → `{item['filename']}`\n"
+            dashboard += f"- 🔴 `{item['filename']}` — {item['subject']} `[{item['modified']}]`\n"
+        dashboard += "\n"
+    elif needs_action_count > 0:
+        dashboard += "- 🟢 No high priority items\n\n"
     else:
-        dashboard += "- ✅ No high priority items\n"
-    dashboard += "\n"
+        dashboard += "- ✅ No items in Needs Action\n\n"
 
-    # Medium Priority (Orange)
-    dashboard += "### 🟠 Medium Priority\n\n"
-    if priorities["medium"]:
-        for item in priorities["medium"]:
-            dashboard += f"- [ ] {item['subject']} `({item['modified']})` → `{item['filename']}`\n"
-    else:
-        dashboard += "- ✅ No medium priority items\n"
-    dashboard += "\n"
-
-    # Low Priority (Yellow)
-    dashboard += "### 🟡 Low Priority\n\n"
-    if priorities["low"]:
-        for item in priorities["low"]:
-            dashboard += f"- [ ] {item['subject']} `({item['modified']})` → `{item['filename']}`\n"
-    else:
-        dashboard += "- ✅ No low priority items\n"
-    dashboard += "\n"
-
-    # Pending Approvals
-    dashboard += "---\n\n## ⏳ Pending Approval (Human-in-the-Loop)\n\n"
+    # 🟠 PENDING APPROVALS
+    dashboard += "---\n\n## 🟠 Pending Approvals - Human Review Required\n\n"
     if pending_approvals:
-        dashboard += "| File | Time | Actions |\n"
-        dashboard += "|------|------|--------|\n"
-        for item in pending_approvals:
-            dashboard += f"| `{item['filename']}` | {item['modified']} | ✅ Approve / 🔄 Regenerate / ❌ Reject |\n"
+        dashboard += "**Move files to `/Approved/` to execute:**\n\n"
+        dashboard += "| # | Type | File | Since | Quick Action |\n"
+        dashboard += "|---|------|------|-------|-------------|\n"
+        for i, item in enumerate(pending_approvals, 1):
+            # Icon based on type
+            if "REPLY" in item["filename"].upper() or "EMAIL" in item["filename"].upper():
+                icon = "📧"
+                action = "Send Email"
+            elif "LINKEDIN" in item["filename"].upper():
+                icon = "📱"
+                action = "Post LinkedIn"
+            elif "PAYMENT" in item["filename"].upper():
+                icon = "💰"
+                action = "Approve Payment"
+            else:
+                icon = "📄"
+                action = "Review"
+
+            dashboard += f"| {i} | {icon} | `{item['filename']}` | {item['modified']} | → `/Approved/` |\n"
+
+        dashboard += f"\n**Total:** {len(pending_approvals)} file(s) awaiting your decision\n"
+        dashboard += "\n**Quick Commands:**\n"
+        dashboard += "```\n# Approve: mv Pending_Approval/<file> Approved/\n# Reject: mv Pending_Approval/<file> Rejected/\n```\n"
     else:
-        dashboard += "- ✅ No pending approvals\n"
+        dashboard += "✅ **All clear!** No pending approvals\n"
+
     dashboard += "\n"
 
-    # Quick Actions
+    # 🟡 TODAY'S COMPLETED
+    dashboard += "---\n\n## 🟡 Today's Completed Tasks\n\n"
+    if today_completed:
+        dashboard += "**Successfully processed today:**\n\n"
+        for item in today_completed:
+            # Determine completion icon
+            if "REJECTED" in item["filename"].upper():
+                icon = "❌"
+            elif "EMAIL" in item["filename"].upper() or "REPLY" in item["filename"].upper():
+                icon = "📧"
+            elif "LINKEDIN" in item["filename"].upper():
+                icon = "📱"
+            else:
+                icon = "✅"
+
+            dashboard += f"- {icon} `{item['filename']}` `[{item['time']}]`\n"
+    else:
+        dashboard += "- ⏳ No tasks completed yet today\n"
+
+    dashboard += "\n"
+
+    # 📋 QUICK ACTIONS & SCHEDULING
     dashboard += f"""---
 
-## ⚡ Quick Actions
+## ⚡ Quick Actions & Scheduling
 
-| Command | Description |
-|---------|-------------|
-| `python3 orchestrator.py` | Process Needs_Action folder |
-| `python3 gmail_watcher.py --start` | Start Gmail monitoring (30s) |
-| `python3 gmail_watcher.py --status` | Check Gmail watcher status |
-| `tmux attach -t gmail_watcher` | View Gmail watcher logs |
+### Manual Commands
+
+| Command | Purpose |
+|---------|---------|
+| `python3 orchestrator.py` | Process all pending items |
+| `python3 gmail_watcher.py --start` | Start Gmail monitor (30s interval) |
+| `python3 gmail_watcher.py --status` | Check watcher status |
+| `python3 email_mcp.py test` | Test email connection |
+
+### Automated Scheduling (Recommended)
+
+**Option 1: Cron Job (Linux/Mac)**
+```bash
+# Add to crontab (runs every 5 minutes)
+*/5 * * * * cd /path/to/Digital_Employee && python3 orchestrator.py >> Logs/cron.log 2>&1
+```
+
+**Option 2: tmux Session (Background)**
+```bash
+# Start Gmail watcher in tmux
+tmux new -d -s gmail_watcher "python3 gmail_watcher.py --start"
+
+# View logs anytime
+tmux attach -t gmail_watcher
+```
+
+**Option 3: Systemd Service (Production)**
+```ini
+# /etc/systemd/system/digital-employee.service
+[Unit]
+Description=Digital Employee Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+User=your-user
+WorkingDirectory=/path/to/Digital_Employee
+ExecStart=/usr/bin/python3 orchestrator.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ---
 
-## 📈 Activity Log
+## 📝 Recent Activity Log
 
 """
 
-    # Read existing activity log entries
+    # Recent activity from existing dashboard
     if DASHBOARD_FILE.exists():
         try:
             with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
                 existing = f.read()
 
-            # Extract recent activity entries
+            # Extract recent activity entries (last 10)
+            activity_lines = []
             for line in existing.split("\n"):
                 if line.startswith("- [✓]") or line.startswith("- [x]"):
-                    dashboard += f"{line}\n"
+                    activity_lines.append(line)
+
+            for line in activity_lines[-10:]:
+                dashboard += f"{line}\n"
         except Exception:
             pass
 
-    dashboard += "\n---\n\n*Generated by Silver Tier Orchestrator v4.0*\n"
+    dashboard += "\n---\n\n"
+    dashboard += f"*🤖 Silver Tier Orchestrator v4.0 | {system_status}*\n"
 
     return dashboard
 
@@ -1472,67 +1611,421 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
 
 
 # =============================================================================
-# APPROVAL WORKFLOW
+# APPROVAL WORKFLOW WITH EMAIL MCP INTEGRATION
 # =============================================================================
 
-def check_pending_approvals(metrics: MetricsManager) -> int:
-    """Check Approved folder and trigger actions."""
-    approved_dir = FOLDERS["approved"]
+def extract_email_from_approval(content: str) -> Optional[Dict[str, str]]:
+    """
+    Extract email details from approval file content.
+    
+    Returns dict with to, subject, body for sending.
+    """
+    email_data = {
+        "to": None,
+        "subject": None,
+        "body": None,
+        "in_reply_to": None,
+        "thread_id": None,
+    }
+    
+    # Extract To email
+    for line in content.split("\n"):
+        if line.startswith("**To:**"):
+            email_data["to"] = line.replace("**To:**", "").strip()
+            break
+    
+    # Extract Subject
+    for line in content.split("\n"):
+        if line.startswith("**Subject:**"):
+            email_data["subject"] = line.replace("**Subject:**", "").strip()
+            break
+    
+    # Extract In-Reply-To and Thread-ID from metadata
+    for line in content.split("\n"):
+        if line.startswith("**In Reply To:**"):
+            email_data["in_reply_to"] = line.replace("**In Reply To:**", "").strip()
+        if line.startswith("**Thread ID:**"):
+            email_data["thread_id"] = line.replace("**Thread ID:**", "").strip()
+    
+    # Extract body from code block
+    in_code_block = False
+    body_lines = []
+    for line in content.split("\n"):
+        if line.strip() == "```":
+            if not in_code_block:
+                in_code_block = True
+            else:
+                break
+        elif in_code_block:
+            body_lines.append(line)
+    
+    email_data["body"] = "\n".join(body_lines).strip()
+    
+    return email_data if email_data["to"] and email_data["body"] else None
 
-    if not approved_dir.exists():
-        return 0
 
-    approved_files = list(approved_dir.iterdir())
+def send_approved_email(file_path: Path, metrics: MetricsManager) -> Tuple[bool, str]:
+    """
+    Send email for an approved file using email_mcp.
 
-    if not approved_files:
-        logger.info("📭 No approved files to process")
-        return 0
+    Args:
+        file_path: Path to approved file
+        metrics: Metrics manager for tracking
 
-    logger.info(f"✅ Found {len(approved_files)} approved file(s)")
-    approved_count = 0
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    try:
+        # Import email MCP
+        from email_mcp import send_email as mcp_send_email
 
-    for file_path in approved_files:
-        logger.info(f"{'─' * 60}")
-        logger.success(f"🎉 Action Approved: {file_path.name}")
-        approved_count += 1
-        metrics.record_approval_triggered()
+        content = read_file_content(file_path)
+        email_data = extract_email_from_approval(content)
 
-        try:
-            content = read_file_content(file_path)
+        if not email_data:
+            return False, "Could not extract email data from approval file"
 
-            # Extract original file reference
-            original_file = None
-            for line in content.split("\n"):
-                if line.startswith("original_file:"):
-                    original_file = line.replace("original_file:", "").strip()
+        to = email_data["to"]
+        subject = email_data["subject"] or "Email Reply"
+        body = email_data["body"]
+
+        logger.info(f"📧 Sending email via email_mcp.py:")
+        logger.info(f"   To: {to}")
+        logger.info(f"   Subject: {subject}")
+
+        # Send email using MCP
+        result = mcp_send_email(
+            to=to,
+            subject=subject,
+            body=body,
+            is_html=False,
+            dry_run=None  # Use DRY_RUN from environment
+        )
+
+        if result.get("success"):
+            msg = result.get("message", "Email sent successfully")
+            logger.success(f"✅ {msg}")
+            return True, msg
+        else:
+            error_msg = result.get("message", "Unknown error")
+            logger.error(f"❌ Email send failed: {error_msg}")
+            return False, error_msg
+
+    except ImportError as e:
+        error_msg = f"email_mcp.py not found or import failed: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"Error sending email: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+
+
+def extract_linkedin_post_content(content: str) -> Optional[Dict[str, str]]:
+    """
+    Extract LinkedIn post content from an approval file.
+
+    Args:
+        content: File content
+
+    Returns:
+        Dictionary with post content or None
+    """
+    post_data = {"content": "", "hashtags": ""}
+
+    # Try to find the post content section
+    in_post_section = False
+    content_lines = []
+
+    for line in content.split("\n"):
+        if "## Proposed Post Content" in line or "## Post Content" in line:
+            in_post_section = True
+            continue
+        elif in_post_section:
+            if line.startswith("---") or line.startswith("## "):
+                break
+            content_lines.append(line)
+
+    if content_lines:
+        post_data["content"] = "\n".join(content_lines).strip()
+    else:
+        # Fallback: extract from code blocks
+        in_code_block = False
+        body_lines = []
+        for line in content.split("\n"):
+            if line.strip() == "```":
+                if not in_code_block:
+                    in_code_block = True
+                else:
                     break
+            elif in_code_block:
+                body_lines.append(line)
+        post_data["content"] = "\n".join(body_lines).strip()
 
-            logger.info(f"📧 Original file: {original_file or 'N/A'}")
-            logger.info("📬 Triggering email send via email_mcp.py...")
+    return post_data if post_data["content"] else None
 
-            # TODO: Actually send email via email_mcp.py
-            # For now, just log
-            logger.info("✅ Email would be sent here (integration pending)")
 
-            # Move approved file to Done
-            done_path = FOLDERS["done"] / file_path.name
-            move_file(file_path, done_path)
+def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[bool, str]:
+    """
+    Publish LinkedIn post for an approved file using linkedin_mcp.
 
-        except Exception as e:
-            logger.error(f"Error processing approval {file_path.name}: {e}")
-            metrics.record_error()
+    Args:
+        file_path: Path to approved LinkedIn post file
+        metrics: Metrics manager for tracking
 
-    # Update dashboard after processing approvals
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    try:
+        # Import LinkedIn MCP
+        from linkedin_mcp import create_post as mcp_create_post
+
+        content = read_file_content(file_path)
+        post_data = extract_linkedin_post_content(content)
+
+        if not post_data:
+            return False, "Could not extract LinkedIn post content from approval file"
+
+        post_content = post_data["content"]
+
+        logger.info(f"📱 Publishing LinkedIn post via linkedin_mcp.py:")
+        logger.info(f"   Content preview: {post_content[:100]}...")
+
+        # Publish post using MCP
+        result = mcp_create_post(
+            content=post_content,
+            dry_run=None  # Use DRY_RUN from environment
+        )
+
+        if result.get("success"):
+            msg = result.get("message", "LinkedIn post published successfully")
+            post_url = result.get("post_url", "")
+            logger.success(f"✅ {msg}")
+            if post_url:
+                logger.info(f"   Post URL: {post_url}")
+            return True, f"{msg} - {post_url}"
+        else:
+            error_msg = result.get("message", "Unknown error")
+            logger.error(f"❌ LinkedIn post publish failed: {error_msg}")
+            return False, error_msg
+
+    except ImportError as e:
+        error_msg = f"linkedin_mcp.py not found or import failed: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"Error publishing LinkedIn post: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+
+
+def handle_rejected_file(file_path: Path, metrics: MetricsManager) -> Tuple[bool, str]:
+    """
+    Handle a rejected approval file - move to Done with rejection note.
+    
+    Args:
+        file_path: Path to rejected file
+        metrics: Metrics manager
+        
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    try:
+        content = read_file_content(file_path)
+        
+        # Create rejection note
+        rejection_note = f"""
+---
+## ❌ Rejection Record
+
+- **Rejected At:** {datetime.now().isoformat()}
+- **Original File:** {file_path.name}
+- **Reason:** Human rejected this draft
+
+### Archived Content
+
+{content}
+
+---
+*This file was rejected and archived for record-keeping.*
+"""
+        
+        # Move to Done with rejection note
+        done_dir = FOLDERS["done"]
+        done_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create rejection record in Done
+        rejection_filename = f"REJECTED_{file_path.name}"
+        rejection_path = done_dir / rejection_filename
+        
+        with open(rejection_path, "w", encoding="utf-8") as f:
+            f.write(rejection_note)
+        
+        # Remove original from Pending_Approval
+        file_path.unlink()
+        
+        logger.info(f"📁 Rejected file archived: {rejection_filename}")
+        return True, f"Rejected file archived to {rejection_filename}"
+        
+    except Exception as e:
+        error_msg = f"Error handling rejection: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+
+
+def handle_pending_review(file_path: Path, dashboard_notes: List[str]) -> Tuple[bool, str]:
+    """
+    Handle a file that remains in Pending_Approval for later review.
+    
+    Args:
+        file_path: Path to pending file
+        dashboard_notes: List to add dashboard note
+        
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    try:
+        modified_time = datetime.fromtimestamp(file_path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        note = f"⏳ `{file_path.name}` - Pending review since {modified_time}"
+        dashboard_notes.append(note)
+        logger.info(f"⏳ File remains in Pending_Approval: {file_path.name}")
+        return True, "File remains pending"
+    except Exception as e:
+        logger.error(f"Error noting pending file: {e}")
+        return False, str(e)
+
+
+def process_approval_folder(metrics: MetricsManager) -> Dict[str, int]:
+    """
+    Process files in approval workflow folders.
+
+    This function monitors:
+    - /Approved/ - Send emails, publish LinkedIn posts, move to Done
+    - /Rejected/ - Archive with rejection note
+    - /Pending_Approval/ - Track pending items
+
+    Returns:
+        Dictionary with counts: {sent: int, rejected: int, pending: int, linkedin_posts: int}
+    """
+    results = {
+        "sent": 0,
+        "rejected": 0,
+        "pending": 0,
+        "linkedin_posts": 0,
+        "errors": 0,
+    }
+
+    dashboard_notes = []
+
+    # Process Approved folder - send emails and publish LinkedIn posts
+    approved_dir = FOLDERS["approved"]
+    if approved_dir.exists():
+        approved_files = list(approved_dir.glob("*.md"))
+
+        if approved_files:
+            logger.info(f"✅ Found {len(approved_files)} approved file(s) to process")
+
+            for file_path in approved_files:
+                logger.info(f"{'─' * 60}")
+                logger.success(f"🎉 Processing Approved: {file_path.name}")
+
+                # Determine file type and process accordingly
+                content = read_file_content(file_path)
+                
+                if "type: linkedin_post_draft" in content or "type: linkedin_post" in content:
+                    # Process as LinkedIn post
+                    success, message = publish_linkedin_post(file_path, metrics)
+                    
+                    if success:
+                        # Move to Done after successful publish
+                        done_path = FOLDERS["done"] / file_path.name
+                        if move_file(file_path, done_path):
+                            results["linkedin_posts"] += 1
+                            metrics.record_approval_triggered()
+
+                            # Add success note to file
+                            done_content = read_file_content(done_path)
+                            if "✅ LinkedIn Post Published" not in done_content:
+                                success_note = f"\n\n---\n## ✅ LinkedIn Post Published\n- **Published At:** {datetime.now().isoformat()}\n- **Status:** Live on LinkedIn\n- **Message:** {message}\n"
+                                with open(done_path, "a", encoding="utf-8") as f:
+                                    f.write(success_note)
+                    else:
+                        results["errors"] += 1
+                        logger.error(f"❌ Failed to publish LinkedIn post: {file_path.name} - {message}")
+                else:
+                    # Process as email
+                    success, message = send_approved_email(file_path, metrics)
+
+                    if success:
+                        # Move to Done after successful send
+                        done_path = FOLDERS["done"] / file_path.name
+                        if move_file(file_path, done_path):
+                            results["sent"] += 1
+                            metrics.record_approval_triggered()
+
+                            # Add success note to file
+                            done_content = read_file_content(done_path)
+                            if "✅ Email Sent" not in done_content:
+                                success_note = f"\n\n---\n## ✅ Email Sent\n- **Sent At:** {datetime.now().isoformat()}\n- **Status:** Delivered successfully\n"
+                                with open(done_path, "a", encoding="utf-8") as f:
+                                    f.write(success_note)
+                    else:
+                        results["errors"] += 1
+                        logger.error(f"❌ Failed to process: {file_path.name} - {message}")
+        else:
+            logger.info("📭 No approved files to process")
+    
+    # Process Rejected folder - archive with note
+    rejected_dir = FOLDERS["rejected"]
+    if rejected_dir.exists():
+        rejected_files = list(rejected_dir.glob("*.md"))
+        
+        if rejected_files:
+            logger.info(f"❌ Found {len(rejected_files)} rejected file(s) to archive")
+            
+            for file_path in rejected_files:
+                logger.info(f"{'─' * 60}")
+                logger.warning(f"🗑️ Archiving Rejected: {file_path.name}")
+                
+                success, message = handle_rejected_file(file_path, metrics)
+                
+                if success:
+                    results["rejected"] += 1
+                else:
+                    results["errors"] += 1
+        else:
+            logger.info("📭 No rejected files to archive")
+    
+    # Check Pending_Approval folder - track pending items
+    pending_dir = FOLDERS["pending_approval"]
+    if pending_dir.exists():
+        pending_files = list(pending_dir.glob("*.md"))
+        
+        if pending_files:
+            logger.info(f"⏳ Found {len(pending_files)} pending approval(s)")
+            
+            for file_path in pending_files:
+                handle_pending_review(file_path, dashboard_notes)
+                results["pending"] += 1
+        else:
+            logger.info("📭 No pending approvals")
+    
+    # Update dashboard with pending notes
+    if dashboard_notes:
+        for note in dashboard_notes:
+            logger.info(note)
+    
+    # Update dashboard
     update_dashboard()
-
-    return approved_count
+    
+    return results
 
 
 # =============================================================================
 # STATUS REPORTING
 # =============================================================================
 
-def generate_status_report(processed: int, approved: int,
+def generate_status_report(processed: int, approval_results: Dict[str, int],
                            metrics: MetricsManager) -> str:
     """Generate comprehensive status report."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1546,9 +2039,11 @@ ORCHESTRATOR STATUS REPORT - {now}
 📊 SESSION SUMMARY
 {'─' * 70}
   Files Processed:     {processed:>6}
-  Approvals Created:   {metrics.session_metrics['approvals_created']:>6}
-  Approvals Triggered: {approved:>6}
-  Status:              {'✓ Active' if processed > 0 or approved > 0 else '○ No Activity'}
+  Emails Sent:         {approval_results.get('sent', 0):>6}
+  Rejected:            {approval_results.get('rejected', 0):>6}
+  Pending Approval:    {approval_results.get('pending', 0):>6}
+  Errors:              {approval_results.get('errors', 0):>6}
+  Status:              {'✓ Active' if processed > 0 or approval_results.get('sent', 0) > 0 else '○ No Activity'}
 
 {metrics.get_summary()}
 
@@ -1618,17 +2113,24 @@ def main(run_mode: str = "once") -> None:
     if processed_count == 0:
         logger.info("📭 Nothing to process in Needs_Action folder.")
 
-    # Check Approvals
+    # Check Approval Workflow (Approved, Rejected, Pending_Approval)
     print("\n" + "─" * 70)
-    logger.info("✅ Checking approval workflow...")
+    logger.info("✅ Processing approval workflow...")
     print("─" * 70)
-    approved_count = check_pending_approvals(metrics)
+    approval_results = process_approval_folder(metrics)
+    
+    # Log approval workflow results
+    logger.info(f"📊 Approval Workflow Results:")
+    logger.info(f"   ✅ Emails Sent: {approval_results['sent']}")
+    logger.info(f"   ❌ Rejected: {approval_results['rejected']}")
+    logger.info(f"   ⏳ Pending: {approval_results['pending']}")
+    logger.info(f"   🐛 Errors: {approval_results['errors']}")
 
     # Save metrics
     metrics.save_metrics()
 
     # Generate report
-    print("\n" + generate_status_report(processed_count, approved_count, metrics))
+    print("\n" + generate_status_report(processed_count, approval_results, metrics))
 
     logger.info("✨ Orchestrator run complete.")
     print("=" * 70 + "\n")
