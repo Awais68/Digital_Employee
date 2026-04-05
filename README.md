@@ -7,7 +7,7 @@
 | Tier | Status | Completion Date | Features |
 |------|--------|-----------------|----------|
 | **Bronze** | ✅ Complete | 2026-04-02 | Basic orchestration, Dashboard, Plans |
-| **Silver** | ✅ **100% Complete** | 2026-04-03 | Email MCP, LinkedIn MCP, WhatsApp, Gmail, Approval Workflow, Cron |
+| **Silver** | ✅ **100% Complete** | 2026-04-03 | Email MCP, LinkedIn MCP, Gmail, Approval Workflow, Cron |
 | **Gold** | ⏳ Pending | — | LLM integration, NLU |
 | **Platinum** | ⏳ Pending | — | Full autonomy, Learning |
 
@@ -18,8 +18,8 @@
 | Feature | Status | Description |
 |---------|--------|-------------|
 | ✅ **Email MCP Integration** | Complete | `email_mcp.py` with SMTP/Gmail support |
-| ✅ **LinkedIn MCP Integration** | Complete | `linkedin_mcp.py` with LinkedIn API |
-| ✅ **WhatsApp Watcher** | Complete | `whatsapp_watcher.py` with Twilio integration |
+| ✅ **LinkedIn MCP Integration** | Complete | `linkedin_mcp.py` with LinkedIn API + **Session Persistence** |
+| ✅ **Gmail Watcher** | Complete | `gmail_watcher.py` with 30s interval monitoring |
 | ✅ **Approval Workflow** | Complete | Pending → Approved → Sent pipeline |
 | ✅ **Human-in-the-Loop** | Complete | Review before any email/post |
 | ✅ **Auto Dashboard Updates** | Complete | Colorful priority-based status |
@@ -27,7 +27,6 @@
 | ✅ **Rejection Handling** | Complete | Archive rejected drafts |
 | ✅ **Dry-Run Mode** | Complete | Test without sending |
 | ✅ **Gmail Watcher** | Complete | 30s interval monitoring |
-| ✅ **WhatsApp Watcher** | Complete | 30s interval monitoring via Twilio |
 | ✅ **Logging & Metrics** | Complete | Full audit trail |
 | ✅ **Cron Scheduling** | Complete | `setup_cron.py` utility for automation |
 | ✅ **Production Email Send** | Complete | Gmail App Password support |
@@ -58,7 +57,6 @@ Digital_Employee/
 ├── linkedin_mcp.py        # 📱 LinkedIn publishing MCP
 ├── orchestrator.py        # 🧠 Silver Tier orchestrator (main brain)
 ├── gmail_watcher.py       # 👁️ Gmail monitor (30s interval)
-├── whatsapp_watcher.py    # 📱 WhatsApp monitor (30s interval, Twilio)
 ├── filesystem_watcher.py  # 📂 File system monitor
 ├── setup_cron.py          # ⏰ Cron setup utility
 └── run_silver_test.py     # 🧪 Test script for Silver Tier
@@ -108,7 +106,6 @@ python3 setup_cron.py --status
 ```bash
 # Start watchers in tmux (continuous monitoring)
 tmux new -d -s gmail_watcher "python3 gmail_watcher.py --continuous"
-tmux new -d -s whatsapp_watcher "python3 whatsapp_watcher.py --continuous"
 
 # Setup cron for orchestrator (every 5 minutes)
 python3 setup_cron.py

@@ -3260,3 +3260,486 @@
 2026-04-03 02:48:24 - GmailWatcher - INFO - Found 0 unread emails
 2026-04-03 02:48:24 - GmailWatcher - INFO - No new important emails
 2026-04-03 02:48:24 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:48:54 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:48:54 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:48:54 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:48:54 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:48:54 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:48:54 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:48:54 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:49:24 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:49:24 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:49:24 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:49:24 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:49:25 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:49:25 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:49:25 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:49:55 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:49:55 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:49:55 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:49:55 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:49:55 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:49:55 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:49:55 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:50:25 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:50:25 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:50:25 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:50:25 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:50:25 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:50:25 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:50:25 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:50:55 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:50:55 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:50:55 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:50:55 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:50:56 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:50:56 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:50:56 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:51:26 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:51:26 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:51:26 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:51:26 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:51:26 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:51:26 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:51:26 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:51:56 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:51:56 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:51:56 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:51:56 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:51:56 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:51:56 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:51:56 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:52:26 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:52:26 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:52:26 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:52:26 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:52:27 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:52:27 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:52:27 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:52:57 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:52:57 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:52:57 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:52:57 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:52:57 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:52:57 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:52:57 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:53:27 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:53:27 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:53:27 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:53:27 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:53:27 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:53:27 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:53:27 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:53:57 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:53:57 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:53:57 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:53:57 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:53:58 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:53:58 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:53:58 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:54:28 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:54:28 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:54:28 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:54:28 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:54:28 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:54:28 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:54:28 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:54:58 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:54:58 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:54:58 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:54:58 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:54:58 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:54:58 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:54:58 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:55:28 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:55:28 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:55:28 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:55:28 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:55:29 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:55:29 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:55:29 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:55:59 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:55:59 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:55:59 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:55:59 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:55:59 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:55:59 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:55:59 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:56:29 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:56:29 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:56:29 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:56:29 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:56:29 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:56:29 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:56:29 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:56:59 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:56:59 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:56:59 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:56:59 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:57:00 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:57:00 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:57:00 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:57:30 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:57:30 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:57:30 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:57:30 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:57:30 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:57:30 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:57:30 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:58:00 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:58:00 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:58:00 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:58:00 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:58:00 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:58:00 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:58:00 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:58:30 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:58:30 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:58:30 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:58:30 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:58:31 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:58:31 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:58:31 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:59:01 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:59:01 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:59:01 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:59:01 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:59:01 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:59:01 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:59:01 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 02:59:31 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:59:31 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 02:59:31 - GmailWatcher - INFO - ============================================================
+2026-04-03 02:59:31 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 02:59:31 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 02:59:31 - GmailWatcher - INFO - No new important emails
+2026-04-03 02:59:31 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:00:01 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:00:01 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:00:01 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:00:01 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:00:02 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:00:02 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:00:02 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:00:32 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:00:32 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:00:32 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:00:32 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:00:32 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:00:32 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:00:32 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:01:02 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:01:02 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:01:02 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:01:02 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:01:02 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:01:02 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:01:02 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:01:32 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:01:32 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:01:32 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:01:32 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:01:33 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:01:33 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:01:33 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:02:03 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:02:03 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:02:03 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:02:03 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:02:03 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:02:03 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:02:03 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:02:33 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:02:33 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:02:33 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:02:33 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:02:33 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:02:33 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:02:33 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:03:03 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:03:03 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:03:03 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:03:03 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:03:04 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:03:04 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:03:04 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:03:34 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:03:34 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:03:34 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:03:34 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:03:34 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:03:34 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:03:34 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:04:04 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:04:04 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:04:04 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:04:04 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:04:04 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:04:04 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:04:04 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:04:34 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:04:34 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:04:34 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:04:34 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:04:34 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:04:34 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:04:34 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:05:04 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:05:04 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:05:04 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:05:04 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:05:05 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:05:05 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:05:05 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:05:35 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:05:35 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:05:35 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:05:35 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:05:35 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:05:35 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:05:35 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:06:05 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:06:05 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:06:05 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:06:05 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:06:05 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:06:05 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:06:05 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:06:35 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:06:36 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:06:36 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:06:36 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:06:36 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:06:36 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:06:36 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:07:06 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:07:06 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:07:06 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:07:06 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:07:06 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:07:06 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:07:06 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:07:36 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:07:36 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:07:36 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:07:36 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:07:36 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:07:36 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:07:36 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:08:06 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:08:06 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:08:06 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:08:06 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:08:07 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:08:07 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:08:07 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:08:37 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:08:37 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:08:37 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:08:37 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:08:37 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:08:37 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:08:37 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:09:07 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:09:07 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:09:07 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:09:07 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:09:07 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:09:07 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:09:07 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:09:37 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:09:37 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:09:37 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:09:37 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:09:38 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:09:38 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:09:38 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:10:08 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:10:08 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:10:08 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:10:08 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:10:08 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:10:08 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:10:08 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:10:38 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:10:38 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:10:38 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:10:38 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:10:39 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:10:39 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:10:39 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:11:09 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:11:09 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:11:09 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:11:09 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:11:09 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:11:09 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:11:09 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:11:39 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:11:39 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:11:39 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:11:39 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:11:39 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:11:39 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:11:39 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:12:09 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:12:09 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:12:09 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:12:09 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:12:09 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:12:09 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:12:09 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:12:39 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:12:39 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:12:39 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:12:39 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:12:40 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:12:40 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:12:40 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:13:10 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:13:10 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:13:10 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:13:10 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:13:10 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:13:10 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:13:10 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:13:40 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:13:40 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:13:40 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:13:40 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:13:40 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:13:40 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:13:40 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:14:10 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:14:10 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:14:10 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:14:10 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:14:11 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:14:11 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:14:11 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:14:41 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:14:41 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:14:41 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:14:41 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:14:41 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:14:41 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:14:41 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:15:11 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:15:11 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:15:11 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:15:11 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:15:11 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:15:11 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:15:11 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:15:41 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:15:41 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:15:41 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:15:41 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:15:42 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:15:42 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:15:42 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:16:12 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:16:12 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:16:12 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:16:12 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:16:12 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:16:12 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:16:12 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:16:42 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:16:42 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:16:42 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:16:42 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:16:42 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:16:42 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:16:42 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:17:12 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:17:12 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:17:12 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:17:12 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:17:13 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:17:13 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:17:13 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:17:43 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:17:43 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:17:43 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:17:43 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:17:43 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:17:43 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:17:43 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:18:13 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:18:13 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:18:13 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:18:13 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:18:13 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:18:13 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:18:13 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:18:43 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:18:43 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:18:43 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:18:43 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:18:44 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:18:44 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:18:44 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:19:14 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:19:14 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:19:14 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:19:14 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:19:14 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:19:14 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:19:14 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:19:44 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:19:44 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:19:44 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:19:44 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:19:45 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:19:45 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:19:45 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:20:15 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:20:15 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:20:15 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:20:15 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:20:15 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:20:15 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:20:15 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:20:45 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:20:45 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:20:45 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:20:45 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:20:45 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:20:45 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:20:45 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:21:15 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:21:15 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:21:15 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:21:15 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:21:16 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:21:16 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:21:16 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:21:46 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:21:46 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:21:46 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:21:46 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:21:46 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:21:46 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:21:46 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:22:16 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:22:16 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:22:16 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:22:16 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:22:16 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:22:16 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:22:16 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:22:46 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:22:46 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:22:46 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:22:46 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:22:47 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:22:47 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:22:47 - GmailWatcher - INFO - Next check in 30 seconds...
+2026-04-03 03:23:17 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:23:17 - GmailWatcher - INFO - Gmail Watcher - Starting iteration
+2026-04-03 03:23:17 - GmailWatcher - INFO - ============================================================
+2026-04-03 03:23:17 - GmailWatcher - INFO - Fetching emails with query: is:unread in:inbox -category:promotions -category:social
+2026-04-03 03:23:17 - GmailWatcher - INFO - Found 0 unread emails
+2026-04-03 03:23:17 - GmailWatcher - INFO - No new important emails
+2026-04-03 03:23:17 - GmailWatcher - INFO - Next check in 30 seconds...

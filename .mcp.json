@@ -1,0 +1,13 @@
+{
+  "email_mcp": {
+    "type": "stdio",
+    "command": "node",
+    "args": ["/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/email_mcp.js"],
+    "env": {
+      "GMAIL_CREDENTIALS_PATH": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/credentials.json",
+      "GMAIL_TOKEN_PATH": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/token.json",
+      "SENDER_NAME": "Digital Employee",
+      "DRY_RUN": "false"
+    }
+  }
+}

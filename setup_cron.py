@@ -46,12 +46,10 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 # Cron job configuration
 ORCHESTRATOR_CRON = "*/5 * * * *"  # Every 5 minutes
 GMAIL_WATCHER_INTERVAL = 30  # seconds (handled by script, not cron)
-WHATSAPP_WATCHER_INTERVAL = 30  # seconds (handled by script, not cron)
 
 # Log files
 CRON_LOG = LOGS_DIR / "cron_orchestrator.log"
 GMAIL_WATCHER_LOG = LOGS_DIR / "gmail_watcher_cron.log"
-WHATSAPP_WATCHER_LOG = LOGS_DIR / "whatsapp_watcher_cron.log"
 
 
 # =============================================================================
@@ -130,9 +128,9 @@ def generate_crontab() -> str:
     # Remove any existing Digital Employee cron jobs
     lines = existing.split('\n')
     filtered_lines = [
-        line for line in lines 
+        line for line in lines
         if 'Digital_Employee' not in line and 'orchestrator.py' not in line
-        and 'gmail_watcher.py' not in line and 'whatsapp_watcher.py' not in line
+        and 'gmail_watcher.py' not in line
     ]
     existing_cleaned = '\n'.join(filtered_lines)
     
@@ -149,10 +147,6 @@ def generate_crontab() -> str:
 
 # Gmail Watcher - Runs every minute (monitors every {GMAIL_WATCHER_INTERVAL}s internally)
 * * * * * cd {BASE_DIR} && python3 gmail_watcher.py >> {GMAIL_WATCHER_LOG} 2>&1
-
-# WhatsApp Watcher - Runs every minute (monitors every {WHATSAPP_WATCHER_INTERVAL}s internally)
-# Uncomment when Twilio is configured:
-# * * * * * cd {BASE_DIR} && python3 whatsapp_watcher.py >> {WHATSAPP_WATCHER_LOG} 2>&1
 
 # Daily log rotation at midnight
 0 0 * * * find {LOGS_DIR} -name "*.log" -mtime +7 -delete
@@ -196,11 +190,11 @@ def uninstall_crontab() -> bool:
     # Remove Digital Employee related lines
     lines = current.split('\n')
     filtered_lines = [
-        line for line in lines 
+        line for line in lines
         if 'Digital_Employee' not in line and 'orchestrator.py' not in line
-        and 'gmail_watcher.py' not in line and 'whatsapp_watcher.py' not in line
+        and 'gmail_watcher.py' not in line
         and '# Digital Employee' not in line and '# Orchestrator' not in line
-        and '# Gmail Watcher' not in line and '# WhatsApp Watcher' not in line
+        and '# Gmail Watcher' not in line
         and '# Daily log rotation' not in line and '# =========' not in line
         and 'Added:' not in line
     ]
@@ -266,18 +260,18 @@ def show_status() -> None:
         # Highlight Digital Employee jobs
         for line in current.split('\n'):
             if 'Digital_Employee' in line or 'orchestrator.py' in line or \
-               'gmail_watcher.py' in line or 'whatsapp_watcher.py' in line:
+               'gmail_watcher.py' in line:
                 print(f"  🤖 {line}")
             elif line.strip() and not line.startswith('#'):
                 print(f"     {line}")
-        
+
         print("-" * 70)
     else:
         print("\nℹ️  No crontab configured")
-    
+
     # Check if tmux watchers are running
     print("\n📊 Watcher Status:")
-    
+
     try:
         result = subprocess.run(
             ["tmux", "list-sessions"],
@@ -287,7 +281,7 @@ def show_status() -> None:
         if result.returncode == 0:
             sessions = result.stdout.split('\n')
             for session in sessions:
-                if 'gmail_watcher' in session or 'whatsapp_watcher' in session:
+                if 'gmail_watcher' in session:
                     print(f"  ✅ {session.strip()}")
     except Exception:
         pass
@@ -332,25 +326,13 @@ def start_tmux_watchers() -> None:
         print("✅ Gmail watcher started in tmux session 'gmail_watcher'")
     except Exception as e:
         print(f"⚠️  Could not start Gmail watcher: {e}")
-    
-    # Start WhatsApp watcher (if enabled)
-    try:
-        subprocess.run(
-            ["tmux", "new-session", "-d", "-s", "whatsapp_watcher",
-             "-c", str(BASE_DIR),
-             "python3", "whatsapp_watcher.py", "--continuous"],
-            check=True
-        )
-        print("✅ WhatsApp watcher started in tmux session 'whatsapp_watcher'")
-    except Exception as e:
-        print(f"ℹ️  WhatsApp watcher not started (may not be configured): {e}")
 
 
 def stop_tmux_watchers() -> None:
     """Stop watchers in tmux sessions."""
     print("\n🛑 Stopping tmux watchers...")
-    
-    for session_name in ["gmail_watcher", "whatsapp_watcher"]:
+
+    for session_name in ["gmail_watcher"]:
         try:
             subprocess.run(
                 ["tmux", "kill-session", "-t", session_name],
@@ -463,28 +445,26 @@ Examples:
             print("=" * 70)
             print(f"""
   What's configured:
-  
+
   ✅ Orchestrator: Runs every 5 minutes
      Command: python3 orchestrator.py
      Log: {CRON_LOG}
-  
+
   ✅ Gmail Watcher: Runs every minute
      Command: python3 gmail_watcher.py
      Log: {GMAIL_WATCHER_LOG}
-  
-  ℹ️  WhatsApp Watcher: Disabled (configure Twilio first)
-  
+
   Next Steps:
-  
+
   1. Start tmux watchers for continuous monitoring:
      python3 setup_cron.py --start-tmux
-  
+
   2. Check logs:
      tail -f {LOGS_DIR}/*.log
-  
+
   3. View dashboard:
      cat Dashboard.md
-  
+
   4. Monitor cron jobs:
      python3 setup_cron.py --status
 """)

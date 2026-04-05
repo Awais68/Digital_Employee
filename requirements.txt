@@ -37,6 +37,13 @@ twilio>=8.0.0
 # Already included: requests>=2.28.0
 
 # =============================================================================
+# LLM ROUTER (Required for AI reasoning)
+# =============================================================================
+
+# LiteLLM - Unified interface for 100+ LLM providers
+litellm>=1.60.0
+
+# =============================================================================
 # SCHEDULING & AUTOMATION (Optional)
 # =============================================================================
 
@@ -61,7 +68,10 @@ schedule>=1.2.0
 #   pip install -r requirements.txt
 
 # Minimal installation (core only):
-#   pip install python-dotenv watchdog requests
+#   pip install python-dotenv watchdog requests litellm
 
 # Production installation (no optional):
-#   pip install python-dotenv watchdog requests google-auth google-auth-oauthlib google-api-python-client twilio schedule
+#   pip install python-dotenv watchdog requests google-auth google-auth-oauthlib google-api-python-client twilio schedule litellm
+
+
+playwright
