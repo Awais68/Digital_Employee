@@ -16,12 +16,23 @@ Tier: Silver v4.0 - Human-in-the-Loop Ready
 
 import os
 import sys
+import re
 import json
+import time
 import shutil
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any, Tuple
 from dotenv import load_dotenv
+
+# Ralph Wiggum Loop — Autonomous Task Completion (Stop Hook Pattern)
+try:
+    from ralph_wiggum import RalphWiggumLoop, ralph_process_task
+    RALPH_WIGGUM_AVAILABLE = True
+except ImportError:
+    RalphWiggumLoop = None
+    ralph_process_task = None
+    RALPH_WIGGUM_AVAILABLE = False
 
 # Optional imports with graceful fallback
 try:
@@ -135,6 +146,7 @@ Best regards,
 TASK_PATTERNS = {
     "email": ["email", "gmail", "message", "inbox", "send", "reply"],
     "linkedin": ["linkedin", "post", "connection", "message", "network"],
+    "whatsapp": ["whatsapp", "type: whatsapp"],
     "document": ["document", "doc", "report", "summary", "write", "create"],
     "calendar": ["calendar", "meeting", "schedule", "event", "appointment"],
     "file": ["file", "folder", "move", "copy", "organize", "save"],
@@ -1028,6 +1040,221 @@ original_file: {filename}
 
 
 # =============================================================================
+# WHATSAPP REPLY DRAFT GENERATION
+# =============================================================================
+
+def generate_whatsapp_reply_draft(sender: str, message_body: str, message_id: str) -> Dict[str, str]:
+    """
+    Generate a WhatsApp reply draft.
+
+    CRITICAL: This draft is ONLY for human review. It must NEVER be auto-sent.
+    WhatsApp has strict rate limits — all replies require Human-in-the-Loop approval.
+
+    Args:
+        sender: WhatsApp sender name/number
+        message_body: Original message content
+        message_id: Unique message identifier
+
+    Returns:
+        Dictionary with draft content
+    """
+    sender_name = sender.split(" · ")[0].strip() if " · " in sender else sender
+
+    # Detect intent for contextual reply
+    low = message_body.lower()
+    if any(kw in low for kw in ["urgent", "asap", "immediate"]):
+        intent = "urgent_response"
+        reply_body = (
+            f"Hi {sender_name},\n\n"
+            f"I received your urgent message and I'm looking into this right away. "
+            f"I'll get back to you with a detailed response as soon as possible.\n\n"
+            f"Best regards,\n{DEFAULT_SENDER['name']}"
+        )
+    elif any(kw in low for kw in ["invoice", "payment", "price", "quote"]):
+        intent = "billing_inquiry"
+        reply_body = (
+            f"Hi {sender_name},\n\n"
+            f"Thank you for your message regarding billing. I'm reviewing the details "
+            f"and will respond with complete information shortly.\n\n"
+            f"Best regards,\n{DEFAULT_SENDER['name']}"
+        )
+    elif any(kw in low for kw in ["meeting", "schedule", "available"]):
+        intent = "meeting_request"
+        reply_body = (
+            f"Hi {sender_name},\n\n"
+            f"Thanks for reaching out about scheduling a meeting. "
+            f"I'd be happy to connect. Let me check my availability and get back to you "
+            f"with some time options.\n\n"
+            f"Best regards,\n{DEFAULT_SENDER['name']}"
+        )
+    elif any(kw in low for kw in ["help", "required", "need"]):
+        intent = "help_request"
+        reply_body = (
+            f"Hi {sender_name},\n\n"
+            f"I got your message and I'm here to help. "
+            f"Let me review what you need and I'll follow up with a proper response.\n\n"
+            f"Best regards,\n{DEFAULT_SENDER['name']}"
+        )
+    elif any(kw in low for kw in ["saas", "ai", "developer", "project"]):
+        intent = "business_inquiry"
+        reply_body = (
+            f"Hi {sender_name},\n\n"
+            f"Thank you for your interest. I'd love to discuss this further. "
+            f"Let me review your message in detail and respond with next steps.\n\n"
+            f"Best regards,\n{DEFAULT_SENDER['name']}"
+        )
+    else:
+        intent = "general_acknowledgment"
+        reply_body = (
+            f"Hi {sender_name},\n\n"
+            f"Thanks for your message. I've received it and will get back to you properly soon.\n\n"
+            f"Best regards,\n{DEFAULT_SENDER['name']}"
+        )
+
+    return {
+        "intent": intent,
+        "sender": sender,
+        "message_id": message_id,
+        "reply_body": reply_body,
+        "generated_at": datetime.now().isoformat(),
+    }
+
+
+def create_whatsapp_approval_file(filename: str, whatsapp_data: Dict) -> Optional[Path]:
+    """
+    Create WhatsApp approval file in /Pending_Approval/.
+
+    ⚠️  CRITICAL SAFETY RULE:
+    WhatsApp replies MUST NEVER be auto-sent. Every reply requires human approval
+    to avoid WhatsApp rate limit bans ("api rate limit exceed please try again later").
+
+    The human MUST move this file to /Approved/ before any reply is sent.
+
+    Args:
+        filename: Original WhatsApp task filename
+        whatsapp_data: Dict with sender, body, message_id, priority
+
+    Returns:
+        Path to created approval file or None on error
+    """
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_sender = re.sub(r'[^\w\s-]', '', whatsapp_data.get('sender', 'unknown')[:40])
+        safe_sender = re.sub(r'[-\s]+', '_', safe_sender.strip()).lower()
+        approval_filename = f"WHATSAPP_{timestamp}_{safe_sender}.md"
+        approval_path = FOLDERS["pending_approval"] / approval_filename
+
+        sender = whatsapp_data.get("sender", "Unknown")
+        body = whatsapp_data.get("body", "")
+        priority = whatsapp_data.get("priority", "medium")
+
+        # Generate contextual reply draft
+        reply_draft = generate_whatsapp_reply_draft(
+            sender=sender,
+            message_body=body,
+            message_id=whatsapp_data.get("message_id", ""),
+        )
+
+        priority_emoji = "🔴" if priority == "high" else "🟠"
+
+        content = f"""---
+type: whatsapp_reply_approval
+action: send_whatsapp_reply
+status: pending
+priority: {priority}
+created: {datetime.now().isoformat()}
+original_file: {filename}
+sender: {sender}
+message_id: {whatsapp_data.get('message_id', 'N/A')}
+---
+
+# {priority_emoji} WhatsApp Reply — Human Approval Required
+
+## ⚠️  IMPORTANT SAFETY RULE
+
+**WhatsApp replies MUST be manually reviewed and approved by a human.**
+**NEVER auto-send WhatsApp messages — rate limits will cause bans.**
+
+Only send this reply after moving this file to `/Approved/`.
+
+---
+
+## 📋 Original WhatsApp Message
+
+**From:** {sender}
+**Received:** {whatsapp_data.get('received_iso', 'N/A')}
+**Priority:** {priority.upper()}
+**Message ID:** {whatsapp_data.get('message_id', 'N/A')}
+
+---
+
+### Message Content
+
+```
+{body}
+```
+
+---
+
+## 💬 Proposed Reply Draft
+
+**Intent Detected:** {reply_draft['intent'].replace('_', ' ').title()}
+**Generated:** {reply_draft['generated_at']}
+
+```
+{reply_draft['reply_body']}
+```
+
+---
+
+## 🎯 Action Buttons
+
+**Please select an action by moving this file:**
+
+| Action | Destination | Description |
+|--------|-------------|-------------|
+| ✅ **Approve** | `/Approved/` | Reply draft is ready — human will send via WhatsApp Web |
+| 🔄 **Edit & Approve** | `/Approved/` | Edit the draft above, then move to `/Approved/` |
+| ❌ **Reject** | `/Rejected/` | Discard this draft, no reply needed |
+| ⏳ **Pending** | `/Pending_Approval/` | Need more time to decide |
+
+---
+
+## 📝 Human Notes
+
+*Add any comments, edits, or instructions here:*
+
+
+
+---
+
+## 🔧 Metadata
+
+- **Generated By:** Silver Tier Orchestrator v4.0
+- **Approval ID:** {timestamp}
+- **Source:** WhatsApp Watcher v1.1
+- **Rate Limit Safety:** 60-second minimum delay between sends
+
+---
+
+*⚠️  REMINDER: Do NOT send WhatsApp replies without human approval.*
+*📖 See Company_Handbook.md → WhatsApp Approval Rules*
+"""
+
+        with open(approval_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        logger.success(f"✅ Created WhatsApp approval file: {approval_filename}")
+        logger.info("   📋 Draft created in Pending_Approval — Waiting for human approval")
+        print(f"   📋 Draft created in Pending_Approval — Waiting for human approval")
+        return approval_path
+
+    except Exception as e:
+        logger.error(f"Failed to create WhatsApp approval file: {e}")
+        return None
+
+
+# =============================================================================
 # DASHBOARD MANAGEMENT (COLORFUL)
 # =============================================================================
 
@@ -1082,7 +1309,7 @@ def get_priority_items() -> Dict[str, List[Dict]]:
 
 
 def get_pending_approvals() -> List[Dict]:
-    """Get list of pending approval files."""
+    """Get list of pending approval files with type detection."""
     approvals = []
     pa_dir = FOLDERS["pending_approval"]
 
@@ -1090,12 +1317,91 @@ def get_pending_approvals() -> List[Dict]:
         return approvals
 
     for md_file in pa_dir.glob("*.md"):
-        approvals.append({
-            "filename": md_file.name,
-            "modified": datetime.fromtimestamp(md_file.stat().st_mtime).strftime("%H:%M"),
-        })
+        try:
+            content = md_file.read_text(encoding="utf-8")[:500]
+            item_type = "email"
+            if "type: linkedin" in content.lower() or "LINKEDIN" in md_file.name.upper():
+                item_type = "linkedin"
+            elif "type: whatsapp" in content.lower() or "WHATSAPP" in md_file.name.upper():
+                item_type = "whatsapp"
+
+            approvals.append({
+                "filename": md_file.name,
+                "modified": datetime.fromtimestamp(md_file.stat().st_mtime).strftime("%H:%M"),
+                "type": item_type,
+            })
+        except Exception:
+            approvals.append({
+                "filename": md_file.name,
+                "modified": datetime.fromtimestamp(md_file.stat().st_mtime).strftime("%H:%M"),
+                "type": "email",
+            })
 
     return approvals
+
+
+def get_linkedin_pending_posts() -> List[Dict]:
+    """Get list of pending LinkedIn posts with status tracking."""
+    linkedin_posts = []
+    pa_dir = FOLDERS["pending_approval"]
+    approved_dir = FOLDERS["approved"]
+    done_dir = FOLDERS["done"]
+
+    # Check pending approvals
+    if pa_dir.exists():
+        for md_file in pa_dir.glob("*.md"):
+            try:
+                content = md_file.read_text(encoding="utf-8")[:1000]
+                if "type: linkedin" in content.lower() or "LINKEDIN" in md_file.name.upper():
+                    # Extract topic/subject if available
+                    topic = "LinkedIn Post"
+                    for line in content.split("\n"):
+                        if line.startswith("topic:") or line.startswith("subject:"):
+                            topic = line.split(":", 1)[1].strip()[:60]
+                            break
+                    
+                    linkedin_posts.append({
+                        "filename": md_file.name,
+                        "modified": datetime.fromtimestamp(md_file.stat().st_mtime).strftime("%H:%M"),
+                        "status": "pending",
+                        "topic": topic,
+                    })
+            except Exception:
+                continue
+
+    # Check approved (ready to post)
+    if approved_dir.exists():
+        for md_file in approved_dir.glob("*.md"):
+            try:
+                content = md_file.read_text(encoding="utf-8")[:500]
+                if "type: linkedin" in content.lower() or "LINKEDIN" in md_file.name.upper():
+                    linkedin_posts.append({
+                        "filename": md_file.name,
+                        "modified": datetime.fromtimestamp(md_file.stat().st_mtime).strftime("%H:%M"),
+                        "status": "approved",
+                        "topic": "LinkedIn Post",
+                    })
+            except Exception:
+                continue
+
+    # Check done (posted)
+    if done_dir.exists():
+        for md_file in done_dir.glob("*.md"):
+            try:
+                content = md_file.read_text(encoding="utf-8")[:500]
+                if "LINKEDIN" in md_file.name.upper() or "type: linkedin" in content.lower():
+                    # Check if successfully posted
+                    if "✅" in content or "published" in content.lower():
+                        linkedin_posts.append({
+                            "filename": md_file.name,
+                            "modified": datetime.fromtimestamp(md_file.stat().st_mtime).strftime("%H:%M"),
+                            "status": "posted",
+                            "topic": "LinkedIn Post",
+                        })
+            except Exception:
+                continue
+
+    return sorted(linkedin_posts, key=lambda x: x["modified"], reverse=True)
 
 
 def get_daily_email_stats() -> Dict[str, int]:
@@ -1153,6 +1459,7 @@ def generate_colorful_dashboard() -> str:
     pending_approvals = get_pending_approvals()
     email_stats = get_daily_email_stats()
     today_completed = get_today_completed()
+    linkedin_posts = get_linkedin_pending_posts()
 
     # Calculate today's stats
     today_sent = email_stats["sent"] + email_stats["dry_run"]
@@ -1160,6 +1467,9 @@ def generate_colorful_dashboard() -> str:
     today_rejected = counts.get("rejected", 0)
     needs_action_count = counts.get("needs_action", 0)
     approved_count = counts.get("approved", 0)
+    linkedin_pending_count = len([p for p in linkedin_posts if p["status"] == "pending"])
+    linkedin_approved_count = len([p for p in linkedin_posts if p["status"] == "approved"])
+    linkedin_posted_count = len([p for p in linkedin_posts if p["status"] == "posted"])
 
     # Determine overall system status
     if today_pending > 0 or needs_action_count > 0:
@@ -1212,31 +1522,96 @@ def generate_colorful_dashboard() -> str:
     # 🟠 PENDING APPROVALS
     dashboard += "---\n\n## 🟠 Pending Approvals - Human Review Required\n\n"
     if pending_approvals:
-        dashboard += "**Move files to `/Approved/` to execute:**\n\n"
-        dashboard += "| # | Type | File | Since | Quick Action |\n"
-        dashboard += "|---|------|------|-------|-------------|\n"
-        for i, item in enumerate(pending_approvals, 1):
-            # Icon based on type
-            if "REPLY" in item["filename"].upper() or "EMAIL" in item["filename"].upper():
-                icon = "📧"
-                action = "Send Email"
-            elif "LINKEDIN" in item["filename"].upper():
-                icon = "📱"
-                action = "Post LinkedIn"
-            elif "PAYMENT" in item["filename"].upper():
-                icon = "💰"
-                action = "Approve Payment"
-            else:
-                icon = "📄"
-                action = "Review"
+        # Separate by type
+        whatsapp_approvals = [a for a in pending_approvals if a.get("type") == "whatsapp"]
+        linkedin_approvals = [a for a in pending_approvals if a.get("type") == "linkedin"]
+        email_approvals = [a for a in pending_approvals if a.get("type") == "email"]
 
-            dashboard += f"| {i} | {icon} | `{item['filename']}` | {item['modified']} | → `/Approved/` |\n"
+        # ─── WhatsApp Approvals (Highlighted for safety) ────────────────
+        if whatsapp_approvals:
+            dashboard += "### 💬 WhatsApp Replies — Manual Approval Required\n\n"
+            dashboard += "> ⚠️ **WhatsApp replies are NEVER auto-sent. Human must approve and send manually.**\n\n"
+            dashboard += "| # | File | Sender | Since | Action |\n"
+            dashboard += "|---|------|--------|-------|--------|\n"
+            for i, item in enumerate(whatsapp_approvals, 1):
+                # Extract sender from filename
+                sender = item["filename"].replace("WHATSAPP_", "").rsplit("_", 3)[0] if "_" in item["filename"] else "Unknown"
+                dashboard += f"| {i} | 💬 `{item['filename']}` | {sender} | {item['modified']} | Review → `/Approved/` |\n"
+            dashboard += f"\n**WhatsApp:** {len(whatsapp_approvals)} reply(ies) awaiting your review\n\n"
 
-        dashboard += f"\n**Total:** {len(pending_approvals)} file(s) awaiting your decision\n"
+        # ─── General Approvals ──────────────────────────────────────────
+        other_approvals = email_approvals + linkedin_approvals
+        if other_approvals:
+            dashboard += "**Move files to `/Approved/` to execute:**\n\n"
+            dashboard += "| # | Type | File | Since | Quick Action |\n"
+            dashboard += "|---|------|------|-------|-------------|\n"
+            for i, item in enumerate(other_approvals, 1):
+                if item.get("type") == "linkedin":
+                    icon = "📱"
+                    action = "Post LinkedIn"
+                else:
+                    icon = "📧"
+                    action = "Send Email"
+
+                dashboard += f"| {i} | {icon} | `{item['filename']}` | {item['modified']} | → `/Approved/` |\n"
+
+            dashboard += f"\n**Total (Email + LinkedIn):** {len(other_approvals)} file(s) awaiting your decision\n"
+
         dashboard += "\n**Quick Commands:**\n"
         dashboard += "```\n# Approve: mv Pending_Approval/<file> Approved/\n# Reject: mv Pending_Approval/<file> Rejected/\n```\n"
     else:
         dashboard += "✅ **All clear!** No pending approvals\n"
+
+    dashboard += "\n"
+
+    # 🔵 LINKEDIN PENDING POSTS
+    dashboard += "---\n\n## 🔵 LinkedIn Pending Posts\n\n"
+    if linkedin_posts:
+        dashboard += f"**LinkedIn Post Queue:** {linkedin_pending_count} pending, {linkedin_approved_count} approved, {linkedin_posted_count} posted\n\n"
+        
+        # Pending posts
+        pending_li = [p for p in linkedin_posts if p["status"] == "pending"]
+        if pending_li:
+            dashboard += "### 🟡 Awaiting Human Review\n\n"
+            dashboard += "| # | File | Topic | Since | Action |\n"
+            dashboard += "|---|------|-------|-------|--------|\n"
+            for i, item in enumerate(pending_li, 1):
+                dashboard += f"| {i} | `{item['filename']}` | {item['topic']} | {item['modified']} | Review → `/Approved/` |\n"
+            dashboard += f"\n**{len(pending_li)} post(s)** awaiting your review\n\n"
+        
+        # Approved posts (ready to publish)
+        approved_li = [p for p in linkedin_posts if p["status"] == "approved"]
+        if approved_li:
+            dashboard += "### 🟢 Approved - Ready to Publish\n\n"
+            dashboard += "| # | File | Since | Status |\n"
+            dashboard += "|---|------|-------|--------|\n"
+            for i, item in enumerate(approved_li, 1):
+                dashboard += f"| {i} | `{item['filename']}` | {item['modified']} | ⏳ Waiting for orchestrator |\n"
+            dashboard += f"\n**{len(approved_li)} post(s)** approved, will be posted on next orchestrator run\n\n"
+        
+        # Posted successfully
+        posted_li = [p for p in linkedin_posts if p["status"] == "posted"]
+        if posted_li:
+            dashboard += "### ✅ Successfully Posted\n\n"
+            dashboard += "| # | File | Posted | Status |\n"
+            dashboard += "|---|------|--------|--------|\n"
+            for i, item in enumerate(posted_li, 1):
+                dashboard += f"| {i} | `{item['filename']}` | {item['modified']} | ✅ Live on LinkedIn |\n"
+            dashboard += f"\n**{len(posted_li)} post(s)** published successfully\n\n"
+        
+        dashboard += "**Quick Commands:**\n"
+        dashboard += "```\n"
+        dashboard += "# Approve post: mv Pending_Approval/LINKEDIN_POST_* Approved/\n"
+        dashboard += "# Reject post: mv Pending_Approval/LINKEDIN_POST_* Rejected/\n"
+        dashboard += "# Create new post request: echo 'topic' > Needs_Action/LINKEDIN_DAILY_POST.md\n"
+        dashboard += "```\n"
+    else:
+        dashboard += "✅ **No LinkedIn posts in queue**\n\n"
+        dashboard += "**To create a post:**\n"
+        dashboard += "```\n"
+        dashboard += "python3 orchestrator.py tasks \"Post on LinkedIn: Your content here\"\n"
+        dashboard += "```\n"
+        dashboard += "Or place a file in `/Needs_Action/LINKEDIN_DAILY_POST.md`\n"
 
     dashboard += "\n"
 
@@ -1347,6 +1722,100 @@ def update_dashboard() -> None:
         f.write(content)
 
     logger.info("📊 Dashboard updated with priority view")
+
+
+def update_dashboard_linkedin_success(filename: str, message: str) -> None:
+    """Update Dashboard.md with LinkedIn post success status."""
+    try:
+        if not DASHBOARD_FILE.exists():
+            return
+
+        with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Add success entry to Recently Published section
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        success_entry = f"| {timestamp} | {filename.replace('LINKEDIN_POST_', '').replace('.md', '')} | ✅ Live | Posted |"
+
+        # Check if Recently Published section exists
+        if "Recently Published:" in content:
+            # Find the table and add entry
+            lines = content.split("\n")
+            new_lines = []
+            added = False
+            for line in lines:
+                new_lines.append(line)
+                if "| Date |" in line or "|------|" in line:
+                    continue
+                if "Recently Published:" in line and not added:
+                    # Add entry after header
+                    new_lines.append("")
+                    new_lines.append(success_entry)
+                    added = True
+
+            content = "\n".join(new_lines)
+        else:
+            # Add new section
+            linkedin_section = f"""
+---
+
+## 🔵 LinkedIn Recently Published
+
+| Date | File | Status | Post URL |
+|------|------|--------|----------|
+{success_entry}
+"""
+            content += linkedin_section
+
+        with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        logger.info(f"📊 Dashboard updated: LinkedIn post success - {filename}")
+    except Exception as e:
+        logger.warning(f"Could not update Dashboard with LinkedIn success: {e}")
+
+
+def update_dashboard_linkedin_failure(filename: str, message: str) -> None:
+    """Update Dashboard.md with LinkedIn post failure status."""
+    try:
+        if not DASHBOARD_FILE.exists():
+            return
+
+        with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Add failure entry
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        failure_entry = f"| {timestamp} | {filename} | ❌ Failed | {message[:50]}... |"
+
+        # Check if failure section exists
+        if "LinkedIn Post Failures:" in content:
+            lines = content.split("\n")
+            new_lines = []
+            for line in lines:
+                new_lines.append(line)
+                if "|------|" in line and "Date" not in line:
+                    new_lines.append(failure_entry)
+            content = "\n".join(new_lines)
+        else:
+            # Add new section
+            failure_section = f"""
+---
+
+## 🔴 LinkedIn Post Failures
+
+| Date | File | Status | Error |
+|------|------|--------|-------|
+{failure_entry}
+"""
+            content += failure_section
+
+        with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        logger.info(f"📊 Dashboard updated: LinkedIn post failure - {filename}")
+    except Exception as e:
+        logger.warning(f"Could not update Dashboard with LinkedIn failure: {e}")
 
 
 # =============================================================================
@@ -1520,6 +1989,39 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
             task_type = detect_task_type(original_content, file_path.name)
             logger.info(f"🎯 Detected task type: {task_type.title()}")
 
+            # ─── RALPH WIGGUM LOOP — Complex Task Auto-Detection ─────────
+            # If task is complex, delegate to Ralph Wiggum for autonomous
+            # multi-iteration completion before falling through to standard flow.
+            if RALPH_WIGGUM_AVAILABLE and is_task_candidate_for_ralph(task_type, original_content):
+                logger.info("🧸 Complex task detected — delegating to Ralph Wiggum Loop...")
+
+                ralph_result = process_complex_task_with_ralph(
+                    task_description=original_content,
+                    task_file=file_path,
+                    max_iterations=15,
+                    metrics=metrics,
+                )
+
+                if ralph_result.get("completed"):
+                    logger.success(f"✅ Ralph completed task: {file_path.name}")
+                    # Move to Done with Ralph completion marker
+                    destination_path = FOLDERS["done"] / file_path.name
+                    if move_file(file_path, destination_path):
+                        # Append Ralph completion note
+                        with open(destination_path, "a", encoding="utf-8") as f:
+                            f.write(f"\n\n---\n## 🧸 Ralph Wiggum Loop Completion\n")
+                            f.write(f"- **Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            f.write(f"- **Iterations:** {ralph_result['iterations_run']}\n")
+                            f.write(f"- **Duration:** {ralph_result['total_duration']:.1f}s\n")
+                        processed_count += 1
+                        duration = (datetime.now() - start_time).total_seconds()
+                        metrics.record_file_processed("ralph_loop", duration)
+                    continue
+                else:
+                    logger.warning("⚠️  Ralph did not complete task — falling back to standard processing")
+                    # Fall through to standard handlers below
+                    # (Ralph made progress but didn't signal completion)
+
             # Check for LinkedIn trigger (special handling)
             is_linkedin_trigger = (
                 task_type == "linkedin" or
@@ -1531,21 +2033,92 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
                 # Generate LinkedIn post and create approval file directly
                 logger.info("📱 LinkedIn trigger detected - generating post draft...")
                 post_data = generate_linkedin_post(original_content, file_path.name)
-                
+
                 approval_filename, approval_content = create_linkedin_approval_file(
                     post_data, file_path.name
                 )
-                
+
                 approval_path = FOLDERS["pending_approval"] / approval_filename
                 with open(approval_path, "w", encoding="utf-8") as f:
                     f.write(approval_content)
-                
+
                 logger.success(f"✅ Created LinkedIn post draft: {approval_filename}")
                 logger.info(f"📍 Saved to: /Pending_Approval/{approval_filename}")
                 linkedin_posts_generated += 1
                 approvals_created += 1
 
                 # Move trigger file to Done
+                destination_path = FOLDERS["done"] / file_path.name
+                if move_file(file_path, destination_path):
+                    processed_count += 1
+                    duration = (datetime.now() - start_time).total_seconds()
+                    metrics.record_file_processed(task_type, duration)
+                    logger.success(f"✓ Completed: {file_path.name} ({duration:.2f}s)")
+                else:
+                    metrics.record_error()
+                    logger.error(f"✗ Failed to move: {file_path.name}")
+                continue
+
+            # ─── WHATSAPP TASK HANDLING ─────────────────────────────────────
+            # CRITICAL: WhatsApp tasks ALWAYS create approval drafts — NEVER auto-send.
+            # This prevents rate limit bans from WhatsApp.
+            is_whatsapp_trigger = (
+                task_type == "whatsapp" or
+                "WHATSAPP" in file_path.name.upper() or
+                "type: whatsapp" in original_content.lower()
+            )
+
+            if is_whatsapp_trigger:
+                logger.info("💬 WhatsApp trigger detected — creating approval draft (NO auto-send)")
+
+                # Extract WhatsApp data from frontmatter
+                whatsapp_data = {}
+                lines = original_content.split("\n")
+                in_frontmatter = False
+                body_lines = []
+                in_body = False
+
+                for line in lines:
+                    if line.strip() == "---":
+                        if not in_frontmatter:
+                            in_frontmatter = True
+                        else:
+                            in_body = True
+                        continue
+
+                    if in_frontmatter:
+                        if ":" in line:
+                            key, value = line.split(":", 1)
+                            whatsapp_data[key.strip()] = value.strip()
+                    elif in_body and line.strip():
+                        body_lines.append(line)
+
+                whatsapp_data["body"] = "\n".join(body_lines).strip()
+                whatsapp_data.setdefault("sender", whatsapp_data.get("from", "Unknown"))
+                whatsapp_data.setdefault("priority", whatsapp_data.get("priority", "medium"))
+
+                # Create approval file — HUMAN must review before any reply is sent
+                approval_path = create_whatsapp_approval_file(
+                    file_path.name, whatsapp_data
+                )
+
+                if approval_path:
+                    approvals_created += 1
+                    logger.success(
+                        f"✅ WhatsApp approval created: {approval_path.name}"
+                    )
+                    logger.info(
+                        "   🛡️  SAFETY: Reply will NOT be sent automatically. "
+                        "Human must move file to /Approved/ first."
+                    )
+                    # 60-second delay to prevent rate limiting on batch processing
+                    logger.info("   ⏳ Enforcing 60-second delay before next action (rate limit safety)")
+                    time.sleep(60)
+                else:
+                    metrics.record_error()
+                    logger.error("✗ Failed to create WhatsApp approval file")
+
+                # Move trigger to Done
                 destination_path = FOLDERS["done"] / file_path.name
                 if move_file(file_path, destination_path):
                     processed_count += 1
@@ -1767,7 +2340,9 @@ def extract_linkedin_post_content(content: str) -> Optional[Dict[str, str]]:
 
 def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[bool, str]:
     """
-    Publish LinkedIn post for an approved file using linkedin_mcp.
+    Publish LinkedIn post for an approved file using Playwright MCP.
+    
+    Tries Playwright MCP first (saved session), falls back to LinkedIn API MCP.
 
     Args:
         file_path: Path to approved LinkedIn post file
@@ -1777,9 +2352,6 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
         Tuple of (success: bool, message: str)
     """
     try:
-        # Import LinkedIn MCP
-        from linkedin_mcp import create_post as mcp_create_post
-
         content = read_file_content(file_path)
         post_data = extract_linkedin_post_content(content)
 
@@ -1788,31 +2360,76 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
 
         post_content = post_data["content"]
 
-        logger.info(f"📱 Publishing LinkedIn post via linkedin_mcp.py:")
+        logger.info(f"📱 Publishing LinkedIn post:")
         logger.info(f"   Content preview: {post_content[:100]}...")
 
-        # Publish post using MCP
-        result = mcp_create_post(
-            content=post_content,
-            dry_run=None  # Use DRY_RUN from environment
-        )
-
-        if result.get("success"):
+        # Try Playwright MCP first (uses saved session)
+        result = None
+        used_method = ""
+        
+        try:
+            logger.info("   🎭 Attempt 1: Using Playwright MCP (saved session)...")
+            from Agent_Skills.SKILL_LInkedin_Playwright_MCP import post_to_linkedin
+            
+            result = post_to_linkedin(
+                content=post_content,
+                image_path=None,  # Can be extended to support images
+                target="personal"
+            )
+            
+            if result.get("success"):
+                used_method = "Playwright MCP"
+                logger.success(f"✅ Posted via Playwright MCP")
+            else:
+                logger.warning(f"⚠️  Playwright MCP failed: {result.get('message', 'Unknown error')}")
+                result = None
+                
+        except ImportError as e:
+            logger.info(f"   ⚠️  Playwright MCP not available: {e}")
+            result = None
+        except Exception as e:
+            logger.warning(f"⚠️  Playwright MCP error: {e}")
+            result = None
+        
+        # Fallback to LinkedIn API MCP
+        if not result or not result.get("success"):
+            try:
+                logger.info("   🔌 Attempt 2: Using LinkedIn API MCP...")
+                from linkedin_mcp import create_post as mcp_create_post
+                
+                result = mcp_create_post(
+                    content=post_content,
+                    dry_run=None  # Use DRY_RUN from environment
+                )
+                
+                if result.get("success"):
+                    used_method = "LinkedIn API MCP"
+                    logger.success(f"✅ Posted via LinkedIn API MCP")
+                else:
+                    logger.error(f"❌ LinkedIn API MCP failed: {result.get('message', 'Unknown error')}")
+                    
+            except ImportError as e:
+                error_msg = f"linkedin_mcp.py not found or import failed: {e}"
+                logger.error(error_msg)
+                return False, error_msg
+            except Exception as e:
+                error_msg = f"Error using LinkedIn API MCP: {e}"
+                logger.error(error_msg)
+                return False, error_msg
+        
+        # Check final result
+        if result and result.get("success"):
             msg = result.get("message", "LinkedIn post published successfully")
             post_url = result.get("post_url", "")
             logger.success(f"✅ {msg}")
             if post_url:
                 logger.info(f"   Post URL: {post_url}")
-            return True, f"{msg} - {post_url}"
+            return True, f"{msg} (via {used_method}) - {post_url}"
         else:
-            error_msg = result.get("message", "Unknown error")
+            error_msg = result.get("message", "Unknown error") if result else "No result"
             logger.error(f"❌ LinkedIn post publish failed: {error_msg}")
             return False, error_msg
 
-    except ImportError as e:
-        error_msg = f"linkedin_mcp.py not found or import failed: {e}"
-        logger.error(error_msg)
-        return False, error_msg
     except Exception as e:
         error_msg = f"Error publishing LinkedIn post: {e}"
         logger.error(error_msg)
@@ -1932,10 +2549,10 @@ def process_approval_folder(metrics: MetricsManager) -> Dict[str, int]:
                 # Determine file type and process accordingly
                 content = read_file_content(file_path)
                 
-                if "type: linkedin_post_draft" in content or "type: linkedin_post" in content:
+                if "type: linkedin_post_draft" in content or "type: linkedin_post" in content or "LINKEDIN_POST" in file_path.name.upper():
                     # Process as LinkedIn post
                     success, message = publish_linkedin_post(file_path, metrics)
-                    
+
                     if success:
                         # Move to Done after successful publish
                         done_path = FOLDERS["done"] / file_path.name
@@ -1949,9 +2566,51 @@ def process_approval_folder(metrics: MetricsManager) -> Dict[str, int]:
                                 success_note = f"\n\n---\n## ✅ LinkedIn Post Published\n- **Published At:** {datetime.now().isoformat()}\n- **Status:** Live on LinkedIn\n- **Message:** {message}\n"
                                 with open(done_path, "a", encoding="utf-8") as f:
                                     f.write(success_note)
+
+                            # Log success in Dashboard.md
+                            update_dashboard_linkedin_success(file_path.name, message)
+
+                            logger.success(f"✅ LinkedIn post published: {file_path.name}")
                     else:
                         results["errors"] += 1
                         logger.error(f"❌ Failed to publish LinkedIn post: {file_path.name} - {message}")
+
+                        # Log failure in Dashboard.md
+                        update_dashboard_linkedin_failure(file_path.name, message)
+                elif "type: whatsapp_reply_approval" in content or "WHATSAPP_" in file_path.name.upper():
+                    # ─── WHATSAPP APPROVED — NEVER AUTO-SEND ───────────────────
+                    # WhatsApp replies are handled manually by the human via WhatsApp Web.
+                    # The orchestrator ONLY logs the approval and moves the file to Done.
+                    # This is intentional to prevent WhatsApp rate limit bans.
+                    logger.success(f"💬 WhatsApp reply approved: {file_path.name}")
+                    logger.info("   📋 Reply approved by human — Human will send manually via WhatsApp Web")
+                    logger.info("   🛡️  Auto-send DISABLED for WhatsApp (rate limit safety)")
+
+                    # Move to Done with approval note (no auto-send)
+                    done_path = FOLDERS["done"] / file_path.name
+                    if move_file(file_path, done_path):
+                        results["sent"] += 1  # Count as "handled" not "sent"
+                        metrics.record_approval_triggered()
+
+                        # Add approval note
+                        try:
+                            done_content = read_file_content(done_path)
+                            if "✅ WhatsApp Reply Approved" not in done_content:
+                                success_note = (
+                                    f"\n\n---\n"
+                                    f"## ✅ WhatsApp Reply Approved (Manual Send)\n"
+                                    f"- **Approved At:** {datetime.now().isoformat()}\n"
+                                    f"- **Status:** Human will send manually via WhatsApp Web\n"
+                                    f"- **Rate Limit Safety:** 60s minimum delay between sends\n"
+                                    f"- **Auto-Send:** DISABLED (prevents API rate limit bans)\n"
+                                )
+                                with open(done_path, "a", encoding="utf-8") as f:
+                                    f.write(success_note)
+                        except Exception as e:
+                            logger.warning(f"Could not append approval note: {e}")
+                    else:
+                        results["errors"] += 1
+                        logger.error(f"❌ Failed to move approved WhatsApp file: {file_path.name}")
                 else:
                     # Process as email
                     success, message = send_approved_email(file_path, metrics)
@@ -2132,6 +2791,458 @@ def main(run_mode: str = "once") -> None:
     # Generate report
     print("\n" + generate_status_report(processed_count, approval_results, metrics))
 
+    logger.info("✨ Orchestrator run complete.")
+    print("=" * 70 + "\n")
+
+
+# =============================================================================
+# ENTRY POINT
+# =============================================================================
+
+# =============================================================================
+# LLM-POWERED TASK ROUTING (Claude Addition)
+# =============================================================================
+
+def process_task_with_llm_routing(task_description: str, metrics: MetricsManager) -> Dict[str, Any]:
+    """
+    Process tasks using LLM-based routing to appropriate skill agents.
+    
+    This integrates the LLM router with the existing orchestrator to enable
+    intelligent task distribution across LinkedIn, WhatsApp, scheduling, etc.
+    
+    Args:
+        task_description: Natural language description of the task
+        metrics: Metrics manager for tracking
+        
+    Returns:
+        Dictionary with task processing results
+    """
+    logger.info(f"🧠 Processing task with LLM routing: {task_description}")
+    
+    result = {
+        "task": task_description,
+        "task_type": None,
+        "success": False,
+        "message": "",
+        "timestamp": datetime.now().isoformat(),
+    }
+    
+    try:
+        # Route task using pattern matching (since llm_router doesn't have route_task)
+        task_type = detect_task_type(task_description, "task")
+        result["task_type"] = task_type
+        logger.info(f"🎯 Routed task as: {task_type}")
+        
+        if task_type == "linkedin":
+            # Handle LinkedIn tasks using Playwright MCP or standard MCP
+            logger.info("📱 Routing to LinkedIn MCP...")
+            
+            # Extract content from task description
+            if "Post on LinkedIn: " in task_description:
+                content = task_description.split("Post on LinkedIn: ")[1]
+            else:
+                content = task_description
+            
+            # Determine target (personal or company)
+            target = "personal"
+            if "company" in task_description.lower():
+                target = "company"
+            
+            # Extract image path if specified
+            image_path = None
+            if "with image:" in task_description.lower():
+                parts = task_description.lower().split("with image:")
+                if len(parts) > 1:
+                    image_path = parts[1].split()[0].strip()
+            
+            # Try Playwright MCP first (easier setup - just QR scan), fallback to API MCP
+            linkedin_result = {"success": False, "message": "LinkedIn MCP not available"}
+            used_method = ""
+
+            # Attempt 1: Playwright MCP (uses saved browser session - NO API tokens needed)
+            try:
+                from Agent_Skills.SKILL_LInkedin_Playwright_MCP import post_to_linkedin
+                logger.info("   🎭 Attempt 1: Using Playwright MCP (saved browser session)")
+
+                linkedin_result = post_to_linkedin(content, image_path=image_path, target=target)
+
+                if linkedin_result.get("success"):
+                    used_method = "Playwright MCP"
+                    result["success"] = True
+                    result["message"] = f"LinkedIn post published via Playwright: {linkedin_result.get('message', '')}"
+                    logger.success(f"✅ {result['message']}")
+                    if linkedin_result.get("post_url"):
+                        logger.info(f"   Post URL: {linkedin_result['post_url']}")
+                else:
+                    logger.warning(f"⚠️  Playwright MCP failed: {linkedin_result.get('message', 'Unknown error')}")
+                    linkedin_result = None
+
+            except ImportError:
+                logger.info("   ⚠️  Playwright MCP not available")
+                linkedin_result = None
+            except Exception as e:
+                logger.warning(f"⚠️  Playwright MCP error: {e}")
+                linkedin_result = None
+
+            # Attempt 2: LinkedIn API MCP (requires API tokens in .env)
+            if not linkedin_result or not linkedin_result.get("success"):
+                try:
+                    from linkedin_mcp import create_post as mcp_create_post
+                    logger.info("   🔌 Attempt 2: Using LinkedIn API MCP")
+
+                    linkedin_result = mcp_create_post(
+                        content=content,
+                        dry_run=None
+                    )
+
+                    if linkedin_result.get("success"):
+                        used_method = "LinkedIn API MCP"
+                        result["success"] = True
+                        result["message"] = f"LinkedIn post published via API: {linkedin_result.get('message', '')}"
+                        logger.success(f"✅ {result['message']}")
+                        if linkedin_result.get("post_url"):
+                            logger.info(f"   Post URL: {linkedin_result['post_url']}")
+                    else:
+                        result["message"] = f"LinkedIn API failed: {linkedin_result.get('message', 'Unknown error')}"
+                        logger.error(f"❌ {result['message']}")
+                except ImportError as e:
+                    result["message"] = "LinkedIn not configured - please save session using: python3 Agent_Skills/SKILL_LInkedin_Playwright_MCP.py save"
+                    logger.error(f"❌ {result['message']}")
+                except Exception as e:
+                    result["message"] = f"LinkedIn API error: {e}"
+                    logger.error(f"❌ {result['message']}")
+
+            metrics.record_file_processed("linkedin", 0)
+            
+        elif task_type == "whatsapp":
+            # Handle WhatsApp tasks
+            logger.info("💬 Routing to WhatsApp watcher...")
+            
+            # Extract recipient and message
+            recipient = "default_recipient"
+            message = task_description
+            
+            if "Send WhatsApp message to" in task_description:
+                # Parse recipient
+                parts = task_description.split("Send WhatsApp message to")[1]
+                if ":" in parts:
+                    recipient = parts.split(":")[0].strip()
+                    message = ":".join(parts.split(":")[1:]).strip()
+            
+            # WhatsApp requires manual sending - create approval file instead
+            logger.info("   ⚠️  WhatsApp requires manual approval - creating approval file")
+            logger.info("   📋 Please place WhatsApp tasks in Needs_Action/ folder for approval workflow")
+            result["message"] = "WhatsApp task logged - use Needs_Action folder for approval workflow"
+            
+            metrics.record_file_processed("whatsapp", 0)
+            
+        elif task_type == "calendar" or task_type == "notification":
+            # Handle scheduling/calendar tasks
+            logger.info("📅 Calendar/Notification task detected")
+            logger.info("   📋 Scheduling tasks should use Gmail/Calendar integration")
+            result["message"] = "Scheduling task - use Gmail/Calendar integration"
+            
+            metrics.record_file_processed(task_type, 0)
+            
+        elif task_type == "email":
+            # Handle email tasks using existing email pipeline
+            logger.info("📧 Routing to email MCP...")
+            result["message"] = "Email task - use Needs_Action folder for processing"
+            logger.info("   Email tasks should be placed in Needs_Action/ folder")
+            
+        elif task_type == "document":
+            # Handle document creation tasks
+            logger.info("📄 Routing to document skill...")
+            result["message"] = "Document task - use Plans folder for processing"
+            logger.info("   Document tasks should be placed in Needs_Action/ folder")
+            
+        else:
+            result["message"] = f"Unknown task type: {task_type}"
+            logger.warning(f"⚠️  {result['message']}")
+        
+        return result
+        
+    except Exception as e:
+        error_msg = f"Error processing task: {e}"
+        result["message"] = error_msg
+        logger.error(f"❌ {error_msg}")
+        metrics.record_error()
+        return result
+
+
+# =============================================================================
+# BATCH TASK PROCESSING
+# =============================================================================
+
+def process_batch_tasks(task_list: List[str], metrics: MetricsManager) -> Dict[str, Any]:
+    """
+    Process a batch of tasks using LLM routing.
+    
+    Args:
+        task_list: List of task descriptions
+        metrics: Metrics manager
+        
+    Returns:
+        Dictionary with batch processing results
+    """
+    logger.info(f"📦 Processing batch of {len(task_list)} tasks...")
+    
+    results = {
+        "total": len(task_list),
+        "successful": 0,
+        "failed": 0,
+        "task_results": [],
+    }
+    
+    for i, task in enumerate(task_list, 1):
+        logger.info(f"{'─' * 60}")
+        logger.info(f"Task {i}/{len(task_list)}: {task[:80]}...")
+        
+        result = process_task_with_llm_routing(task, metrics)
+        results["task_results"].append(result)
+        
+        if result["success"]:
+            results["successful"] += 1
+        else:
+            results["failed"] += 1
+        
+        # Add delay between tasks to prevent rate limiting
+        if i < len(task_list):
+            time.sleep(2)
+    
+    logger.info(f"{'─' * 60}")
+    logger.info(f"📊 Batch Results: {results['successful']}/{results['total']} successful")
+
+    return results
+
+
+# =============================================================================
+# RALPH WIGGUM LOOP INTEGRATION (Autonomous Task Completion)
+# =============================================================================
+
+def process_complex_task_with_ralph(
+    task_description: str,
+    task_file: Optional[Path] = None,
+    max_iterations: int = 15,
+    metrics: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Process important long-running tasks using the Ralph Wiggum Loop.
+
+    This is the Silver Tier's autonomous "keep going until it's actually done"
+    mechanism.  Use for complex tasks that may require multiple Claude iterations.
+
+    Completion is detected when:
+      1. Claude outputs "TASK_COMPLETE" sentinel
+      2. The task file is moved to Done/
+      3. A custom completion hook returns True
+
+    Args:
+        task_description: The task prompt/description
+        task_file: Optional path to the task file for Done/ tracking
+        max_iterations: Maximum loop iterations (default 15)
+        metrics: Optional MetricsManager for tracking
+
+    Returns:
+        Dictionary with ralph loop results
+    """
+    if not RALPH_WIGGUM_AVAILABLE:
+        logger.warning("⚠️  Ralph Wiggum Loop not available — falling back to single-pass processing")
+        return {
+            "success": False,
+            "message": "Ralph Wiggum Loop not available",
+            "task": task_description,
+            "fallback": True,
+        }
+
+    logger.separator("🧸")
+    logger.info("🧸 RALPH WIGGUM LOOP — Autonomous Task Activation")
+    logger.info(f"📋 Task: {task_description[:120]}...")
+    logger.info(f"📋 Max iterations: {max_iterations}")
+    logger.separator("🧸")
+
+    result = {
+        "task": task_description,
+        "task_file": str(task_file) if task_file else None,
+        "max_iterations": max_iterations,
+        "success": False,
+        "completed": False,
+        "iterations_run": 0,
+        "total_duration": 0,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    try:
+        # Build an enriched system prompt for the Digital Employee context
+        system_prompt = (
+            "You are the Digital Employee — an autonomous AI agent working for a SaaS company. "
+            "You are thorough, professional, and detail-oriented. "
+            "Complete the given task with the highest quality possible. "
+            "When you are certain the task is fully complete, output TASK_COMPLETE on its own line."
+        )
+
+        # Run the Ralph Wiggum Loop
+        ralph_result = ralph_process_task(
+            prompt=task_description,
+            task_file=task_file,
+            max_iterations=max_iterations,
+            system_prompt=system_prompt,
+        )
+
+        result["completed"] = ralph_result.get("completed", False)
+        result["success"] = ralph_result.get("completed", False) and ralph_result.get("all_succeeded", False)
+        result["iterations_run"] = ralph_result.get("iterations_run", 0)
+        result["total_duration"] = ralph_result.get("total_duration", 0)
+        result["ralph_summary"] = ralph_result
+
+        if result["completed"]:
+            logger.success(f"✅ Ralph Wiggum Loop completed task in {result['iterations_run']} iterations")
+            if metrics:
+                metrics.record_task_completed("ralph_loop", result["total_duration"])
+        else:
+            logger.warning(
+                f"⚠️  Ralph Wiggum Loop exhausted after {result['iterations_run']} iterations "
+                f"without completion signal"
+            )
+            if metrics:
+                metrics.record_error()
+
+    except Exception as e:
+        logger.error(f"❌ Ralph Wiggum Loop failed: {e}")
+        result["error"] = str(e)
+        if metrics:
+            metrics.record_error()
+
+    return result
+
+
+def is_task_candidate_for_ralph(task_type: str, content: str) -> bool:
+    """
+    Determine if a task should be processed by Ralph Wiggum Loop.
+
+    Ralph is used for complex, multi-step tasks that benefit from
+    autonomous iterative refinement.
+
+    Args:
+        task_type: Detected task type (linkedin, email, whatsapp, etc.)
+        content: Task content
+
+    Returns:
+        True if task should go through Ralph Wiggum Loop
+    """
+    # Keywords that signal complex, multi-step work
+    complex_indicators = [
+        "build", "create", "implement", "develop", "design",
+        "research", "analysis", "comprehensive", "detailed",
+        "multi-step", "full-stack", "complete system", "end-to-end",
+        "refactor", "migrate", "debug", "fix all", "optimize",
+        "write a", "generate a", "full report", "deep dive",
+    ]
+
+    content_lower = content.lower()
+
+    # Count complexity indicators
+    complexity_score = sum(1 for word in complex_indicators if word in content_lower)
+
+    # Ralph activates if:
+    # 1. Multiple complexity indicators found (score >= 2)
+    # 2. Task is explicitly marked as complex
+    # 3. Content is long enough (>500 chars) suggesting non-trivial work
+    if complexity_score >= 2:
+        return True
+
+    if complexity_score >= 1 and len(content_lower) > 500:
+        return True
+
+    # Check for explicit Ralph trigger
+    if "use ralph" in content_lower or "ralph wiggum" in content_lower or "autonomous" in content_lower:
+        return True
+
+    return False
+
+
+# =============================================================================
+# MAIN ORCHESTRATOR (Updated with LLM Routing)
+# =============================================================================
+
+def main(run_mode: str = "once") -> None:
+    """
+    Main orchestrator entry point.
+    
+    Supports three modes:
+    1. 'once' - Single run (process Needs_Action + approval workflow)
+    2. 'scheduled' - Continuous monitoring (not fully implemented, use cron)
+    3. 'tasks' - Process specific tasks from command line
+    
+    Args:
+        run_mode: Execution mode
+    """
+    print("\n" + "=" * 70)
+    print("  SILVER TIER ORCHESTRATOR v4.0 - Human-in-the-Loop")
+    print("=" * 70 + "\n")
+    
+    logger.info("🚀 Orchestrator starting...")
+    
+    # Initialize
+    load_environment()
+    ensure_directories()
+    
+    # Initialize managers
+    metrics = MetricsManager(METRICS_FILE)
+    
+    # Handle task mode (new)
+    if run_mode == "tasks" and len(sys.argv) > 2:
+        # Process specific tasks from command line
+        tasks = sys.argv[2:]
+        logger.info(f"📦 Task mode: Processing {len(tasks)} task(s)")
+        
+        batch_results = process_batch_tasks(tasks, metrics)
+        
+        print("\n" + "=" * 70)
+        print("  TASK PROCESSING RESULTS")
+        print("=" * 70)
+        print(f"\n  Total: {batch_results['total']}")
+        print(f"  Successful: {batch_results['successful']}")
+        print(f"  Failed: {batch_results['failed']}")
+        print("\n" + "=" * 70 + "\n")
+        
+        metrics.save_metrics()
+        return
+    
+    # Handle scheduled mode
+    if run_mode == "scheduled":
+        interval = int(os.getenv("ORCHESTRATOR_INTERVAL", "30"))
+        logger.info(f"⏰ Scheduled mode not fully implemented. Use cron instead.")
+        logger.info("   Recommended: python setup_cron.py")
+    
+    # Process Needs_Action
+    print("\n" + "─" * 70)
+    logger.info("📥 Scanning Needs_Action folder...")
+    print("─" * 70)
+    processed_count = process_needs_action_files(metrics)
+    
+    if processed_count == 0:
+        logger.info("📭 Nothing to process in Needs_Action folder.")
+    
+    # Check Approval Workflow (Approved, Rejected, Pending_Approval)
+    print("\n" + "─" * 70)
+    logger.info("✅ Processing approval workflow...")
+    print("─" * 70)
+    approval_results = process_approval_folder(metrics)
+    
+    # Log approval workflow results
+    logger.info(f"📊 Approval Workflow Results:")
+    logger.info(f"   ✅ Emails Sent: {approval_results['sent']}")
+    logger.info(f"   ❌ Rejected: {approval_results['rejected']}")
+    logger.info(f"   ⏳ Pending: {approval_results['pending']}")
+    logger.info(f"   🐛 Errors: {approval_results['errors']}")
+    
+    # Save metrics
+    metrics.save_metrics()
+    
+    # Generate report
+    print("\n" + generate_status_report(processed_count, approval_results, metrics))
+    
     logger.info("✨ Orchestrator run complete.")
     print("=" * 70 + "\n")
 

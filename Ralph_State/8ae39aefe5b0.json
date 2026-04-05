@@ -1,0 +1,32 @@
+{
+  "task_id": "8ae39aefe5b0",
+  "prompt": "Build something",
+  "task_file": null,
+  "iteration": 3,
+  "cumulative_output": "\n---\nStill working...\n\n---\nStill working...\n\n---\nStill working...\n",
+  "results": [
+    {
+      "success": true,
+      "stdout": "Still working...",
+      "stderr": "",
+      "returncode": 0,
+      "duration": 0.5
+    },
+    {
+      "success": true,
+      "stdout": "Still working...",
+      "stderr": "",
+      "returncode": 0,
+      "duration": 0.5
+    },
+    {
+      "success": true,
+      "stdout": "Still working...",
+      "stderr": "",
+      "returncode": 0,
+      "duration": 0.5
+    }
+  ],
+  "completed": false,
+  "started_at": "2026-04-05T08:35:16.070698+00:00"
+}

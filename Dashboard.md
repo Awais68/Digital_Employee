@@ -1,6 +1,6 @@
 # 🎛️ Digital Employee Control Panel
 
-*Last Updated: 2026-04-03 00:44:42* | **Status:** 🟡 Action Required
+*Last Updated: 2026-04-06 00:57:01* | **Status:** 🟡 Action Required
 
 ---
 
@@ -8,7 +8,7 @@
 
 | 🔴 Needs Action | 🟠 Pending Approval | 🟡 Sent Today | 🟢 Completed Today |
 |:---------------:|:-------------------:|:-------------:|:------------------:|
-| **0** | **3** | **6** | **6** |
+| **0** | **10** | **0** | **1** |
 
 ---
 
@@ -16,8 +16,8 @@
 
 | Metric | Count | Visual Status |
 |--------|-------|---------------|
-| **Emails Sent** | 6 | 🟢 Active |
-| **Pending Review** | 3 | 🟡 Waiting |
+| **Emails Sent** | 0 | ⚪ None |
+| **Pending Review** | 10 | 🟡 Waiting |
 | **Rejected** | 0 | 🟢 None |
 | **Dry Run Mode** | 0 | ✅ Live |
 
@@ -36,10 +36,17 @@
 | # | Type | File | Since | Quick Action |
 |---|------|------|-------|-------------|
 | 1 | 📧 | `REPLY_20260403_000457_email_re_agent_testing.md` | 00:07 | → `/Approved/` |
-| 2 | 📧 | `REPLY_20260402_235852_email_security_alert.md` | 23:59 | → `/Approved/` |
-| 3 | 📱 | `LINKEDIN_POST_20260403_001735.md` | 00:17 | → `/Approved/` |
+| 2 | 📧 | `REPLY_20260403_004456_email_delivery_status_notification_failure.md` | 02:59 | → `/Approved/` |
+| 3 | 📧 | `REPLY_20260402_235852_email_security_alert.md` | 23:59 | → `/Approved/` |
+| 4 | 📧 | `REPLY_20260406_004803_email_re_test_from_digital_fte_email_mcp.md` | 00:51 | → `/Approved/` |
+| 5 | 📧 | `REPLY_20260403_010511_email_action_needed_your_profile_is_no_longer_appearing.md` | 02:59 | → `/Approved/` |
+| 6 | 📱 | `LINKEDIN_POST_20260404_234638.md` | 23:46 | → `/Approved/` |
+| 7 | 📱 | `LINKEDIN_POST_20260404_234837.md` | 23:48 | → `/Approved/` |
+| 8 | 📱 | `READY_TO_POST_LINKEDIN.md` | 03:16 | → `/Approved/` |
+| 9 | 📱 | `LINKEDIN_POST_20260405_100902.md` | 10:09 | → `/Approved/` |
+| 10 | 📱 | `LINKEDIN_POST_20260405_222214.md` | 22:22 | → `/Approved/` |
 
-**Total:** 3 file(s) awaiting your decision
+**Total (Email + LinkedIn):** 10 file(s) awaiting your decision
 
 **Quick Commands:**
 ```
@@ -49,16 +56,36 @@
 
 ---
 
+## 🔵 LinkedIn Pending Posts
+
+**LinkedIn Post Queue:** 5 pending, 0 approved, 0 posted
+
+### 🟡 Awaiting Human Review
+
+| # | File | Topic | Since | Action |
+|---|------|-------|-------|--------|
+| 1 | `LINKEDIN_POST_20260404_234837.md` | LinkedIn Post | 23:48 | Review → `/Approved/` |
+| 2 | `LINKEDIN_POST_20260404_234638.md` | LinkedIn Post | 23:46 | Review → `/Approved/` |
+| 3 | `LINKEDIN_POST_20260405_222214.md` | LinkedIn Post | 22:22 | Review → `/Approved/` |
+| 4 | `LINKEDIN_POST_20260405_100902.md` | LinkedIn Post | 10:09 | Review → `/Approved/` |
+| 5 | `READY_TO_POST_LINKEDIN.md` | LinkedIn Post | 03:16 | Review → `/Approved/` |
+
+**5 post(s)** awaiting your review
+
+**Quick Commands:**
+```
+# Approve post: mv Pending_Approval/LINKEDIN_POST_* Approved/
+# Reject post: mv Pending_Approval/LINKEDIN_POST_* Rejected/
+# Create new post request: echo 'topic' > Needs_Action/LINKEDIN_DAILY_POST.md
+```
+
+---
+
 ## 🟡 Today's Completed Tasks
 
 **Successfully processed today:**
 
-- 📧 `REPLY_20260403_003519_email_test_reply.md` `[00:44]`
-- 📧 `REPLY_test_silver_email.md` `[00:44]`
-- 📧 `20260403_003519_email_test_reply.md` `[00:35]`
-- 📱 `test_silver_linkedin.md` `[00:17]`
-- 📧 `test_silver_email.md` `[00:17]`
-- 📧 `20260403_000457_email_re_agent_testing.md` `[00:04]`
+- 📧 `20260406_004803_email_re_test_from_digital_fte_email_mcp.md` `[00:48]`
 
 ---
 

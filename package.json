@@ -1,0 +1,26 @@
+{
+  "name": "digital_employee",
+  "version": "1.0.0",
+  "description": "> **Personal AI Employee Hackathon 2026** — A file-based task orchestration system that automates workflow processing using markdown files.",
+  "main": "email_mcp.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Awais68/Digital_Employee.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Awais68/Digital_Employee/issues"
+  },
+  "homepage": "https://github.com/Awais68/Digital_Employee#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "googleapis": "^171.4.0",
+    "mime-types": "^2.1.35"
+  }
+}

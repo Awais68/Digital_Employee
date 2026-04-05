@@ -1,0 +1,18 @@
+{
+  "task_id": "summary_test",
+  "prompt": "Test",
+  "task_file": null,
+  "iteration": 1,
+  "cumulative_output": "\n---\nTASK_COMPLETE\n",
+  "results": [
+    {
+      "success": true,
+      "stdout": "TASK_COMPLETE",
+      "stderr": "",
+      "returncode": 0,
+      "duration": 3.14
+    }
+  ],
+  "completed": true,
+  "started_at": "2026-04-05T08:35:16.078926+00:00"
+}

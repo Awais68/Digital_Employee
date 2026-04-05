@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "email_mcp": {
+      "command": "node",
+      "args": ["/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/email_mcp.js"],
+      "env": {
+        "GMAIL_CREDENTIALS_PATH": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/credentials.json",
+        "GMAIL_TOKEN_PATH": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/token.json",
+        "SENDER_NAME": "Digital Employee",
+        "DRY_RUN": "false",
+        "PORT": "3001"
+      },
+      "config": {
+        "GMAIL_CREDENTIALS": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/credentials.json",
+        "description": "Gmail integration for sending emails via Google APIs",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "instructions": {
+    "email_mcp": {
+      "setup": [
+        "1. Create Gmail API credentials: https://console.cloud.google.com/apis/credentials",
+        "2. Download credentials.json and place it in the Digital_Employee directory",
+        "3. Run: node email_mcp.js get_auth_url",
+        "4. Visit the URL and authorize access",
+        "5. Copy the authorization code and run: node email_mcp.js set_auth_code <code>",
+        "6. Test connection: node email_mcp.js test"
+      ],
+      "tools": [
+        "send_email - Send an email with support for plain text, HTML, CC, BCC",
+        "test_email_connection - Test Gmail API connection",
+        "get_auth_url - Get OAuth2 authorization URL for authentication",
+        "set_auth_code - Set authorization code to complete OAuth flow"
+      ],
+      "notes": [
+        "Credentials are stored in credentials.json (auto-generated from Google Cloud Console)",
+        "Token is saved in token.json after first authorization",
+        "Set DRY_RUN=true in environment to test without sending actual emails",
+        "Logs are written to Logs/email_log_YYYYMMDD.md"
+      ]
+    }
+  }
+}

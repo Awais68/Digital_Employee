@@ -16,7 +16,7 @@ Features:
 - Post metrics tracking
 
 Author: Digital Employee System
-Tier: Silver v2.0 - LinkedIn MCP Integration
+Tier: Silver v1.0 - LinkedIn MCP Integration
 """
 
 import os
@@ -26,8 +26,9 @@ import logging
 import subprocess
 import base64
 import time
+import re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 
@@ -51,11 +52,15 @@ except ImportError:
 
 
 # =============================================================================
-# Configuration
+# CONFIGURATION
 # =============================================================================
 
 # Base directory (vault root)
 BASE_DIR = Path(__file__).resolve().parent
+
+# Session persistence directory
+SESSION_DIR = BASE_DIR / ".linkedin_session"
+SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 # LinkedIn API configuration
 LINKEDIN_API_BASE = "https://api.linkedin.com/v2"
@@ -115,6 +120,9 @@ class LinkedInMCP:
         self.organization_id = LINKEDIN_ORGANIZATION_ID
         self.api_base = LINKEDIN_API_BASE
 
+        # Load saved session if exists
+        self._load_session()
+
         self._validate_config()
         self.session = requests.Session()
         if self.access_token:
@@ -124,6 +132,188 @@ class LinkedInMCP:
                 'Content-Type': 'application/json',
                 'linkedin-version': '202402'
             })
+
+    def _load_session(self) -> None:
+        """Load saved LinkedIn session from file."""
+        session_file = SESSION_DIR / "session.json"
+        
+        if not session_file.exists():
+            logger.info("No saved LinkedIn session found")
+            return
+        
+        try:
+            with open(session_file, 'r', encoding='utf-8') as f:
+                session_data = json.load(f)
+            
+            # Check if session is still valid (not expired)
+            expires_at = session_data.get('expires_at')
+            if expires_at:
+                expires_datetime = datetime.fromisoformat(expires_at)
+                if datetime.now() > expires_datetime:
+                    logger.warning("⚠️  LinkedIn session has expired")
+                    # Try to auto-refresh if we have refresh token
+                    if session_data.get('refresh_token'):
+                        logger.info("Attempting to refresh expired session...")
+                        self.access_token = session_data.get('access_token')
+                        self.refresh_token = session_data.get('refresh_token')
+                        self.person_urn = session_data.get('person_urn', self.person_urn)
+                        
+                        # Refresh the token
+                        refresh_result = self._refresh_token_with_data(
+                            self.client_id,
+                            self.client_secret,
+                            self.refresh_token
+                        )
+                        
+                        if refresh_result['success']:
+                            logger.info("✅ Session refreshed successfully!")
+                            self.access_token = refresh_result['access_token']
+                            self.refresh_token = refresh_result.get('refresh_token', self.refresh_token)
+                            self._save_session()
+                            return
+                        else:
+                            logger.error(f"❌ Session refresh failed: {refresh_result['message']}")
+                    return
+            
+            # Session is still valid
+            self.access_token = session_data.get('access_token', self.access_token)
+            self.refresh_token = session_data.get('refresh_token', self.refresh_token)
+            self.person_urn = session_data.get('person_urn', self.person_urn)
+            
+            logger.info("✅ Restored previous LinkedIn session")
+            
+        except Exception as e:
+            logger.error(f"Error loading session: {e}")
+
+    def _save_session(self) -> None:
+        """Save LinkedIn session to file for persistence."""
+        session_file = SESSION_DIR / "session.json"
+        
+        try:
+            # Calculate expiration time (access tokens expire in 30 days)
+            expires_in_seconds = 2592000  # 30 days
+            expires_at = datetime.now() + timedelta(seconds=expires_in_seconds)
+            
+            session_data = {
+                'access_token': self.access_token,
+                'refresh_token': self.refresh_token,
+                'person_urn': self.person_urn,
+                'client_id': self.client_id,
+                'client_secret': self.client_secret,
+                'expires_at': expires_at.isoformat(),
+                'saved_at': datetime.now().isoformat()
+            }
+            
+            with open(session_file, 'w', encoding='utf-8') as f:
+                json.dump(session_data, f, indent=2)
+            
+            # Set restrictive permissions (owner only)
+            os.chmod(session_file, 0o600)
+            
+            logger.info(f"💾 LinkedIn session saved successfully")
+            logger.info(f"   Session expires: {expires_at.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+        except Exception as e:
+            logger.error(f"Error saving session: {e}")
+
+    def _is_token_expired(self) -> bool:
+        """Check if the current access token is expired."""
+        session_file = SESSION_DIR / "session.json"
+        
+        if not session_file.exists():
+            return True
+        
+        try:
+            with open(session_file, 'r', encoding='utf-8') as f:
+                session_data = json.load(f)
+            
+            expires_at = session_data.get('expires_at')
+            if not expires_at:
+                return True
+            
+            expires_datetime = datetime.fromisoformat(expires_at)
+            return datetime.now() > expires_datetime
+            
+        except Exception:
+            return True
+
+    def _refresh_token_with_data(self, client_id: str, client_secret: str, refresh_token: str) -> Dict[str, Any]:
+        """Refresh access token with provided credentials."""
+        result = {
+            "success": False,
+            "message": "",
+            "access_token": None,
+            "refresh_token": None,
+            "expires_in": None
+        }
+
+        if not client_id or not client_secret or not refresh_token:
+            result["message"] = "Missing OAuth2 credentials"
+            return result
+
+        try:
+            response = requests.post(
+                "https://www.linkedin.com/oauth/v2/accessToken",
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "refresh_token": refresh_token
+                }
+            )
+
+            if response.status_code == 200:
+                token_data = response.json()
+                result["success"] = True
+                result["message"] = "Access token refreshed successfully"
+                result["access_token"] = token_data.get("access_token")
+                result["refresh_token"] = token_data.get("refresh_token", refresh_token)
+                result["expires_in"] = token_data.get("expires_in", 2592000)
+
+                logger.info("✅ Access token refreshed")
+                logger.info(f"   New token expires in: {result['expires_in']} seconds")
+            else:
+                result["message"] = f"Token refresh failed: {response.text}"
+                logger.error(result["message"])
+
+        except Exception as e:
+            result["message"] = f"Error refreshing token: {e}"
+            logger.error(result["message"])
+
+        return result
+
+    def _auto_refresh_if_needed(self) -> bool:
+        """Automatically refresh token if expired or about to expire."""
+        if not self._is_token_expired():
+            return True
+        
+        if not self.refresh_token:
+            logger.error("❌ Token expired and no refresh token available")
+            return False
+        
+        logger.info("🔄 Access token expired, attempting auto-refresh...")
+        
+        refresh_result = self._refresh_token_with_data(
+            self.client_id,
+            self.client_secret,
+            self.refresh_token
+        )
+        
+        if refresh_result['success']:
+            self.access_token = refresh_result['access_token']
+            self.refresh_token = refresh_result['refresh_token']
+            
+            # Update session headers
+            self.session.headers.update({
+                'Authorization': f'Bearer {self.access_token}'
+            })
+            
+            # Save refreshed session
+            self._save_session()
+            return True
+        else:
+            logger.error(f"❌ Auto-refresh failed: {refresh_result['message']}")
+            return False
 
     def _validate_config(self) -> None:
         """Validate LinkedIn configuration."""
@@ -147,11 +337,19 @@ class LinkedInMCP:
         if self.organization_id:
             return f"urn:li:organization:{self.organization_id}"
         elif self.person_urn:
-            return self.person_urn
+            # Convert urn:li:person:XXX to urn:li:member:XXX for UGC Posts API
+            person_urn = self.person_urn
+            if person_urn.startswith("urn:li:person:"):
+                member_id = person_urn.split(":")[-1]
+                return f"urn:li:member:{member_id}"
+            return person_urn
         else:
             # Try to get current user's URN
             person_urn = self._get_current_person_urn()
             if person_urn:
+                if person_urn.startswith("urn:li:person:"):
+                    member_id = person_urn.split(":")[-1]
+                    return f"urn:li:member:{member_id}"
                 return person_urn
             raise ValueError("Cannot determine author URN. Configure LINKEDIN_PERSON_URN or LINKEDIN_ORGANIZATION_ID")
 
@@ -246,6 +444,13 @@ class LinkedInMCP:
             result["message"] = error_msg
             return result
 
+        # Auto-refresh token if expired
+        if not self._auto_refresh_if_needed():
+            error_msg = "LinkedIn token expired and auto-refresh failed. Please regenerate token manually."
+            logger.error(error_msg)
+            result["message"] = error_msg
+            return result
+
         try:
             # Get author URN
             author = self._get_author()
@@ -319,7 +524,6 @@ class LinkedInMCP:
         entities = {"hashtags": []}
         
         # Find all hashtags
-        import re
         hashtag_pattern = re.compile(r'#(\w+)')
         
         for match in hashtag_pattern.finditer(content):
@@ -345,35 +549,17 @@ class LinkedInMCP:
         visibility: str
     ) -> Dict:
         """Build the UGC Post API payload."""
-        
-        # Build content object
-        content_obj = {
-            "contentEntities": {
-                "entities": []
-            },
-            "description": {
-                "text": ""
-            }
-        }
 
-        # Add media if provided
-        if media_urls:
-            for media_url in media_urls:
-                content_obj["contentEntities"]["entities"].append({
-                    "entityLocation": media_url,
-                    "thumbnails": []
-                })
-
-        # Build description with text and entities
-        description = {
+        # Build shareCommentary with text and optional hashtag attributes
+        share_commentary = {
             "text": content
         }
 
-        # Add hashtag entities if present
+        # Add hashtag attributes if present
         if entities.get("hashtags"):
-            description["attributes"] = []
+            share_commentary["attributes"] = []
             for hashtag in entities["hashtags"]:
-                description["attributes"].append({
+                share_commentary["attributes"].append({
                     "start": hashtag["start"],
                     "length": hashtag["length"],
                     "entityType": "HASHTAG",
@@ -382,23 +568,38 @@ class LinkedInMCP:
                     }
                 })
 
-        content_obj["description"] = description
+        # Build shareContent object
+        share_content = {
+            "shareCommentary": share_commentary,
+            "shareMediaCategory": "NONE"
+        }
+
+        # Add media if provided
+        if media_urls:
+            share_content["shareMediaCategory"] = "IMAGE"
+            share_content["media"] = {
+                "contentEntities": {
+                    "entities": [
+                        {
+                            "entityLocation": media_url,
+                            "thumbnails": []
+                        }
+                        for media_url in media_urls
+                    ]
+                }
+            }
 
         # Build full payload
         payload = {
             "author": author,
             "lifecycleState": "PUBLISHED",
             "specificContent": {
-                "com.linkedin.ugc.ShareContent": content_obj
+                "com.linkedin.ugc.ShareContent": share_content
             },
             "visibility": {
                 "com.linkedin.ugc.MemberNetworkVisibility": visibility
             }
         }
-
-        # Add scheduled time if provided
-        # Note: Scheduled posting requires additional API setup
-        # For now, we publish immediately
 
         return payload
 
@@ -625,11 +826,18 @@ class LinkedInMCP:
                 logger.info("✅ Access token refreshed")
                 logger.info(f"   New token expires in: {result['expires_in']} seconds")
 
-                # Update session header
+                # Update tokens
                 if result["new_access_token"]:
+                    self.access_token = result["new_access_token"]
+                    self.refresh_token = token_data.get("refresh_token", self.refresh_token)
+                    
+                    # Update session header
                     self.session.headers.update({
-                        'Authorization': f'Bearer {result["new_access_token"]}'
+                        'Authorization': f'Bearer {self.access_token}'
                     })
+                    
+                    # Save the refreshed session
+                    self._save_session()
             else:
                 result["message"] = f"Token refresh failed: {response.text}"
                 logger.error(result["message"])
@@ -755,6 +963,8 @@ def main():
         print("  refresh-token           Refresh OAuth2 access token")
         print("  post <content>          Create a text post")
         print("  post-file <file>        Create post from file content")
+        print("  save-session            Save current session to file")
+        print("  session-status          Check saved session status")
         print("\nEnvironment Variables:")
         print("  LINKEDIN_CLIENT_ID      LinkedIn OAuth2 Client ID")
         print("  LINKEDIN_CLIENT_SECRET  LinkedIn OAuth2 Client Secret")
@@ -834,6 +1044,46 @@ def main():
                 print(f"   URL: {result['post_url']}")
         else:
             print("❌ Post creation failed")
+
+    elif command == "save-session":
+        print("Saving current LinkedIn session...")
+        if mcp.access_token:
+            mcp._save_session()
+            print("✅ Session saved successfully!")
+            print(f"   Session file: {SESSION_DIR / 'session.json'}")
+            print(f"   Token expires in: 30 days")
+        else:
+            print("❌ No access token available to save")
+
+    elif command == "session-status":
+        session_file = SESSION_DIR / "session.json"
+        if session_file.exists():
+            try:
+                with open(session_file, 'r', encoding='utf-8') as f:
+                    session_data = json.load(f)
+                
+                expires_at = datetime.fromisoformat(session_data.get('expires_at', ''))
+                saved_at = datetime.fromisoformat(session_data.get('saved_at', ''))
+                is_expired = datetime.now() > expires_at
+                
+                print(f"\n📊 LinkedIn Session Status:")
+                print(f"   Status: {'✅ ACTIVE' if not is_expired else '❌ EXPIRED'}")
+                print(f"   Saved at: {saved_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"   Expires at: {expires_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                if not is_expired:
+                    days_left = (expires_at - datetime.now()).days
+                    print(f"   Days remaining: {days_left}")
+                else:
+                    print(f"   Expired: {(datetime.now() - expires_at).days} days ago")
+                
+                print(f"   Person URN: {session_data.get('person_urn', 'N/A')}")
+                print(f"   Has refresh token: {'✅ Yes' if session_data.get('refresh_token') else '❌ No'}")
+                
+            except Exception as e:
+                print(f"❌ Error reading session: {e}")
+        else:
+            print("❌ No saved session found")
 
     else:
         print(f"Unknown command: {command}")

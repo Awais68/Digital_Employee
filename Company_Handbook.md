@@ -9,6 +9,47 @@
 
 ---
 
+## ⚠️ CRITICAL: WhatsApp Human-in-the-Loop Rule
+
+**All WhatsApp replies MUST go through Human-in-the-Loop approval. NEVER auto-send WhatsApp messages.**
+
+WhatsApp has strict API rate limits. Sending messages too fast will trigger:
+> `"api rate limit exceed please try again later"` — and may lead to account bans.
+
+### WhatsApp Approval Workflow
+
+```
+1. WhatsApp message received → whatsapp_watcher.py → /Needs_Action/
+2. Orchestrator creates reply draft → /Pending_Approval/ (WHATSAPP_*.md)
+3. Human reviews draft content
+   ├── ✅ Approve → Move to /Approved/ → Human sends manually via WhatsApp Web
+   ├── 🔄 Edit & Approve → Edit draft, move to /Approved/ → Human sends manually
+   ├── ❌ Reject → Move to /Rejected/ → No reply sent
+   └── ⏳ Pending → Keep in /Pending_Approval/ → Review later
+4. Orchestrator logs approval and moves file to /Done/
+5. Human sends the reply MANUALLY via WhatsApp Web (no auto-send)
+```
+
+### WhatsApp Safety Rules
+
+| Rule | Description |
+|------|-------------|
+| **1. NO Auto-Send** | WhatsApp replies are NEVER sent automatically by the orchestrator |
+| **2. Human Approval Required** | Every draft MUST be reviewed and approved by moving to /Approved/ |
+| **3. Manual Send** | Human sends the reply manually via WhatsApp Web after approval |
+| **4. 60-Second Delay** | Minimum 60 seconds between processing WhatsApp tasks (rate limit safety) |
+| **5. One at a Time** | Maximum 1 WhatsApp message processed per 60 seconds |
+| **6. Log Everything** | All actions logged in /Logs/ and /Done/ |
+
+### Why This Matters
+
+WhatsApp aggressively rate-limits automated messages. Even with approval, replies must be:
+- Sent manually by the human (not by any script)
+- Spaced at least 60 seconds apart
+- Reviewed for appropriateness before sending
+
+---
+
 ## Silver Tier Rules – Approval Workflow
 
 ### Approval Categories
@@ -17,6 +58,7 @@
 |----------|-----------|-----------------|
 | **Payments** | > $100 | Human approval required |
 | **Emails** | Any external | Human approval required |
+| **WhatsApp** | Any reply | Human approval required + Manual send only |
 | **LinkedIn Posts** | Any public post | Human approval required |
 | **File Deletions** | Any permanent delete | Human approval required |
 | **API Calls** | Paid APIs | Human approval required |
@@ -270,6 +312,9 @@ Digital_Employee/
 | `python3 email_mcp.py send <to> <subject> <body>` | Send email directly |
 | `python3 gmail_watcher.py --start` | Start Gmail monitoring |
 | `python3 gmail_watcher.py --status` | Check watcher status |
+| `python3 whatsapp_watcher.py --first-run` | First WhatsApp run (QR scan) |
+| `python3 whatsapp_watcher.py --start` | Start WhatsApp monitor in tmux |
+| `python3 whatsapp_watcher.py --status` | Check WhatsApp watcher status |
 
 ---
 
