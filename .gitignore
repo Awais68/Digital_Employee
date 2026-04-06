@@ -71,9 +71,108 @@ desktop.ini
 Metrics/
 metrics.json
 
+# =============================================================================
+# STRICT SECURITY - Browser Session & Cache Data (NEVER COMMIT)
+# =============================================================================
+
+# Browser sessions (Chrome/Edge/Chromium) - contain cookies, tokens, cache
+whatsapp_session/
+browser_session/
+*sessions/
+*Session*/
+*Local Storage/
+*IndexedDB/
+*Service Worker/
+*Code Cache/
+*GPUCache/
+*DawnWebGPUCache/
+*DawnGraphiteCache/
+*Cache/Cache_Data/
+*Cookies*
+*History*
+*Login Data*
+*Web Data*
+*Network/
+*blob_storage/
+
+# Browser profiles
+Default/
+Profile */
+
+# =============================================================================
+# STRICT SECURITY - API Keys & Token Patterns
+# =============================================================================
+
+# Google
+*google*api*key*
+*google*credentials*
+google-services.json
+
+# AWS
+*.aws/
+aws_credentials
+aws-keys.json
+.aws/credentials
+
+# Firebase
+firebase-debug.log
+firebase-debug.*.log
+
+# OAuth tokens
+*oauth*token*
+*refresh_token*
+*access_token*
+
+# Database URLs with credentials
+*://*:*@*
+
+# =============================================================================
+# STRICT SECURITY - Private Keys & Certificates
+# =============================================================================
+
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.cert
+*.crt
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+
+# =============================================================================
+# STRICT SECURITY - Database & Data Dumps
+# =============================================================================
+
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*database*
+*backup*.sql
+*backup*.db
+
+# =============================================================================
+# STRICT SECURITY - Build Artifacts & Dependencies
+# =============================================================================
+
+node_modules/
+bower_components/
+out/
+
 # Temporary files
 tmp/
 temp/
 *.tmp
 
+# =============================================================================
+# STRICT COMPLIANCE - Secret File Names
+# =============================================================================
 
+*secret*
+*password*
+*credential*
+*.env.*
+!.env.example
