@@ -43,7 +43,19 @@
       "Bash(npm *)",
       "mcp(email_mcp, *)",
       "Bash(npm init *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(docker-compose *)",
+      "Bash(docker compose build)",
+      "Bash(docker compose up *)",
+      "Bash(tr *)",
+      "Bash(do *)",
+      "Bash(done)",
+      "Bash(docker compose down *)",
+      "Bash(git commit *)",
+      "Bash(docker compose ps)",
+      "Bash(docker compose logs *)",
+      "Read(//home/awais/.config/claude-code/**)",
+      "Bash(psql *)"
     ]
   },
   "$version": 3

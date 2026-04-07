@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Node modules (we need package.json though)
+node_modules/
+npm-debug.log*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials (mount as volumes instead)
+credentials/
+tokens/
+
+# Logs and Metrics
+Logs/
+Metrics/
+*.log
+
+# Docker
+Dockerfile.*
+.dockerignore
+
+# Environment
+.env
+.env.*
+!.env.example

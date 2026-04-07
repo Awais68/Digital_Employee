@@ -1,0 +1,131 @@
+services:
+  # ─────────────────────────────────────────────────────────────
+  # Main Orchestrator Service
+  # ─────────────────────────────────────────────────────────────
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: digital-employee-orchestrator
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-4}
+      - SENDER_NAME=${SENDER_NAME:-Digital Employee}
+      - SENDER_EMAIL=${SENDER_EMAIL}
+      - SENDER_TITLE=${SENDER_TITLE:-CTO / AI Engineer}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+      - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN}
+      - LINKEDIN_URN=${LINKEDIN_URN}
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-*/30 * * * *}
+    volumes:
+      - gmail_credentials:/app/credentials
+      - gmail_tokens:/app/tokens
+      - logs:/app/Logs
+      - metrics:/app/Metrics
+      - done:/app/Done
+      - needs_action:/app/Needs_Action
+      - pending_approval:/app/Pending_Approval
+      - approved:/app/Approved
+      - rejected:/app/Rejected
+      - plans:/app/Plans
+    restart: unless-stopped
+    networks:
+      - digital-employee-network
+    depends_on:
+      - email-mcp
+
+  # ─────────────────────────────────────────────────────────────
+  # Email MCP Service (Node.js)
+  # ─────────────────────────────────────────────────────────────
+  email-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.email
+    container_name: digital-employee-email-mcp
+    environment:
+      - GMAIL_CREDENTIALS_PATH=/app/credentials/credentials.json
+      - GMAIL_TOKEN_PATH=/app/tokens/token.json
+      - SENDER_NAME=${SENDER_NAME:-Digital Employee}
+      - DRY_RUN=${DRY_RUN:-false}
+      - MAX_ATTACHMENT_SIZE=${MAX_ATTACHMENT_SIZE:-10485760}
+    volumes:
+      - gmail_credentials:/app/credentials
+      - gmail_tokens:/app/tokens
+      - logs:/app/Logs
+      - email_templates:/app/Email_Templates
+    restart: unless-stopped
+    networks:
+      - digital-employee-network
+
+  # ─────────────────────────────────────────────────────────────
+  # WhatsApp Watcher Service (Optional)
+  # ─────────────────────────────────────────────────────────────
+  whatsapp-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: digital-employee-whatsapp
+    command: python whatsapp_watcher.py
+    environment:
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+    volumes:
+      - logs:/app/Logs
+    restart: unless-stopped
+    networks:
+      - digital-employee-network
+    profiles:
+      - whatsapp
+
+  # ─────────────────────────────────────────────────────────────
+  # Gmail Watcher Service
+  # ─────────────────────────────────────────────────────────────
+  gmail-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: digital-employee-gmail-watcher
+    command: python gmail_watcher.py
+    environment:
+      - GMAIL_CREDENTIALS_PATH=/app/credentials/credentials.json
+      - GMAIL_TOKEN_PATH=/app/tokens/token.json
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - WATCH_INTERVAL=${GMAIL_WATCH_INTERVAL:-60}
+    volumes:
+      - gmail_credentials:/app/credentials
+      - gmail_tokens:/app/tokens
+      - logs:/app/Logs
+      - needs_action:/app/Needs_Action
+    restart: unless-stopped
+    networks:
+      - digital-employee-network
+    depends_on:
+      - email-mcp
+
+# ─────────────────────────────────────────────────────────────
+# Volumes — Named volumes (Docker manages them)
+# ─────────────────────────────────────────────────────────────
+volumes:
+  gmail_credentials:
+  gmail_tokens:
+  logs:
+  metrics:
+  done:
+  needs_action:
+  pending_approval:
+  approved:
+  rejected:
+  plans:
+  email_templates:
+
+# ─────────────────────────────────────────────────────────────
+# Network
+# ─────────────────────────────────────────────────────────────
+networks:
+  digital-employee-network:
+    driver: bridge
