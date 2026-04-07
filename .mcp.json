@@ -1,13 +1,39 @@
 {
-  "email_mcp": {
-    "type": "stdio",
-    "command": "node",
-    "args": ["/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/email_mcp.js"],
-    "env": {
-      "GMAIL_CREDENTIALS_PATH": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/credentials.json",
-      "GMAIL_TOKEN_PATH": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/token.json",
-      "SENDER_NAME": "Digital Employee",
-      "DRY_RUN": "false"
+  "mcpServers": {
+    "email_mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/email_mcp.js"],
+      "env": {
+        "GMAIL_CREDENTIALS_PATH": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/credentials.json",
+        "GMAIL_TOKEN_PATH": "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/token.json",
+        "SENDER_NAME": "Digital Employee",
+        "DRY_RUN": "false"
+      }
+    },
+    "linkedin-playwright": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Agent_Skills/SKILL_LInkedin_Playwright_MCP.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    "odoo-gold-tier": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/odoo_mcp.py"
+      ],
+      "env": {
+        "ODOO_URL": "http://localhost:8069",
+        "ODOO_DB": "odoo",
+        "ODOO_USERNAME": "awaisniaz720@gmail.com",
+        "ODOO_PASSWORD": "Haris@123",
+        "PYTHONUNBUFFERED": "1"
+      }
     }
   }
 }
