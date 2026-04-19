@@ -18,6 +18,22 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+# Gold Tier Audit Logging
+try:
+    from audit_log import (
+        AuditLogManager,
+        AuditEntry,
+        AuditCategory,
+        AuditLevel,
+        ErrorRecoveryManager,
+        RetryPolicy,
+        get_audit_manager,
+        get_recovery_manager,
+    )
+    AUDIT_AVAILABLE = True
+except ImportError:
+    AUDIT_AVAILABLE = False
+
 # ── Load environment variables ────────────────────────────────────────────────
 load_dotenv()
 
@@ -43,7 +59,7 @@ OBJECT_URL = f"{ODOO_URL}/xmlrpc/2/object"
 
 # ── Odoo Connection Helper ───────────────────────────────────────────────────
 class OdooClient:
-    """Thin wrapper around xmlrpc.client for Odoo JSON-RPC."""
+    """Thin wrapper around xmlrpc.client for Odoo JSON-RPC with audit logging."""
 
     def __init__(self, url: str, db: str, username: str, password: str):
         self.url = url
@@ -54,17 +70,62 @@ class OdooClient:
         self.models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")
         self._uid: int | None = None
 
+        # Audit integration
+        self.audit = get_audit_manager() if AUDIT_AVAILABLE else None
+        self.recovery = get_recovery_manager() if AUDIT_AVAILABLE else None
+        self.retry_policy = RetryPolicy(
+            max_retries=3,
+            base_delay=2,
+            backoff_factor=2,
+            max_delay=30,
+            retryable_exceptions=(xmlrpc.client.Fault, ConnectionError, OSError),
+        )
+
+    def _audit_log(self, level: str, action: str, details: dict = None, error: dict = None):
+        """Helper to log audit entries if audit is available."""
+        if self.audit:
+            audit_level = getattr(AuditLevel, level.upper(), AuditLevel.INFO)
+            entry = AuditEntry(
+                category=AuditCategory.ODOO,
+                level=audit_level,
+                action=action,
+                details=details or {},
+                error=error,
+                source="odoo_mcp",
+            )
+            self.audit.log(entry)
+
     # ── Authentication ───────────────────────────────────────────────────
     def authenticate(self) -> int:
-        """Authenticate and return user id (uid)."""
-        uid = self.common.authenticate(self.db, self.username, self.password, {})
-        if not uid:
-            raise AuthenticationError(
-                f"Authentication failed for user '{self.username}' on DB '{self.db}'"
+        """Authenticate and return user id (uid) with retry logic."""
+        def _do_auth():
+            uid = self.common.authenticate(self.db, self.username, self.password, {})
+            if not uid:
+                raise AuthenticationError(
+                    f"Authentication failed for user '{self.username}' on DB '{self.db}'"
+                )
+            return uid
+
+        if self.recovery:
+            result = self.recovery.execute_with_retry(
+                _do_auth,
+                policy=self.retry_policy,
+                category=AuditCategory.ODOO,
+                action="authenticate",
             )
-        self._uid = uid
-        logger.info("Authenticated as uid=%d", uid)
-        return uid
+            if result["success"]:
+                self._uid = result["result"]
+                self._audit_log("INFO", "authenticate_success", {"uid": self._uid})
+                return self._uid
+            else:
+                self._audit_log("ERROR", "authenticate_failed", error={"message": result["error"]})
+                raise AuthenticationError(result["error"])
+        else:
+            # Fallback without retry
+            uid = _do_auth()
+            self._uid = uid
+            self._audit_log("INFO", "authenticate_success", {"uid": uid})
+            return uid
 
     @property
     def uid(self) -> int:
@@ -80,9 +141,36 @@ class OdooClient:
         args: list | None = None,
         kwargs: dict | None = None,
     ) -> Any:
-        return self.models.execute_kw(
-            self.db, self.uid, self.password, model, method, args or [], kwargs or {}
-        )
+        """Execute a method on an Odoo model with audit logging and retry."""
+        def _do_execute():
+            return self.models.execute_kw(
+                self.db, self.uid, self.password, model, method, args or [], kwargs or {}
+            )
+
+        action = f"{model}.{method}"
+        details = {"model": model, "method": method, "args_count": len(args or [])}
+
+        if self.recovery:
+            result = self.recovery.execute_with_retry(
+                _do_execute,
+                policy=self.retry_policy,
+                category=AuditCategory.ODOO,
+                action=action,
+                details=details,
+            )
+            if result["success"]:
+                return result["result"]
+            else:
+                self._audit_log("ERROR", f"{action}_failed", details, error={"message": result["error"]})
+                raise OdooRPCError(f"{action}: {result['error']}")
+        else:
+            try:
+                res = _do_execute()
+                self._audit_log("INFO", action, details)
+                return res
+            except Exception as exc:
+                self._audit_log("ERROR", f"{action}_failed", details, error={"type": type(exc).__name__, "message": str(exc)})
+                raise
 
     def search_read(
         self,
@@ -154,32 +242,78 @@ def create_customer(
     country_id: int | None = None,
     **extra_fields: Any,
 ) -> dict:
-    """Create a new customer (res.partner with customer rank)."""
-    client = get_client()
-    vals: dict[str, Any] = {
-        "name": name,
-        "email": email,
-        "phone": phone,
-        "vat": vat,
-        "street": street,
-        "city": city,
-        "customer_rank": 1,
-    }
-    if country_id:
-        vals["country_id"] = country_id
-    vals.update(extra_fields)
+    """Create a new customer (res.partner with customer rank) with audit logging."""
+    from audit_log import get_audit_manager, AuditEntry, AuditCategory, AuditLevel
 
-    partner_id = client.create("res.partner", vals)
-    logger.info("Created customer res.partner id=%d", partner_id)
+    audit = get_audit_manager()
+    correlation_id = str(id(name))  # Simple correlation ID
+    start_time = datetime.now()
 
-    # Read back the created record
-    partner = client.read("res.partner", [partner_id])[0]
-    return {
-        "status": "success",
-        "message": f"Customer '{name}' created successfully",
-        "customer_id": partner_id,
-        "customer": partner,
-    }
+    try:
+        client = get_client()
+        vals: dict[str, Any] = {
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "vat": vat,
+            "street": street,
+            "city": city,
+            "customer_rank": 1,
+        }
+        if country_id:
+            vals["country_id"] = country_id
+        vals.update(extra_fields)
+
+        partner_id = client.create("res.partner", vals)
+        logger.info("Created customer res.partner id=%d", partner_id)
+
+        # Read back the created record
+        partner = client.read("res.partner", [partner_id])[0]
+
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+        # Audit log
+        entry = AuditEntry(
+            category=AuditCategory.ODOO,
+            level=AuditLevel.SUCCESS,
+            action="create_customer",
+            correlation_id=correlation_id,
+            details={
+                "customer_name": name,
+                "email": email,
+                "phone": phone,
+                "partner_id": partner_id,
+            },
+            duration_ms=round(duration_ms, 2),
+            source="odoo_mcp",
+        )
+        audit.log(entry)
+
+        return {
+            "status": "success",
+            "message": f"Customer '{name}' created successfully",
+            "customer_id": partner_id,
+            "customer": partner,
+        }
+    except Exception as e:
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+        # Audit log
+        entry = AuditEntry(
+            category=AuditCategory.ODOO,
+            level=AuditLevel.ERROR,
+            action="create_customer",
+            correlation_id=correlation_id,
+            details={
+                "customer_name": name,
+                "email": email,
+            },
+            error={"type": type(e).__name__, "message": str(e)},
+            duration_ms=round(duration_ms, 2),
+            source="odoo_mcp",
+        )
+        audit.log(entry)
+        raise
 
 
 def create_invoice(
@@ -678,7 +812,7 @@ def _handle_tools_list(params: dict) -> dict:
 
 
 def _handle_tools_call(params: dict) -> dict:
-    """Execute a tool and return result."""
+    """Execute a tool and return result with audit logging."""
     tool_name = params.get("name", "")
     arguments = params.get("arguments", {})
 
@@ -689,26 +823,77 @@ def _handle_tools_call(params: dict) -> dict:
             "isError": True,
         }
 
+    # Audit log start
+    audit = get_audit_manager() if AUDIT_AVAILABLE else None
+    if audit:
+        entry = AuditEntry(
+            category=AuditCategory.ODOO,
+            level=AuditLevel.INFO,
+            action=f"tool_call.{tool_name}",
+            details={"arguments": {k: str(v)[:100] for k, v in arguments.items()}},
+            source="odoo_mcp",
+        )
+        audit.log(entry)
+
     try:
         result = handler(**arguments)
+
+        # Audit log success
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.ODOO,
+                level=AuditLevel.SUCCESS,
+                action=f"tool_call.{tool_name}",
+                details={"status": "success"},
+                source="odoo_mcp",
+            )
+            audit.log(entry)
+
         return {
             "content": [{"type": "text", "text": _safe_json(result)}],
             "isError": False,
         }
     except AuthenticationError as exc:
         logger.error("Auth error: %s", exc)
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.ODOO,
+                level=AuditLevel.ERROR,
+                action=f"tool_call.{tool_name}",
+                error={"type": "AuthenticationError", "message": str(exc)},
+                source="odoo_mcp",
+            )
+            audit.log(entry)
         return {
             "content": [{"type": "text", "text": f"Authentication error: {exc}"}],
             "isError": True,
         }
     except xmlrpc.client.Fault as exc:
         logger.error("Odoo XML-RPC fault: %s", exc)
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.ODOO,
+                level=AuditLevel.ERROR,
+                action=f"tool_call.{tool_name}",
+                error={"type": "XMLRPCFault", "message": exc.faultString},
+                source="odoo_mcp",
+            )
+            audit.log(entry)
         return {
             "content": [{"type": "text", "text": f"Odoo XML-RPC error: {exc.faultString}"}],
             "isError": True,
         }
     except Exception as exc:
         logger.exception("Tool '%s' raised exception: %s", tool_name, exc)
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.ODOO,
+                level=AuditLevel.ERROR,
+                action=f"tool_call.{tool_name}",
+                error={"type": type(exc).__name__, "message": str(exc)},
+                source="odoo_mcp",
+            )
+            audit.log(entry)
         return {
             "content": [{"type": "text", "text": f"Error: {exc}"}],
             "isError": True,

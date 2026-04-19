@@ -34,6 +34,22 @@ from typing import Optional, Dict, Any, List, Union
 from dotenv import load_dotenv
 from string import Template
 
+# Gold Tier Audit Logging
+try:
+    from audit_log import (
+        AuditLogManager,
+        AuditEntry,
+        AuditCategory,
+        AuditLevel,
+        ErrorRecoveryManager,
+        RetryPolicy,
+        get_audit_manager,
+        get_recovery_manager,
+    )
+    AUDIT_AVAILABLE = True
+except ImportError:
+    AUDIT_AVAILABLE = False
+
 # =============================================================================
 # Configuration
 # =============================================================================
@@ -252,7 +268,7 @@ class EmailMCP:
 
     def __init__(self, dry_run: Optional[bool] = None):
         """
-        Initialize Email MCP.
+        Initialize Email MCP with audit logging.
 
         Args:
             dry_run: Override DRY_RUN environment variable if specified
@@ -265,7 +281,32 @@ class EmailMCP:
         self.smtp_port = SMTP_PORT
         self.template_manager = TemplateManager()
 
+        # Audit integration
+        self.audit = get_audit_manager() if AUDIT_AVAILABLE else None
+        self.recovery = get_recovery_manager() if AUDIT_AVAILABLE else None
+        self.retry_policy = RetryPolicy(
+            max_retries=3,
+            base_delay=2,
+            backoff_factor=2,
+            max_delay=30,
+            retryable_exceptions=(smtplib.SMTPException, ConnectionError, OSError),
+        )
+
         self._validate_config()
+
+    def _audit_log(self, level: str, action: str, details: dict = None, error: dict = None):
+        """Helper to log audit entries."""
+        if self.audit:
+            audit_level = getattr(AuditLevel, level.upper(), AuditLevel.INFO)
+            entry = AuditEntry(
+                category=AuditCategory.EMAIL,
+                level=audit_level,
+                action=action,
+                details=details or {},
+                error=error,
+                source="email_mcp",
+            )
+            self.audit.log(entry)
 
     def _validate_config(self) -> None:
         """Validate email configuration."""
@@ -400,7 +441,17 @@ class EmailMCP:
             Dictionary with send result
         """
         timestamp = datetime.now().isoformat()
-        
+
+        # Audit: email send attempt
+        self._audit_log("INFO", "send_email_attempt", {
+            "to": to,
+            "subject": subject,
+            "is_html": is_html,
+            "priority": priority,
+            "attachments_count": len(attachments) if attachments else 0,
+            "dry_run": self.dry_run,
+        })
+
         # Parse recipients
         to_list = self._parse_recipients(to)
         cc_list = self._parse_recipients(cc) if cc else []
@@ -566,7 +617,14 @@ class EmailMCP:
             logger.info(f"✅ Email sent successfully: {subject}")
             logger.info(f"   Message-ID: {message_id}")
             logger.info(f"   Recipients: {len(all_recipients)}")
-            
+
+            # Audit: success
+            self._audit_log("SUCCESS", "send_email_success", {
+                "message_id": message_id,
+                "to": to_header,
+                "recipients_count": len(all_recipients),
+            })
+
             self._log_email_action(result, body)
             return result
 
@@ -574,24 +632,28 @@ class EmailMCP:
             error_msg = f"SMTP Authentication failed: {e}"
             logger.error(error_msg)
             result["message"] = error_msg
+            self._audit_log("ERROR", "send_email_auth_failed", {"error": error_msg})
             return result
 
         except smtplib.SMTPConnectError as e:
             error_msg = f"Failed to connect to SMTP server: {e}"
             logger.error(error_msg)
             result["message"] = error_msg
+            self._audit_log("ERROR", "send_email_connection_failed", {"error": error_msg})
             return result
 
         except smtplib.SMTPException as e:
             error_msg = f"SMTP error: {e}"
             logger.error(error_msg)
             result["message"] = error_msg
+            self._audit_log("ERROR", "send_email_smtp_error", {"error": error_msg})
             return result
 
         except Exception as e:
             error_msg = f"Unexpected error sending email: {e}"
             logger.error(error_msg)
             result["message"] = error_msg
+            self._audit_log("ERROR", "send_email_unexpected_error", {"error": error_msg})
             return result
 
     def send_from_template(
