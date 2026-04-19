@@ -25,6 +25,18 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any, Tuple
 from dotenv import load_dotenv
 
+# Gold Tier Audit Logging
+from audit_log import (
+    AuditLogManager,
+    AuditEntry,
+    AuditCategory,
+    AuditLevel,
+    ErrorRecoveryManager,
+    RetryPolicy,
+    get_audit_manager,
+    get_recovery_manager,
+)
+
 # Ralph Wiggum Loop — Autonomous Task Completion (Stop Hook Pattern)
 try:
     from ralph_wiggum import RalphWiggumLoop, ralph_process_task
@@ -1823,11 +1835,12 @@ def update_dashboard_linkedin_failure(filename: str, message: str) -> None:
 # =============================================================================
 
 class MetricsManager:
-    """Track and export orchestrator metrics."""
+    """Track and export orchestrator metrics with audit logging."""
 
-    def __init__(self, metrics_file: Path):
-        self.metrics_file = metrics_file
+    def __init__(self, metrics_file: Path, audit_manager: Optional[AuditLogManager] = None):
+        self.metrics_file = Path(metrics_file) if isinstance(metrics_file, str) else metrics_file
         self.metrics_file.parent.mkdir(parents=True, exist_ok=True)
+        self.audit = audit_manager or get_audit_manager()
         self.session_metrics = {
             "started_at": datetime.now().isoformat(),
             "files_processed": 0,
@@ -1837,6 +1850,16 @@ class MetricsManager:
             "task_types": {},
             "processing_times": [],
         }
+
+        # Audit session start
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.INFO,
+            action="session_start",
+            details={"metrics_file": str(metrics_file)},
+            source="orchestrator",
+        )
+        self.audit.log(entry)
 
     def load_metrics(self) -> Dict[str, Any]:
         if self.metrics_file.exists():
@@ -1850,14 +1873,36 @@ class MetricsManager:
             self.session_metrics["task_types"].get(task_type, 0) + 1
         self.session_metrics["processing_times"].append(duration)
 
+        # Audit log
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.SUCCESS,
+            action="file_processed",
+            details={"task_type": task_type, "duration_seconds": round(duration, 2)},
+            duration_ms=round(duration * 1000, 2),
+            source="orchestrator",
+        )
+        self.audit.log(entry)
+
     def record_approval_created(self) -> None:
         self.session_metrics["approvals_created"] += 1
 
     def record_approval_triggered(self) -> None:
         self.session_metrics["approvals_triggered"] += 1
 
-    def record_error(self) -> None:
+    def record_error(self, error_msg: str = "", error_type: str = "") -> None:
         self.session_metrics["errors"] += 1
+
+        # Audit log
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.ERROR,
+            action="error_occurred",
+            details={"error_msg": error_msg, "error_type": error_type},
+            error={"type": error_type or "Unknown", "message": error_msg},
+            source="orchestrator",
+        )
+        self.audit.log(entry)
 
     def save_metrics(self) -> None:
         self.session_metrics["ended_at"] = datetime.now().isoformat()
@@ -1877,6 +1922,20 @@ class MetricsManager:
 
         logger.info(f"📈 Metrics saved")
 
+        # Audit session end
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.INFO,
+            action="session_end",
+            details={
+                "files_processed": self.session_metrics["files_processed"],
+                "approvals_created": self.session_metrics["approvals_created"],
+                "errors": self.session_metrics["errors"],
+            },
+            source="orchestrator",
+        )
+        self.audit.log(entry)
+
     def get_summary(self) -> str:
         return (
             f"Files: {self.session_metrics['files_processed']} | "
@@ -1890,7 +1949,11 @@ class MetricsManager:
 # =============================================================================
 
 def move_file(source: Path, destination: Path) -> bool:
-    """Safely move a file."""
+    """Safely move a file with audit logging."""
+    audit = get_audit_manager()
+    correlation_id = str(uuid.uuid4())
+    start_time = datetime.now()
+
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1899,21 +1962,122 @@ def move_file(source: Path, destination: Path) -> bool:
             destination = destination.parent / f"{timestamp}_{destination.name}"
 
         shutil.move(str(source), str(destination))
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
         logger.success(f"📦 Moved: {source.name} → {destination.parent.name}/")
+
+        # Audit log
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.SUCCESS,
+            action="file_move",
+            correlation_id=correlation_id,
+            details={
+                "source": str(source),
+                "destination": str(destination),
+                "source_name": source.name,
+                "destination_folder": destination.parent.name,
+            },
+            duration_ms=round(duration_ms, 2),
+            source="orchestrator",
+        )
+        audit.log(entry)
         return True
     except Exception as e:
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
         logger.error(f"Move failed: {e}")
+
+        # Audit log
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.ERROR,
+            action="file_move",
+            correlation_id=correlation_id,
+            details={
+                "source": str(source),
+                "destination": str(destination),
+                "source_name": source.name,
+            },
+            error={"type": type(e).__name__, "message": str(e)},
+            duration_ms=round(duration_ms, 2),
+            source="orchestrator",
+        )
+        audit.log(entry)
         return False
 
 
 def read_file_content(file_path: Path) -> str:
-    """Read file content with encoding fallback."""
+    """Read file content with encoding fallback and audit logging."""
+    audit = get_audit_manager()
+    correlation_id = str(uuid.uuid4())
+    start_time = datetime.now()
+
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
+            content = f.read()
+
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+        # Audit log
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.SUCCESS,
+            action="file_read",
+            correlation_id=correlation_id,
+            details={
+                "file_path": str(file_path),
+                "file_name": file_path.name,
+                "content_length": len(content),
+                "encoding": "utf-8",
+            },
+            duration_ms=round(duration_ms, 2),
+            source="orchestrator",
+        )
+        audit.log(entry)
+        return content
     except UnicodeDecodeError:
         with open(file_path, "r", encoding="latin-1") as f:
-            return f.read()
+            content = f.read()
+
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+        # Audit log with encoding fallback
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.WARNING,
+            action="file_read",
+            correlation_id=correlation_id,
+            details={
+                "file_path": str(file_path),
+                "file_name": file_path.name,
+                "content_length": len(content),
+                "encoding": "latin-1",
+                "fallback_used": True,
+            },
+            duration_ms=round(duration_ms, 2),
+            source="orchestrator",
+        )
+        audit.log(entry)
+        return content
+    except Exception as e:
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+        # Audit log
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.ERROR,
+            action="file_read",
+            correlation_id=correlation_id,
+            details={
+                "file_path": str(file_path),
+                "file_name": file_path.name,
+            },
+            error={"type": type(e).__name__, "message": str(e)},
+            duration_ms=round(duration_ms, 2),
+            source="orchestrator",
+        )
+        audit.log(entry)
+        raise
 
 
 def extract_email_data_from_task(content: str) -> Optional[Dict]:
@@ -1953,11 +2117,23 @@ def extract_email_data_from_task(content: str) -> Optional[Dict]:
 # =============================================================================
 
 def process_needs_action_files(metrics: MetricsManager) -> int:
-    """Process all .md files in Needs_Action folder."""
+    """Process all .md files in Needs_Action folder with audit logging."""
+    audit = get_audit_manager()
+    correlation_id = str(uuid.uuid4())
+
     needs_action_dir = FOLDERS["needs_action"]
 
     if not needs_action_dir.exists():
         logger.warning("Needs_Action directory does not exist")
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.WARNING,
+            action="scan_needs_action",
+            correlation_id=correlation_id,
+            details={"directory": str(needs_action_dir), "exists": False},
+            source="orchestrator",
+        )
+        audit.log(entry)
         return 0
 
     md_files = sorted(
@@ -1968,6 +2144,15 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
 
     if not md_files:
         logger.info("📭 No .md files found in Needs_Action folder")
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.INFO,
+            action="scan_needs_action",
+            correlation_id=correlation_id,
+            details={"directory": str(needs_action_dir), "file_count": 0},
+            source="orchestrator",
+        )
+        audit.log(entry)
         return 0
 
     logger.info(f"📥 Found {len(md_files)} file(s) to process")
@@ -1975,10 +2160,37 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
     approvals_created = 0
     linkedin_posts_generated = 0
 
+    # Audit: batch scan complete
+    entry = AuditEntry(
+        category=AuditCategory.ORCHESTRATOR,
+        level=AuditLevel.INFO,
+        action="scan_needs_action",
+        correlation_id=correlation_id,
+        details={
+            "directory": str(needs_action_dir),
+            "file_count": len(md_files),
+            "files": [f.name for f in md_files],
+        },
+        source="orchestrator",
+    )
+    audit.log(entry)
+
     for file_path in md_files:
         start_time = datetime.now()
+        file_correlation_id = str(uuid.uuid4())
         logger.info(f"{'─' * 60}")
         logger.info(f"Processing: {file_path.name}")
+
+        # Audit: file processing started
+        entry = AuditEntry(
+            category=AuditCategory.ORCHESTRATOR,
+            level=AuditLevel.INFO,
+            action="process_file_start",
+            correlation_id=file_correlation_id,
+            details={"file_name": file_path.name, "file_path": str(file_path)},
+            source="orchestrator",
+        )
+        audit.log(entry)
 
         try:
             # Read content
@@ -1988,6 +2200,21 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
             # Detect task type
             task_type = detect_task_type(original_content, file_path.name)
             logger.info(f"🎯 Detected task type: {task_type.title()}")
+
+            # Audit: task type detected
+            entry = AuditEntry(
+                category=AuditCategory.ORCHESTRATOR,
+                level=AuditLevel.INFO,
+                action="task_type_detected",
+                correlation_id=file_correlation_id,
+                details={
+                    "file_name": file_path.name,
+                    "task_type": task_type,
+                    "content_length": len(original_content),
+                },
+                source="orchestrator",
+            )
+            audit.log(entry)
 
             # ─── RALPH WIGGUM LOOP — Complex Task Auto-Detection ─────────
             # If task is complex, delegate to Ralph Wiggum for autonomous
@@ -2055,7 +2282,7 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
                     metrics.record_file_processed(task_type, duration)
                     logger.success(f"✓ Completed: {file_path.name} ({duration:.2f}s)")
                 else:
-                    metrics.record_error()
+                    metrics.record_error(f"Failed to move: {file_path.name}", "FileMoveError")
                     logger.error(f"✗ Failed to move: {file_path.name}")
                 continue
 
@@ -2174,8 +2401,40 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
             metrics.record_error()
             logger.error(f"✗ Error: {file_path.name} - {e}")
 
+            # Audit: error occurred
+            entry = AuditEntry(
+                category=AuditCategory.ORCHESTRATOR,
+                level=AuditLevel.ERROR,
+                action="process_file_error",
+                correlation_id=file_correlation_id,
+                details={
+                    "file_name": file_path.name,
+                    "file_path": str(file_path),
+                    "task_type": task_type if 'task_type' in locals() else "unknown",
+                },
+                error={"type": type(e).__name__, "message": str(e)},
+                source="orchestrator",
+            )
+            audit.log(entry)
+
     # Update dashboard
     update_dashboard()
+
+    # Audit: batch processing complete
+    entry = AuditEntry(
+        category=AuditCategory.ORCHESTRATOR,
+        level=AuditLevel.SUCCESS,
+        action="batch_process_complete",
+        correlation_id=correlation_id,
+        details={
+            "total_files": len(md_files),
+            "processed_count": processed_count,
+            "approvals_created": approvals_created,
+            "linkedin_posts_generated": linkedin_posts_generated,
+        },
+        source="orchestrator",
+    )
+    audit.log(entry)
 
     if linkedin_posts_generated > 0:
         logger.info(f"📱 LinkedIn posts generated: {linkedin_posts_generated}")
@@ -2239,7 +2498,7 @@ def extract_email_from_approval(content: str) -> Optional[Dict[str, str]]:
 
 def send_approved_email(file_path: Path, metrics: MetricsManager) -> Tuple[bool, str]:
     """
-    Send email for an approved file using email_mcp.
+    Send email for an approved file using email_mcp with audit logging.
 
     Args:
         file_path: Path to approved file
@@ -2248,6 +2507,10 @@ def send_approved_email(file_path: Path, metrics: MetricsManager) -> Tuple[bool,
     Returns:
         Tuple of (success: bool, message: str)
     """
+    audit = get_audit_manager()
+    correlation_id = str(uuid.uuid4())
+    start_time = datetime.now()
+
     try:
         # Import email MCP
         from email_mcp import send_email as mcp_send_email
@@ -2256,6 +2519,16 @@ def send_approved_email(file_path: Path, metrics: MetricsManager) -> Tuple[bool,
         email_data = extract_email_from_approval(content)
 
         if not email_data:
+            entry = AuditEntry(
+                category=AuditCategory.EMAIL,
+                level=AuditLevel.ERROR,
+                action="send_approved_email",
+                correlation_id=correlation_id,
+                details={"file_path": str(file_path), "file_name": file_path.name},
+                error={"type": "EmailExtractionError", "message": "Could not extract email data from approval file"},
+                source="orchestrator",
+            )
+            audit.log(entry)
             return False, "Could not extract email data from approval file"
 
         to = email_data["to"]
@@ -2266,6 +2539,22 @@ def send_approved_email(file_path: Path, metrics: MetricsManager) -> Tuple[bool,
         logger.info(f"   To: {to}")
         logger.info(f"   Subject: {subject}")
 
+        # Audit: email send attempt
+        entry = AuditEntry(
+            category=AuditCategory.EMAIL,
+            level=AuditLevel.INFO,
+            action="send_approved_email",
+            correlation_id=correlation_id,
+            details={
+                "to": to,
+                "subject": subject,
+                "file_path": str(file_path),
+                "file_name": file_path.name,
+            },
+            source="orchestrator",
+        )
+        audit.log(entry)
+
         # Send email using MCP
         result = mcp_send_email(
             to=to,
@@ -2275,22 +2564,88 @@ def send_approved_email(file_path: Path, metrics: MetricsManager) -> Tuple[bool,
             dry_run=None  # Use DRY_RUN from environment
         )
 
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
         if result.get("success"):
             msg = result.get("message", "Email sent successfully")
             logger.success(f"✅ {msg}")
+
+            # Audit: success
+            entry = AuditEntry(
+                category=AuditCategory.EMAIL,
+                level=AuditLevel.SUCCESS,
+                action="send_approved_email",
+                correlation_id=correlation_id,
+                details={
+                    "to": to,
+                    "subject": subject,
+                    "file_name": file_path.name,
+                    "result_message": msg,
+                    "message_id": result.get("message_id"),
+                },
+                duration_ms=round(duration_ms, 2),
+                source="orchestrator",
+            )
+            audit.log(entry)
             return True, msg
         else:
             error_msg = result.get("message", "Unknown error")
             logger.error(f"❌ Email send failed: {error_msg}")
+
+            # Audit: failure
+            entry = AuditEntry(
+                category=AuditCategory.EMAIL,
+                level=AuditLevel.ERROR,
+                action="send_approved_email",
+                correlation_id=correlation_id,
+                details={
+                    "to": to,
+                    "subject": subject,
+                    "file_name": file_path.name,
+                    "result_message": error_msg,
+                },
+                error={"type": "EmailSendError", "message": error_msg},
+                duration_ms=round(duration_ms, 2),
+                source="orchestrator",
+            )
+            audit.log(entry)
             return False, error_msg
 
     except ImportError as e:
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
         error_msg = f"email_mcp.py not found or import failed: {e}"
         logger.error(error_msg)
+
+        # Audit: import error
+        entry = AuditEntry(
+            category=AuditCategory.EMAIL,
+            level=AuditLevel.ERROR,
+            action="send_approved_email",
+            correlation_id=correlation_id,
+            details={"file_path": str(file_path), "file_name": file_path.name},
+            error={"type": "ImportError", "message": error_msg},
+            duration_ms=round(duration_ms, 2),
+            source="orchestrator",
+        )
+        audit.log(entry)
         return False, error_msg
     except Exception as e:
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
         error_msg = f"Error sending email: {e}"
         logger.error(error_msg)
+
+        # Audit: generic error
+        entry = AuditEntry(
+            category=AuditCategory.EMAIL,
+            level=AuditLevel.ERROR,
+            action="send_approved_email",
+            correlation_id=correlation_id,
+            details={"file_path": str(file_path), "file_name": file_path.name},
+            error={"type": type(e).__name__, "message": error_msg},
+            duration_ms=round(duration_ms, 2),
+            source="orchestrator",
+        )
+        audit.log(entry)
         return False, error_msg
 
 
@@ -2340,8 +2695,8 @@ def extract_linkedin_post_content(content: str) -> Optional[Dict[str, str]]:
 
 def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[bool, str]:
     """
-    Publish LinkedIn post for an approved file using Playwright MCP.
-    
+    Publish LinkedIn post for an approved file using Playwright MCP with audit logging.
+
     Tries Playwright MCP first (saved session), falls back to LinkedIn API MCP.
 
     Args:
@@ -2351,11 +2706,25 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
     Returns:
         Tuple of (success: bool, message: str)
     """
+    audit = get_audit_manager()
+    correlation_id = str(uuid.uuid4())
+    start_time = datetime.now()
+
     try:
         content = read_file_content(file_path)
         post_data = extract_linkedin_post_content(content)
 
         if not post_data:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="publish_linkedin_post",
+                correlation_id=correlation_id,
+                details={"file_path": str(file_path), "file_name": file_path.name},
+                error={"type": "ContentExtractionError", "message": "Could not extract LinkedIn post content from approval file"},
+                source="orchestrator",
+            )
+            audit.log(entry)
             return False, "Could not extract LinkedIn post content from approval file"
 
         post_content = post_data["content"]
@@ -2363,60 +2732,101 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
         logger.info(f"📱 Publishing LinkedIn post:")
         logger.info(f"   Content preview: {post_content[:100]}...")
 
+        # Audit: publish attempt start
+        entry = AuditEntry(
+            category=AuditCategory.LINKEDIN,
+            level=AuditLevel.INFO,
+            action="publish_linkedin_post",
+            correlation_id=correlation_id,
+            details={
+                "file_name": file_path.name,
+                "content_length": len(post_content),
+                "content_preview": post_content[:200],
+            },
+            source="orchestrator",
+        )
+        audit.log(entry)
+
         # Try Playwright MCP first (uses saved session)
         result = None
         used_method = ""
-        
+
         try:
             logger.info("   🎭 Attempt 1: Using Playwright MCP (saved session)...")
             from Agent_Skills.SKILL_LInkedin_Playwright_MCP import post_to_linkedin
-            
+
             result = post_to_linkedin(
                 content=post_content,
                 image_path=None,  # Can be extended to support images
                 target="personal"
             )
-            
+
             if result.get("success"):
                 used_method = "Playwright MCP"
                 logger.success(f"✅ Posted via Playwright MCP")
             else:
                 logger.warning(f"⚠️  Playwright MCP failed: {result.get('message', 'Unknown error')}")
                 result = None
-                
+
         except ImportError as e:
             logger.info(f"   ⚠️  Playwright MCP not available: {e}")
             result = None
         except Exception as e:
             logger.warning(f"⚠️  Playwright MCP error: {e}")
             result = None
-        
+
         # Fallback to LinkedIn API MCP
         if not result or not result.get("success"):
             try:
                 logger.info("   🔌 Attempt 2: Using LinkedIn API MCP...")
                 from linkedin_mcp import create_post as mcp_create_post
-                
+
                 result = mcp_create_post(
                     content=post_content,
                     dry_run=None  # Use DRY_RUN from environment
                 )
-                
+
                 if result.get("success"):
                     used_method = "LinkedIn API MCP"
                     logger.success(f"✅ Posted via LinkedIn API MCP")
                 else:
                     logger.error(f"❌ LinkedIn API MCP failed: {result.get('message', 'Unknown error')}")
-                    
+
             except ImportError as e:
                 error_msg = f"linkedin_mcp.py not found or import failed: {e}"
                 logger.error(error_msg)
+
+                # Audit: import error
+                entry = AuditEntry(
+                    category=AuditCategory.LINKEDIN,
+                    level=AuditLevel.ERROR,
+                    action="publish_linkedin_post",
+                    correlation_id=correlation_id,
+                    details={"file_name": file_path.name, "attempted_method": "API MCP"},
+                    error={"type": "ImportError", "message": error_msg},
+                    source="orchestrator",
+                )
+                audit.log(entry)
                 return False, error_msg
             except Exception as e:
                 error_msg = f"Error using LinkedIn API MCP: {e}"
                 logger.error(error_msg)
+
+                # Audit: API error
+                entry = AuditEntry(
+                    category=AuditCategory.LINKEDIN,
+                    level=AuditLevel.ERROR,
+                    action="publish_linkedin_post",
+                    correlation_id=correlation_id,
+                    details={"file_name": file_path.name, "attempted_method": "API MCP"},
+                    error={"type": type(e).__name__, "message": error_msg},
+                    source="orchestrator",
+                )
+                audit.log(entry)
                 return False, error_msg
-        
+
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
         # Check final result
         if result and result.get("success"):
             msg = result.get("message", "LinkedIn post published successfully")
@@ -2424,15 +2834,62 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
             logger.success(f"✅ {msg}")
             if post_url:
                 logger.info(f"   Post URL: {post_url}")
+
+            # Audit: success
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.SUCCESS,
+                action="publish_linkedin_post",
+                correlation_id=correlation_id,
+                details={
+                    "file_name": file_path.name,
+                    "used_method": used_method,
+                    "post_url": post_url,
+                    "message": msg,
+                },
+                duration_ms=round(duration_ms, 2),
+                source="orchestrator",
+            )
+            audit.log(entry)
             return True, f"{msg} (via {used_method}) - {post_url}"
         else:
             error_msg = result.get("message", "Unknown error") if result else "No result"
             logger.error(f"❌ LinkedIn post publish failed: {error_msg}")
+
+            # Audit: failure
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="publish_linkedin_post",
+                correlation_id=correlation_id,
+                details={
+                    "file_name": file_path.name,
+                    "used_method": used_method or "none",
+                },
+                error={"type": "LinkedInPublishError", "message": error_msg},
+                duration_ms=round(duration_ms, 2),
+                source="orchestrator",
+            )
+            audit.log(entry)
             return False, error_msg
 
     except Exception as e:
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
         error_msg = f"Error publishing LinkedIn post: {e}"
         logger.error(error_msg)
+
+        # Audit: generic error
+        entry = AuditEntry(
+            category=AuditCategory.LINKEDIN,
+            level=AuditLevel.ERROR,
+            action="publish_linkedin_post",
+            correlation_id=correlation_id,
+            details={"file_path": str(file_path), "file_name": file_path.name},
+            error={"type": type(e).__name__, "message": error_msg},
+            duration_ms=round(duration_ms, 2),
+            source="orchestrator",
+        )
+        audit.log(entry)
         return False, error_msg
 
 
@@ -3168,27 +3625,31 @@ def is_task_candidate_for_ralph(task_type: str, content: str) -> bool:
 def main(run_mode: str = "once") -> None:
     """
     Main orchestrator entry point.
-    
+
     Supports three modes:
     1. 'once' - Single run (process Needs_Action + approval workflow)
     2. 'scheduled' - Continuous monitoring (not fully implemented, use cron)
     3. 'tasks' - Process specific tasks from command line
-    
+
     Args:
         run_mode: Execution mode
     """
     print("\n" + "=" * 70)
     print("  SILVER TIER ORCHESTRATOR v4.0 - Human-in-the-Loop")
     print("=" * 70 + "\n")
-    
+
     logger.info("🚀 Orchestrator starting...")
-    
+
+    # Initialize Gold Tier Audit Manager
+    audit = get_audit_manager()
+    recovery = get_recovery_manager()
+
     # Initialize
     load_environment()
     ensure_directories()
-    
-    # Initialize managers
-    metrics = MetricsManager(METRICS_FILE)
+
+    # Initialize managers with audit integration
+    metrics = MetricsManager(METRICS_FILE, audit_manager=audit)
     
     # Handle task mode (new)
     if run_mode == "tasks" and len(sys.argv) > 2:

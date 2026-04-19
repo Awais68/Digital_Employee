@@ -34,6 +34,20 @@
         "ODOO_PASSWORD": "Haris@123",
         "PYTHONUNBUFFERED": "1"
       }
+    },
+    "facebook-mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/mcp_servers/facebook-mcp/index.js"
+      ]
+    },
+    "instagram-mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/mcp_servers/instagram-mcp/index.js"
+      ]
     }
   }
 }

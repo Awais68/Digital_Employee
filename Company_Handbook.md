@@ -6,6 +6,62 @@
 - Reply to messages within 24 hours
 - Never send money without approval file
 - Log every action in /Done folder
+- ALL credentials from .env — NEVER hardcode secrets
+- ALL errors logged to audit_log.json — no silent failures
+
+---
+
+## 🏆 Gold Tier Rules (v5.0 — Complete)
+
+### Odoo ERP Operations
+
+| Rule | Description |
+|------|-------------|
+| **1. Secure Credentials** | Odoo credentials loaded from .env (ODOO_URL, ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD) |
+| **2. Audit Every Action** | All Odoo operations logged to audit_log.json with correlation IDs |
+| **3. Retry on Failure** | 3 retries with exponential backoff for network/RPC errors |
+| **4. Human Approval for >$100** | Any invoice/payment >$100 requires human approval |
+| **5. DRY_RUN for Testing** | New Odoo workflows tested in dry-run mode first |
+
+### Social Media (Facebook, Instagram, Twitter/X)
+
+| Rule | Description |
+|------|-------------|
+| **1. NEVER Auto-Post** | ALL social media posts require human approval via /Pending_Approval/ |
+| **2. Saved Sessions** | Use saved cookies from `./facebook_session/`, `./instagram_session/`, `./twitter_session/` |
+| **3. Rate Limits** | Minimum 60s between posts. Max 3-5/day per platform |
+| **4. Human Approval Workflow** | Draft → /Pending_Approval/ → Human moves to /Approved/ → Publish |
+| **5. Session Security** | Session folders in .gitignore. NEVER commit cookies. |
+
+### CEO Briefing
+
+| Rule | Description |
+|------|-------------|
+| **1. Weekly Schedule** | Every Monday at 08:00 AM via cron |
+| **2. Data Sources** | Odoo accounting + Obsidian vault tasks |
+| **3. Output Location** | `/Briefings/CEO_Briefing_YYYY-MM-DD.md` |
+| **4. Confidential** | All briefings marked confidential — restrict access |
+| **5. Error Handling** | If Odoo down, retry 3x, generate partial briefing, log error |
+
+### Ralph Wiggum Loop (Autonomous Tasks)
+
+| Rule | Description |
+|------|-------------|
+| **1. Max Iterations** | Default 15 iterations. Configurable per task. |
+| **2. TASK_COMPLETE Detection** | Loop exits when sentinel found OR file moved to Done/ |
+| **3. State Persistence** | Progress saved in Ralph_State/ — resumes across restarts |
+| **4. Audit Logging** | Every iteration logged to audit_log.json |
+| **5. Timeout Safety** | 600s (10 min) max per iteration |
+
+### Audit Logging & Error Recovery
+
+| Rule | Description |
+|------|-------------|
+| **1. Log Everything** | Every action logged: category, level, action, correlation_id, duration |
+| **2. Integrity Hashes** | SHA-256 hash per entry — tamper detection |
+| **3. Retry Policies** | 3 retries with exponential backoff (2s → 4s → 8s) |
+| **4. Escalation** | After all retries → log CRITICAL, flag for manual intervention |
+| **5. Log Rotation** | Main log rotates at 10,000 entries — archives to audit_log.archive.N.json |
 
 ---
 
@@ -318,5 +374,5 @@ Digital_Employee/
 
 ---
 
-*Last Updated: 2026-04-02*
-*Digital Employee System - Silver Tier v4.0*
+*Last Updated: 2026-04-10*
+*Digital Employee System - Gold Tier v5.0 — Complete ✅*

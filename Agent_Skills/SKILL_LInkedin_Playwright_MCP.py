@@ -32,6 +32,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+# Audit logging
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from audit_log import (
+        get_audit_manager,
+        AuditEntry,
+        AuditCategory,
+        AuditLevel,
+    )
+    AUDIT_AVAILABLE = True
+except ImportError:
+    AUDIT_AVAILABLE = False
+
 # Auto-install playwright if needed
 try:
     from playwright.sync_api import sync_playwright
@@ -92,37 +105,101 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
     >>> if result['success']:
     ...     print(f"Posted! URL: {result['post_url']}")
     """
-    
+    # Initialize audit logging
+    audit = get_audit_manager() if AUDIT_AVAILABLE else None
+    correlation_id = f"linkedin_pw_{int(datetime.now().timestamp())}"
+    start_time = datetime.now()
+
     # Validate content
     if not content or not content.strip():
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={"content_length": 0, "target": target},
+                error={"type": "ValidationError", "message": "Post content cannot be empty"},
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
         return {
             "success": False,
             "message": "Post content cannot be empty",
             "post_url": None
         }
-    
+
     if len(content) > 3000:
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={"content_length": len(content), "target": target},
+                error={"type": "ValidationError", "message": f"Post content exceeds 3000 character limit ({len(content)} chars)"},
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
         return {
             "success": False,
             "message": f"Post content exceeds 3000 character limit ({len(content)} chars)",
             "post_url": None
         }
-    
+
     # Check for saved session
     cookies_file = SESSION_DIR / "cookies.json"
     if not cookies_file.exists():
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={"content_length": len(content), "target": target},
+                error={"type": "SessionError", "message": "No saved LinkedIn session found"},
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
         return {
             "success": False,
             "message": "No saved LinkedIn session found. Please login first using test_linkedin_session.py",
             "post_url": None
         }
-    
+
     # Load saved session cookies
     try:
         with open(cookies_file, 'r', encoding='utf-8') as f:
             cookies = json.load(f)
         print(f"✅ Loaded LinkedIn session from {cookies_file}")
+
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.INFO,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={
+                    "content_length": len(content),
+                    "target": target,
+                    "session_loaded": True,
+                    "cookie_count": len(cookies),
+                },
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
     except Exception as e:
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={"content_length": len(content), "target": target},
+                error={"type": type(e).__name__, "message": str(e)},
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
         return {
             "success": False,
             "message": f"Failed to load session cookies: {e}",
@@ -370,30 +447,89 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
             
             # Close browser
             browser.close()
-            
+
+            duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
             if post_success:
+                # Audit log success
+                if audit:
+                    entry = AuditEntry(
+                        category=AuditCategory.LINKEDIN,
+                        level=AuditLevel.SUCCESS,
+                        action="post_to_linkedin",
+                        correlation_id=correlation_id,
+                        details={
+                            "content_length": len(content),
+                            "target": target,
+                            "post_url": post_url,
+                            "method": "playwright_browser",
+                        },
+                        duration_ms=round(duration_ms, 2),
+                        source="SKILL_LInkedin_Playwright_MCP",
+                    )
+                    audit.log(entry)
+
                 return {
                     "success": True,
                     "message": "Post successfully created on LinkedIn",
                     "post_url": post_url
                 }
             else:
-                # Assume success if no error dialogs appeared
+                # Audit log partial success
+                if audit:
+                    entry = AuditEntry(
+                        category=AuditCategory.LINKEDIN,
+                        level=AuditLevel.WARNING,
+                        action="post_to_linkedin",
+                        correlation_id=correlation_id,
+                        details={
+                            "content_length": len(content),
+                            "target": target,
+                            "post_url": post_url,
+                            "method": "playwright_browser",
+                            "success_confirmed": False,
+                        },
+                        duration_ms=round(duration_ms, 2),
+                        source="SKILL_LInkedin_Playwright_MCP",
+                    )
+                    audit.log(entry)
+
                 return {
                     "success": True,
                     "message": "Post submitted (no error detected, but success indicator not confirmed)",
                     "post_url": post_url
                 }
-    
+
     except Exception as e:
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
         if browser:
             try:
                 browser.close()
             except Exception:
                 pass
-        
+
         error_msg = f"Error posting to LinkedIn: {str(e)}"
         print(f"❌ {error_msg}")
+
+        # Audit log error
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={
+                    "content_length": len(content),
+                    "target": target,
+                    "method": "playwright_browser",
+                },
+                error={"type": type(e).__name__, "message": error_msg},
+                duration_ms=round(duration_ms, 2),
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
+
         return {
             "success": False,
             "message": error_msg,
@@ -486,49 +622,95 @@ def save_linkedin_session(cookies_file: Optional[str] = None):
 def test_linkedin_session():
     """
     Test if saved LinkedIn session is still valid.
-    
+
     Usage:
         python3 -c "from Agent_Skills.SKILL_LInkedin_Playwright_MCP import test_linkedin_session; test_linkedin_session()"
     """
     cookies_file = SESSION_DIR / "cookies.json"
-    
+
     if not cookies_file.exists():
         print("❌ No saved session found. Run save_linkedin_session() first.")
         return False
-    
+
     print("🧪 Testing LinkedIn session...")
+
+    browser = None
+    max_retries = 2
     
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 720}
-            )
+    for attempt in range(max_retries):
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-setuid-sandbox']
+                )
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 720}
+                )
+
+                # Load cookies
+                with open(cookies_file, 'r', encoding='utf-8') as f:
+                    cookies = json.load(f)
+                context.add_cookies(cookies)
+
+                page = context.new_page()
+                
+                if attempt > 0:
+                    print(f"   Retry attempt {attempt + 1}/{max_retries}...")
+                
+                # Navigate to LinkedIn with relaxed wait
+                page.goto("https://www.linkedin.com", timeout=30000, wait_until="domcontentloaded")
+                
+                # Wait for page to be mostly loaded (more lenient than networkidle)
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except Exception:
+                    pass  # Page may still be usable even if this times out
+                
+                # Give LinkedIn a moment to process authentication
+                page.wait_for_timeout(3000)
+
+                current_url = page.url
+
+                if "login" in current_url.lower() or "signin" in current_url.lower():
+                    print("❌ Session expired. Please re-login using save_linkedin_session()")
+                    browser.close()
+                    return False
+                else:
+                    print(f"✅ Session is valid! (URL: {current_url})")
+                    browser.close()
+                    return True
+
+        except Exception as e:
+            if browser:
+                try:
+                    browser.close()
+                except:
+                    pass
             
-            # Load cookies
-            with open(cookies_file, 'r', encoding='utf-8') as f:
-                cookies = json.load(f)
-            context.add_cookies(cookies)
+            error_msg = str(e)
             
-            page = context.new_page()
-            page.goto("https://www.linkedin.com", timeout=30000)
-            page.wait_for_load_state("networkidle", timeout=15000)
-            
-            current_url = page.url
-            
-            if "login" in current_url.lower():
-                print("❌ Session expired. Please re-login using save_linkedin_session()")
-                browser.close()
-                return False
+            # If it's a network error, retry
+            if "ERR_NETWORK" in error_msg or "net::" in error_msg:
+                if attempt < max_retries - 1:
+                    print(f"   ⚠️  Network error, retrying...")
+                    import time
+                    time.sleep(2)
+                    continue
+                else:
+                    print(f"⚠️  Network error after {max_retries} attempts: {error_msg}")
+                    print("   This may be a temporary network issue.")
+                    print("   Try running the test again or check your internet connection.")
+                    return False
             else:
-                print(f"✅ Session is valid! (URL: {current_url})")
-                browser.close()
-                return True
+                # Other errors
+                print(f"❌ Session test failed: {error_msg}")
+                return False
     
-    except Exception as e:
-        print(f"❌ Session test failed: {e}")
-        return False
+    # Should not reach here
+    print("⚠️  Session test inconclusive")
+    return False
 
 
 # =============================================================================

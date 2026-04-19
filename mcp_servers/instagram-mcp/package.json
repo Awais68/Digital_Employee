@@ -1,0 +1,16 @@
+{
+  "name": "instagram-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Instagram Graph API integration via MCP",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.0.0",
+    "form-data": "^4.0.0"
+  }
+}

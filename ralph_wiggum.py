@@ -8,8 +8,14 @@ Ralph Wiggum Loop — Stop Hook Pattern for Autonomous Task Completion
 A persistent execution loop that runs Claude Code (or any LLM agent) against
 a task prompt until the task reports completion or max iterations are reached.
 
-Designed as the Silver Tier's autonomous "keep going until it's actually done"
-mechanism.  Works with orchestrator.py for important long-running tasks.
+Designed as the Gold Tier's autonomous "keep going until it's actually done"
+mechanism. Works with orchestrator.py for important long-running tasks.
+
+Gold Tier v5.0 Updates:
+- Full audit_log.py integration with structured JSON logging
+- Error recovery with retry policies
+- Correlation ID tracking across iterations
+- Performance metrics per iteration
 
 Completion Detection Strategies:
     1. TASK_COMPLETE sentinel in agent stdout/stderr
@@ -17,7 +23,7 @@ Completion Detection Strategies:
     3. Custom completion hook (callable passed by caller)
 
 Author: Digital Employee System
-Tier: Silver v4.0 — Ralph Wiggum Loop
+Tier: Gold v5.0 — Business Operator
 """
 
 import os

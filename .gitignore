@@ -2,11 +2,15 @@
 # SECURITY - Sensitive Files (NEVER commit these)
 # =============================================================================
 
+# Configuration Directories
+config/
+credentials/
+tokens/
+
 # Environment & Credentials
 .env
-.env.local
-.env.production
-.env.backup
+.env.*
+!.env.example
 
 # OAuth & API Credentials
 credentials.json
@@ -15,11 +19,18 @@ token_*.json
 service_account.json
 *.pem
 *.key
+facebook_tokens.json
+facebook_instagram_creds.json
+*creds.json
 
-# Browser sessions (Chrome/Edge/Chromium) - contain cookies, tokens, cache
+# Session Persistence (Playwright / Browser sessions)
 whatsapp_session/
 browser_session/
-*sessions/
+linkedin_session/
+facebook_session/
+instagram_session/
+twitter_session/
+*session*/
 *Session*/
 *Local Storage/
 *IndexedDB/
@@ -40,6 +51,10 @@ browser_session/
 Default/
 Profile */
 
+# Token-related documentation (contains live tokens)
+METAfblonglivetoken.md
+get_facebook_long_token.sh
+
 # Logs (may contain sensitive data)
 Logs/
 *.log
@@ -52,6 +67,8 @@ logs/
 *.swo
 *~
 .obsidian/
+.qwen/
+.claude/
 
 # Python
 __pycache__/

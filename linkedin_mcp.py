@@ -32,6 +32,22 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 
+# Gold Tier Audit Logging
+try:
+    from audit_log import (
+        AuditLogManager,
+        AuditEntry,
+        AuditCategory,
+        AuditLevel,
+        ErrorRecoveryManager,
+        RetryPolicy,
+        get_audit_manager,
+        get_recovery_manager,
+    )
+    AUDIT_AVAILABLE = True
+except ImportError:
+    AUDIT_AVAILABLE = False
+
 # Environment loading
 try:
     from dotenv import load_dotenv
@@ -106,7 +122,7 @@ class LinkedInMCP:
 
     def __init__(self, dry_run: Optional[bool] = None):
         """
-        Initialize LinkedIn MCP.
+        Initialize LinkedIn MCP with audit logging.
 
         Args:
             dry_run: Override DRY_RUN environment variable if specified
@@ -120,6 +136,17 @@ class LinkedInMCP:
         self.organization_id = LINKEDIN_ORGANIZATION_ID
         self.api_base = LINKEDIN_API_BASE
 
+        # Audit integration
+        self.audit = get_audit_manager() if AUDIT_AVAILABLE else None
+        self.recovery = get_recovery_manager() if AUDIT_AVAILABLE else None
+        self.retry_policy = RetryPolicy(
+            max_retries=3,
+            base_delay=2,
+            backoff_factor=2,
+            max_delay=30,
+            retryable_exceptions=(requests.exceptions.RequestException, ConnectionError, OSError),
+        )
+
         # Load saved session if exists
         self._load_session()
 
@@ -132,6 +159,20 @@ class LinkedInMCP:
                 'Content-Type': 'application/json',
                 'linkedin-version': '202402'
             })
+
+    def _audit_log(self, level: str, action: str, details: dict = None, error: dict = None):
+        """Helper to log audit entries."""
+        if self.audit:
+            audit_level = getattr(AuditLevel, level.upper(), AuditLevel.INFO)
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=audit_level,
+                action=action,
+                details=details or {},
+                error=error,
+                source="linkedin_mcp",
+            )
+            self.audit.log(entry)
 
     def _load_session(self) -> None:
         """Load saved LinkedIn session from file."""
@@ -408,6 +449,15 @@ class LinkedInMCP:
             "content_preview": content[:200] + "..." if len(content) > 200 else content
         }
 
+        # Audit: post attempt
+        self._audit_log("INFO", "create_post_attempt", {
+            "content_length": len(content),
+            "visibility": visibility,
+            "media_count": len(media_urls) if media_urls else 0,
+            "scheduled": scheduled_time is not None,
+            "dry_run": self.dry_run,
+        })
+
         # Validate content
         if not content or not content.strip():
             error_msg = "Post content cannot be empty"
@@ -479,7 +529,7 @@ class LinkedInMCP:
                 # Success
                 post_data = response.json()
                 post_id = post_data.get('id', '')
-                
+
                 result["success"] = True
                 result["message"] = f"LinkedIn post published successfully"
                 result["post_id"] = post_id
@@ -489,6 +539,12 @@ class LinkedInMCP:
                 logger.info(f"   Post ID: {post_id}")
                 logger.info(f"   URL: {result['post_url']}")
 
+                # Audit: success
+                self._audit_log("SUCCESS", "create_post_success", {
+                    "post_id": post_id,
+                    "post_url": result['post_url'],
+                })
+
                 self._log_post_action(result, content)
                 return result
             else:
@@ -497,18 +553,27 @@ class LinkedInMCP:
                 error_msg = f"LinkedIn API error ({response.status_code}): {error_data}"
                 logger.error(error_msg)
                 result["message"] = error_msg
+
+                # Audit: error
+                self._audit_log("ERROR", "create_post_api_error", {
+                    "status_code": response.status_code,
+                    "error": str(error_data)[:200],
+                })
+
                 return result
 
         except requests.exceptions.RequestException as e:
             error_msg = f"Network error: {e}"
             logger.error(error_msg)
             result["message"] = error_msg
+            self._audit_log("ERROR", "create_post_network_error", {"error": error_msg})
             return result
 
         except Exception as e:
             error_msg = f"Unexpected error creating post: {e}"
             logger.error(error_msg)
             result["message"] = error_msg
+            self._audit_log("ERROR", "create_post_unexpected_error", {"error": error_msg})
             return result
 
     def _build_post_content(self, content: str) -> tuple:

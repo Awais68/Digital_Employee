@@ -52,8 +52,6 @@ This policy ensures **zero tolerance** for secret key leakage in the repository.
 - `.vscode/`, `.idea/`
 - `*.swp`, `*.swo`
 
----
-
 ## ✅ SAFE TO COMMIT
 
 ### 1. Template Files
@@ -61,12 +59,48 @@ This policy ensures **zero tolerance** for secret key leakage in the repository.
 - `config.example.json`
 - Documentation with fake/example credentials
 
-### 2. Code Without Secrets
-- Source code using `process.env.VAR_NAME` or `os.environ.get('VAR')`
-- Configuration templates
-- Public certificates (not private keys)
+### 2. Code Without Secrets (Mandatory)
+All scripts MUST follow this pattern:
+```python
+import os
+from dotenv import load_dotenv
 
-### 3. Documentation
+# Load variables from .env
+load_dotenv()
+
+# Use os.getenv with optional safe default
+API_KEY = os.getenv("MY_SERVICE_API_KEY")
+```
+
+---
+
+## 🛑 MANDATORY SCRIPT TEMPLATE
+
+Every Python script in this repository that uses credentials MUST use this template:
+
+```python
+#!/usr/bin/env python3
+import os
+from dotenv import load_dotenv
+
+# 1. Always load .env first
+load_dotenv(override=True)
+
+# 2. Extract credentials ONLY via environment variables
+CREDENTIAL = os.getenv("VARIABLE_NAME")
+
+# 3. Fail gracefully if required credential is missing
+if not CREDENTIAL:
+    print("❌ Error: VARIABLE_NAME not set in .env")
+    # exit or handle error
+```
+
+**CRITICAL:** Never assign a string literal to a variable that represents a secret.
+
+---
+
+## 🛡️ AUTOMATED PROTECTIONS
+
 - `README.md`
 - `SETUP_GUIDE.md`
 - API documentation (without real keys)

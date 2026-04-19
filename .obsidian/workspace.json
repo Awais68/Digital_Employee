@@ -11,14 +11,10 @@
             "id": "9d94bd0d0c2919bb",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "Dashboard.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "Dashboard"
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
             }
           }
         ]
@@ -185,17 +181,18 @@
   },
   "active": "9d94bd0d0c2919bb",
   "lastOpenFiles": [
-    "whatsapp_session/Default/Cache/Cache_Data/8409f80b86efb84a_0",
-    "whatsapp_session/Default/Cache/Cache_Data/todelete_290596bbc49443a9_0_1",
-    "whatsapp_session/Default/Cache/Cache_Data/cac25e6b23b06efd_0",
-    "whatsapp_session/Default/Cache/Cache_Data/290596bbc49443a9_0",
+    "whatsapp_session/Default/Cache/Cache_Data/todelete_328d42a44e1a53ba_0_1",
+    "whatsapp_session/Default/Cache/Cache_Data/328d42a44e1a53ba_0",
+    "whatsapp_session/Default/Cache/Cache_Data/2f72e222828aceab_0",
+    "whatsapp_session/Default/Service Worker/ScriptCache/88982711b7d82f98_1",
+    "whatsapp_session/Default/Service Worker/ScriptCache/7786daf1823b575f_1",
     "whatsapp_session/Default/Cache/Cache_Data/140b32f110a850f3_0",
-    "whatsapp_session/Default/Cache/Cache_Data/todelete_74e90d478e961fcc_0_1",
-    "whatsapp_session/Default/Cache/Cache_Data/41dd131396d469de_0",
-    "whatsapp_session/Default/Cache/Cache_Data/ca6827aed20a1223_0",
-    "whatsapp_session/Default/Cache/Cache_Data/74e90d478e961fcc_0",
-    "whatsapp_session/Default/Cache/Cache_Data/fa8ea39c6f036004_0",
-    "whatsapp_session/Default/Cache/Cache_Data/todelete_2cb96e8a9901cb3d_0_1",
+    "whatsapp_session/Default/Service Worker/ScriptCache/7786daf1823b575f_0",
+    "whatsapp_session/Default/Service Worker/ScriptCache/88982711b7d82f98_0",
+    "whatsapp_session/Default/Cache/Cache_Data/todelete_8cf5677b72119f51_0_1",
+    "whatsapp_session/Default/Cache/Cache_Data/a23608cd458c412d_0",
+    "whatsapp_session/Default/Cache/Cache_Data/3099a0f13a445940_0",
+    "Dashboard.md",
     "Done/20260406_004803_email_re_test_from_digital_fte_email_mcp.md",
     "Pending_Approval/REPLY_20260406_004803_email_re_test_from_digital_fte_email_mcp.md",
     "Plans/PLAN_20260406_004803_email_re_test_from_digital_fte_email_mcp.md",
@@ -219,7 +216,6 @@
     "Done/20260403_022506_email_welcome_jumpstart_your_development_with_linkedin.md",
     "Done/20260403_025909_linkedin_test.md",
     "Pending_Approval/LINKEDIN_POST_20260403_025909.md",
-    "Needs_Action/20260403_025909_linkedin_test.md",
-    "LINKEDIN_MCP_COMPLETE.md"
+    "Needs_Action/20260403_025909_linkedin_test.md"
   ]
 }
