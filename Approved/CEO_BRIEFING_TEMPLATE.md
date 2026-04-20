@@ -11,6 +11,7 @@ focus_areas: [revenue, tasks, bottlenecks, suggestions]
 Generate weekly CEO briefing for the current period.
 
 **Instructions:**
+
 - Pull revenue data from Odoo Accounting (last complete week Mon-Sun)
 - Scan Obsidian vault for task completion status
 - Identify bottlenecks and risks

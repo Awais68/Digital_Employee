@@ -66,6 +66,40 @@ logger = logging.getLogger("instagram_graph_api")
 INSTAGRAM_API_BASE = "https://graph.facebook.com/v18.0"
 
 
+def exchange_for_long_lived_token(short_token: str, app_id: str, app_secret: str) -> Dict[str, Any]:
+    """
+    Exchange a short-lived User Access Token for a long-lived one (60 days).
+    """
+    url = f"https://graph.facebook.com/v18.0/oauth/access_token"
+    params = {
+        "grant_type": "fb_exchange_token",
+        "client_id": app_id,
+        "client_secret": app_secret,
+        "fb_exchange_token": short_token
+    }
+    
+    logger.info("Exchanging for long-lived token...")
+    response = requests.get(url, params=params)
+    return response.json()
+
+
+def get_permanent_page_token(long_lived_user_token: str, page_id: str) -> Dict[str, Any]:
+    """
+    Get a permanent Page Access Token using a long-lived User Access Token.
+    Note: This token technically doesn't expire unless the user changes their password
+    or revokes app permissions.
+    """
+    url = f"https://graph.facebook.com/v18.0/{page_id}"
+    params = {
+        "fields": "access_token",
+        "access_token": long_lived_user_token
+    }
+    
+    logger.info(f"Fetching permanent token for Page ID: {page_id}")
+    response = requests.get(url, params=params)
+    return response.json()
+
+
 def load_env_vars() -> Dict[str, str]:
     """Load environment variables from .env file."""
     env_vars = {}
@@ -101,7 +135,7 @@ def get_credentials() -> Dict[str, str]:
     }
 
 
-def upload_image_to_url(image_path: str) -> str:
+def upload_image_to_url(image_path_str: str) -> str:
     """
     Upload local image to a temporary URL that Instagram can access.
     Instagram Graph API requires publicly accessible image URLs.
@@ -110,26 +144,20 @@ def upload_image_to_url(image_path: str) -> str:
     For testing, we'll use a temporary upload service.
     """
     # Check if already a URL
-    if image_path.startswith("http://") or image_path.startswith("https://"):
-        return image_path
+    if image_path_str.startswith("http://") or image_path_str.startswith("https://"):
+        return image_path_str
     
     # Convert local file to URL
-    # Option 1: Upload to imgbb.com (free, no API key needed for testing)
-    # Option 2: Use your own server/CDN
-    # Option 3: Use Facebook's own image hosting
-    
-    image_path = Path(image_path)
-    if not image_path.exists():
-        raise FileNotFoundError(f"Image not found: {image_path}")
+    image_file_path = Path(image_path_str)
+    if not image_file_path.exists():
+        raise FileNotFoundError(f"Image not found: {image_file_path}")
     
     # For now, we'll use imgbb.com free upload
-    # In production, replace with your own CDN
     try:
-        from pathlib import Path
         import base64
         
         # Read image
-        with open(image_path, "rb") as f:
+        with open(image_file_path, "rb") as f:
             image_data = f.read()
         
         # Upload to imgbb (free, no signup needed)
