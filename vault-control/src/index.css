@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply font-sans;
+}
+
+html {
+  @apply scroll-smooth;
+}
+
+/* Dark theme colors - Navy Blue */
+.dark {
+  @apply bg-[#0F1A2E] text-[#E0E0E6];
+  --color-accent: #00FF88;
+  --color-success: #00FF88;
+  --color-warning: #FFB800;
+  --color-error: #FF4444;
+}
+
+/* Light theme colors */
+html:not(.dark) {
+  @apply bg-[#F9FAFB] text-[#1F2937];
+  --color-accent: #3B82F6;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+}
+
+.status-dot {
+  @apply inline-block w-2 h-2 rounded-full animate-pulse;
+}
+
+.status-dot.running {
+  @apply bg-green-500;
+}
+
+.status-dot.warning {
+  @apply bg-yellow-500;
+}
+
+.status-dot.offline {
+  @apply bg-red-500;
+}
+
+.card {
+  @apply rounded-lg border transition-all duration-200 dark:bg-[#1B2A48] dark:border-[#2A3E5F] bg-white border-gray-200;
+}
+
+.card:hover {
+  @apply dark:border-[#00FF88]/30 border-blue-300;
+}
+
+.btn-primary {
+  @apply px-4 py-2 rounded font-medium transition-all duration-200 dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white hover:opacity-90;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 rounded font-medium border transition-all duration-200 dark:border-[#00FF88]/50 dark:text-[#00FF88] border-blue-300 text-blue-600 hover:dark:bg-[#00FF88]/10 hover:bg-blue-50;
+}
+
+.badge {
+  @apply inline-block px-2 py-1 rounded text-sm font-medium;
+}
+
+.badge-email {
+  @apply dark:bg-blue-500/20 dark:text-blue-400 bg-blue-100 text-blue-700;
+}
+
+.badge-payment {
+  @apply dark:bg-red-500/20 dark:text-red-400 bg-red-100 text-red-700;
+}
+
+.badge-post {
+  @apply dark:bg-purple-500/20 dark:text-purple-400 bg-purple-100 text-purple-700;
+}
+
+.badge-other {
+  @apply dark:bg-gray-500/20 dark:text-gray-400 bg-gray-100 text-gray-700;
+}
+
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.skeleton {
+  animation: shimmer 2s infinite;
+  background: linear-gradient(to right, rgba(255,255,255,.1) 0%, rgba(255,255,255,.2) 20%, rgba(255,255,255,.1) 40%, rgba(255,255,255,.1) 100%);
+  background-size: 1000px 100%;
+}
