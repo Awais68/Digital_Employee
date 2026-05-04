@@ -1,20 +1,23 @@
-import { Home, Mail, MessageCircle, CheckSquare, Share2, DollarSign, Cloud, FileText, Menu, X, ChevronLeft, CheckCircle2 } from 'lucide-react'
+import {
+  Home, Mail, MessageCircle, CheckSquare, Share2,
+  DollarSign, Cloud, FileText, Menu, X, ChevronLeft, CheckCircle2,
+} from 'lucide-react'
 import { useState } from 'react'
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: Home, badge: null },
-  { id: 'approvals', label: 'Approvals', icon: CheckSquare, badge: 'HITL' },
-  { id: 'emails', label: 'Emails', icon: Mail, badge: '3' },
-  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, badge: '5' },
-  { id: 'todos', label: 'Todos', icon: CheckCircle2, badge: '12' },
-  { id: 'social', label: 'Social Media', icon: Share2, badge: null },
-  { id: 'accounting', label: 'Accounting', icon: DollarSign, badge: null },
-  { id: 'cloud', label: 'Cloud Status', icon: Cloud, badge: null },
-  { id: 'logs', label: 'Logs', icon: FileText, badge: null },
+  { id: 'dashboard', label: 'Dashboard',    icon: Home,          badge: null   },
+  { id: 'approvals', label: 'Approvals',    icon: CheckSquare,   badge: 'HITL' },
+  { id: 'emails',    label: 'Emails',       icon: Mail,          badge: '3'    },
+  { id: 'whatsapp',  label: 'WhatsApp',     icon: MessageCircle, badge: '5'    },
+  { id: 'todos',     label: 'Todos',        icon: CheckCircle2,  badge: '12'   },
+  { id: 'social',    label: 'Social Media', icon: Share2,        badge: null   },
+  { id: 'accounting',label: 'Accounting',   icon: DollarSign,    badge: null   },
+  { id: 'cloud',     label: 'Cloud Status', icon: Cloud,         badge: null   },
+  { id: 'logs',      label: 'Logs',         icon: FileText,      badge: null   },
 ]
 
 export default function Sidebar({ currentPage, setCurrentPage }) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen,      setIsOpen]      = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   return (
@@ -29,13 +32,14 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
 
       {/* Sidebar */}
       <div className={`
-        fixed md:relative h-screen dark:bg-[#1B2A48] bg-white dark:border-r dark:border-[#2A3E5F] border-r border-gray-200
-        transition-all duration-300 z-40
+        fixed md:relative h-screen dark:bg-[#1B2A48] bg-white
+        dark:border-r dark:border-[#2A3E5F] border-r border-gray-200
+        transition-all duration-300 z-40 flex flex-col overflow-hidden
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-        flex flex-col overflow-hidden
         ${isCollapsed ? 'w-20' : 'w-64'}
       `}>
-        {/* Header with Collapse Button */}
+
+        {/* Header */}
         <div className="p-6 border-b dark:border-[#2A3E5F] border-gray-200 relative">
           {!isCollapsed && (
             <>
@@ -49,15 +53,19 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="hidden md:block absolute top-6 right-4 dark:text-[#7A7A85] hover:dark:text-[#00FF88] text-gray-600 hover:text-blue-600"
           >
-            <ChevronLeft size={20} className={`transition-transform ${isCollapsed ? 'rotate-180' : ''}`} />
+            <ChevronLeft
+              size={20}
+              className={`transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
+            />
           </button>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-3">
           {menuItems.map(item => {
-            const Icon = item.icon
+            const Icon     = item.icon
             const isActive = currentPage === item.id
+
             return (
               <button
                 key={item.id}
@@ -65,6 +73,7 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
                   setCurrentPage(item.id)
                   setIsOpen(false)
                 }}
+                title={isCollapsed ? item.label : undefined}
                 className={`
                   w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-2
                   transition-all duration-200 font-medium text-sm
@@ -74,7 +83,6 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
                   }
                   ${isCollapsed ? 'justify-center px-3' : ''}
                 `}
-                title={isCollapsed ? item.label : undefined}
               >
                 <Icon size={20} />
                 {!isCollapsed && (

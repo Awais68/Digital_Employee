@@ -1,25 +1,33 @@
 import { useState, useEffect, useCallback } from 'react'
-import { TrendingUp, TrendingDown, MessageSquare, Mail, Linkedin, Twitter, Facebook, Instagram, RefreshCw, Loader2 } from 'lucide-react'
-import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { LineChart as MuiLineChart } from '@mui/x-charts'
+import {
+  TrendingUp, TrendingDown, MessageSquare, Mail,
+  Linkedin, Twitter, Facebook, Instagram, RefreshCw, Loader2, AlertCircle,
+} from 'lucide-react'
+import {
+  BarChart, Bar, Cell, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts'
 import axios from 'axios'
 
 const platforms = [
-  { name: 'WhatsApp', icon: MessageSquare, color: '#25D366' },
-  { name: 'LinkedIn', icon: Linkedin, color: '#0A66C2' },
-  { name: 'Facebook', icon: Facebook, color: '#1877F2' },
-  { name: 'Instagram', icon: Instagram, color: '#E4405F' },
-  { name: 'Gmail', icon: Mail, color: '#EA4335' },
-  { name: 'Twitter', icon: Twitter, color: '#1DA1F2' },
+  { name: 'WhatsApp',  icon: MessageSquare, color: '#25D366', inboxKey: 'WhatsApp',  doneKey: null },
+  { name: 'LinkedIn',  icon: Linkedin,       color: '#0A66C2', inboxKey: 'LinkedIn',  doneKey: 'linkedInPosts' },
+  { name: 'Facebook',  icon: Facebook,       color: '#1877F2', inboxKey: 'Facebook',  doneKey: null },
+  { name: 'Instagram', icon: Instagram,      color: '#E4405F', inboxKey: 'Instagram', doneKey: null },
+  { name: 'Gmail',     icon: Mail,           color: '#EA4335', inboxKey: 'Inbox',     doneKey: 'Done' },
+  { name: 'Twitter',   icon: Twitter,        color: '#1DA1F2', inboxKey: 'Twitter',   doneKey: null },
 ]
 
-// Pokémon-style stat bar component
+// ─── Pokémon-style stat bar ────────────────────────────────────────────────────
+
 function StatBar({ label, value, maxValue = 100, color }) {
   const percentage = Math.min((value / maxValue) * 100, 100)
   return (
     <div className="mb-3">
       <div className="flex justify-between items-center mb-1">
-        <span className="text-xs font-semibold dark:text-[#B0C4FF] text-gray-700 uppercase tracking-wide">{label}</span>
+        <span className="text-xs font-semibold dark:text-[#B0C4FF] text-gray-700 uppercase tracking-wide">
+          {label}
+        </span>
         <span className="text-xs font-bold dark:text-[#00FF88] text-green-600">{value}</span>
       </div>
       <div className="w-full bg-gray-300 dark:bg-[#2A3E5F] rounded-full h-3 overflow-hidden border dark:border-[#3A5E7F] border-gray-400">
@@ -36,17 +44,23 @@ function StatBar({ label, value, maxValue = 100, color }) {
   )
 }
 
+// ─── Dashboard ─────────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
-  const [vaultCounts, setVaultCounts] = useState({})
-  const [services, setServices] = useState([])
+  const [vaultCounts,      setVaultCounts]      = useState({})
+  const [services,         setServices]         = useState([])
   const [pendingApprovals, setPendingApprovals] = useState([])
-  const [recentActivity, setRecentActivity] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [wsConnected, setWsConnected] = useState(false)
-  const [lastUpdate, setLastUpdate] = useState(new Date())
+  const [recentActivity,   setRecentActivity]   = useState([])
+  const [loading,          setLoading]          = useState(true)
+  const [wsConnected,      setWsConnected]      = useState(false)
+  const [lastUpdate,       setLastUpdate]       = useState(new Date())
+  const [error,            setError]            = useState(null)
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchDashboardData = useCallback(async () => {
     try {
+      setError(null)
       const res = await axios.get('/api/system/stats')
       setVaultCounts(res.data.vaultCounts)
       setServices(res.data.services)
@@ -55,83 +69,106 @@ export default function Dashboard() {
       setLastUpdate(new Date())
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err)
+      setError('Failed to connect to backend. Please ensure the server is running.')
     } finally {
       setLoading(false)
     }
   }, [])
 
+  // ── WebSocket ──────────────────────────────────────────────────────────────
+
   useEffect(() => {
     fetchDashboardData()
 
-    // Setup WebSocket for live updates
+    // Connect to WebSocket server (port 3000 for both dev and production)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}`)
+    const wsPort = window.location.port === '5173' ? '3000' : window.location.port
+    const wsUrl = `${protocol}//${window.location.hostname}${wsPort ? ':' + wsPort : ''}`
+    
+    let ws = new WebSocket(wsUrl)
+    let reconnectTimer = null
+    let retryCount = 0
+    const maxRetries = 10
 
-    ws.onopen = () => {
-      setWsConnected(true)
-      console.log('Dashboard Stream Connected')
-    }
+    const connect = () => {
+      ws = new WebSocket(wsUrl)
 
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data)
-      if (message.type === 'dashboard_update' || message.type === 'initial_state') {
-        if (message.vaultCounts) setVaultCounts(message.vaultCounts)
-        if (message.services) setServices(message.services)
-        if (message.pendingApprovals) setPendingApprovals(message.pendingApprovals)
-        if (message.recentActivity) setRecentActivity(message.recentActivity)
-        setLastUpdate(new Date())
+      ws.onopen = () => {
+        setWsConnected(true)
+        retryCount = 0
+        console.log('Dashboard Stream Connected')
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data)
+          if (message.type === 'dashboard_update' || message.type === 'initial_state') {
+            if (message.vaultCounts)      setVaultCounts(message.vaultCounts)
+            if (message.services)         setServices(message.services)
+            if (message.pendingApprovals) setPendingApprovals(message.pendingApprovals)
+            if (message.recentActivity)   setRecentActivity(message.recentActivity)
+            setLastUpdate(new Date())
+          }
+        } catch (err) {
+          console.error('Failed to parse WebSocket message:', err)
+        }
+      }
+
+      ws.onclose = () => {
+        setWsConnected(false)
+        
+        if (retryCount < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 30000)
+          retryCount++
+          console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${retryCount}/${maxRetries})`)
+          reconnectTimer = setTimeout(connect, delay)
+        }
+      }
+
+      ws.onerror = (error) => {
+        console.error('[WebSocket] Error:', error)
       }
     }
 
-    ws.onclose = () => {
-      setWsConnected(false)
-    }
+    connect()
 
-    return () => ws.close()
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      ws.close()
+    }
   }, [fetchDashboardData])
 
-  // Calculate platform activity from vault data
-  const getPlatformActivity = () => {
-    return platforms.map(platform => {
-      let incoming = 0
-      let outgoing = 0
-      
-      if (platform.name === 'LinkedIn') {
-        incoming = vaultCounts['LinkedIn'] || 0
-        outgoing = vaultCounts['Posted'] || 0
-      } else if (platform.name === 'Gmail') {
-        incoming = vaultCounts['Inbox'] || 0
-        outgoing = vaultCounts['Done'] || 0
-      } else {
-        // Fallback/Placeholder
-        incoming = Math.floor(Math.random() * 20)
-        outgoing = Math.floor(Math.random() * 10)
-      }
+  // ── Platform Activity (real data only, no Math.random) ────────────────────
 
-      const trend = incoming > 5 ? 'up' : 'stable'
-      
+  const getPlatformActivity = () =>
+    platforms.map(platform => {
+      // incoming = that platform's vault folder count (0 if folder doesn't exist)
+      const incoming = vaultCounts[platform.inboxKey] || 0
+
+      // outgoing = real done/posted count if mapped, otherwise 0 (no fake data)
+      const outgoing = platform.doneKey ? (vaultCounts[platform.doneKey] || 0) : 0
+
       return {
-        name: platform.name,
-        icon: platform.icon,
-        color: platform.color,
+        name:     platform.name,
+        icon:     platform.icon,
+        color:    platform.color,
         incoming,
         outgoing,
-        trend,
+        trend:    incoming > 5 ? 'up' : 'stable',
       }
     })
-  }
 
   const platformActivity = getPlatformActivity()
 
-  const barData = platformActivity
+  const barData = [...platformActivity]
     .map(p => ({ name: p.name, value: p.incoming, fill: p.color }))
     .sort((a, b) => b.value - a.value)
 
   const funnelData = [
-    { stage: 'Inbox', value: vaultCounts['Inbox'] || 0, fill: '#00FF88' },
-    { stage: 'Pending', value: vaultCounts['Pending_Approval'] || 0, fill: '#00D966' },
-    { stage: 'Approved', value: vaultCounts['Approved'] || 0, fill: '#00B050' },
-    { stage: 'Completed', value: vaultCounts['Done'] || 0, fill: '#008800' },
+    { stage: 'Inbox',     value: vaultCounts['Inbox']            || 0, fill: '#00FF88' },
+    { stage: 'Pending',   value: vaultCounts['Pending_Approval'] || 0, fill: '#00D966' },
+    { stage: 'Approved',  value: vaultCounts['Approved']         || 0, fill: '#00B050' },
+    { stage: 'Completed', value: vaultCounts['Done']             || 0, fill: '#008800' },
   ]
 
   const handleRefresh = async () => {
@@ -140,18 +177,25 @@ export default function Dashboard() {
     setLoading(false)
   }
 
+  // ── Loading Screen ─────────────────────────────────────────────────────────
+
   if (loading && Object.keys(vaultCounts).length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] space-y-4">
         <Loader2 className="w-12 h-12 animate-spin text-[#00FF88]" />
-        <p className="text-[#7A7A85] font-mono tracking-widest animate-pulse">SYNCHRONIZING DIGITAL EMPLOYEE...</p>
+        <p className="text-[#7A7A85] font-mono tracking-widest animate-pulse">
+          SYNCHRONIZING DIGITAL EMPLOYEE...
+        </p>
       </div>
     )
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-6">
-      {/* Connection Status Bar */}
+
+      {/* ── Connection Status Bar ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`w-3 h-3 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
@@ -159,22 +203,32 @@ export default function Dashboard() {
             {wsConnected ? 'Real-time updates active' : 'Disconnected'}
           </span>
         </div>
-        {lastUpdate && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs dark:text-[#B0C4FF] text-gray-500">
-              Last update: {lastUpdate.toLocaleTimeString()}
-            </span>
-            <button
-              onClick={handleRefresh}
-              className="p-2 rounded-lg dark:bg-[#1B2A48] bg-gray-100 hover:dark:bg-[#2A3E5F] hover:bg-gray-200 transition-all"
-            >
-              <RefreshCw size={16} className={`dark:text-[#00FF88] text-green-600 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <span className="text-xs dark:text-[#B0C4FF] text-gray-500">
+            Last update: {lastUpdate.toLocaleTimeString()}
+          </span>
+          <button
+            onClick={handleRefresh}
+            className="p-2 rounded-lg dark:bg-[#1B2A48] bg-gray-100 hover:dark:bg-[#2A3E5F] hover:bg-gray-200 transition-all"
+          >
+            <RefreshCw
+              size={16}
+              className={`dark:text-[#00FF88] text-green-600 ${loading ? 'animate-spin' : ''}`}
+            />
+          </button>
+        </div>
       </div>
 
-      {/* PLATFORM ACTIVITY - TOP */}
+      {/* ── Error Banner ── */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg flex items-center gap-3 text-red-400 font-mono text-sm">
+          <AlertCircle size={20} />
+          {error}
+          <button onClick={handleRefresh} className="ml-auto underline hover:opacity-80">Retry</button>
+        </div>
+      )}
+
+      {/* ── Platform Activity ── */}
       <div className="card p-6">
         <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-6 font-mono">
           🌐 PLATFORM ACTIVITY
@@ -183,7 +237,10 @@ export default function Dashboard() {
           {platformActivity.map(platform => {
             const Icon = platform.icon
             return (
-              <div key={platform.name} className="p-4 rounded-lg dark:bg-[#0F1A2E] bg-gray-50 hover:dark:bg-[#1B2A48] hover:bg-gray-100 transition-all border dark:border-[#2A3E5F] border-gray-200">
+              <div
+                key={platform.name}
+                className="p-4 rounded-lg dark:bg-[#0F1A2E] bg-gray-50 hover:dark:bg-[#1B2A48] hover:bg-gray-100 transition-all border dark:border-[#2A3E5F] border-gray-200"
+              >
                 <div className="flex items-center gap-2 mb-4">
                   <Icon size={22} style={{ color: platform.color }} />
                   <div>
@@ -195,8 +252,6 @@ export default function Dashboard() {
                     </span>
                   </div>
                 </div>
-
-                {/* Pokémon-style stats */}
                 <StatBar label="Incoming" value={platform.incoming} maxValue={100} color={platform.color} />
                 <StatBar label="Outgoing" value={platform.outgoing} maxValue={100} color={platform.color} />
               </div>
@@ -205,9 +260,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* CHARTS SECTION */}
+      {/* ── Charts ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Funnel Data Visualization */}
+
+        {/* Actions Funnel */}
         <div className="card p-6">
           <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
             ✅ ACTIONS FUNNEL
@@ -239,7 +295,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Bar Chart - Top Platforms */}
+        {/* Top Platforms Bar Chart */}
         <div className="card p-6">
           <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
             📊 TOP PLATFORMS (INCOMING)
@@ -254,7 +310,11 @@ export default function Dashboard() {
               <XAxis type="number" stroke="#7A7A85" style={{ fontSize: '12px' }} />
               <YAxis dataKey="name" type="category" stroke="#7A7A85" style={{ fontSize: '12px' }} width={70} />
               <Tooltip
-                contentStyle={{ background: '#1B2A48', border: '1px solid #2A3E5F', borderRadius: '8px' }}
+                contentStyle={{
+                  background: '#1B2A48',
+                  border: '1px solid #2A3E5F',
+                  borderRadius: '8px',
+                }}
               />
               <Bar dataKey="value" radius={[0, 8, 8, 0]}>
                 {barData.map((entry, index) => (
@@ -266,7 +326,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* VAULT STATUS - Real-time folder counts */}
+      {/* ── Vault Status ── */}
       <div className="card p-6">
         <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
           📁 VAULT STATUS
@@ -286,7 +346,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* SYSTEM STATUS */}
+      {/* ── System Status ── */}
       <div className="card p-6">
         <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
           🔧 SYSTEM STATUS
@@ -295,7 +355,6 @@ export default function Dashboard() {
           {services.map(service => {
             const isRunning = service.status === 'running'
             const isWarning = service.status === 'warning'
-
             return (
               <div
                 key={service.name}
@@ -309,7 +368,11 @@ export default function Dashboard() {
               >
                 <div className="flex items-start gap-3 mb-3">
                   <div className={`w-3 h-3 rounded-full mt-1 ${
-                    isRunning ? 'bg-green-500 animate-pulse' : isWarning ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
+                    isRunning
+                      ? 'bg-green-500 animate-pulse'
+                      : isWarning
+                      ? 'bg-yellow-500 animate-pulse'
+                      : 'bg-red-500'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold dark:text-[#E0E0E6] text-gray-900 truncate">
@@ -326,7 +389,6 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
-
                 {service.uptime && (
                   <div className="space-y-2 text-xs dark:text-[#B0C4FF] text-gray-600">
                     <div className="flex justify-between">
@@ -345,7 +407,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* PENDING ACTIONS */}
+      {/* ── Pending Actions ── */}
       <div className="card p-6 bg-gradient-to-r dark:from-[#00FF88]/5 dark:to-[#1DA1F2]/5 from-green-50 to-blue-50 border dark:border-[#00FF88]/20 border-blue-200">
         <div className="flex items-center justify-between">
           <div>
@@ -362,6 +424,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
     </div>
   )
 }

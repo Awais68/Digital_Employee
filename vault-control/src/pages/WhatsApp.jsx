@@ -1,151 +1,407 @@
 import { useState, useEffect } from 'react'
-import { Send, Zap, SkipBack, Edit3 } from 'lucide-react'
+import { Send, Zap, SkipBack, Edit3, Loader2, AlertCircle, ArrowLeft, Phone, Video } from 'lucide-react'
+import axios from 'axios'
 
 export default function WhatsApp() {
-  const [conversations, setConversations] = useState([
-    { id: 'wa-1', name: 'John Doe', preview: 'Hey, did you see the latest updates?', time: '10m ago', unread: true },
-    { id: 'wa-2', name: 'Sarah', preview: 'Can we schedule a meeting for tomorrow?', time: '1h ago', unread: false },
-    { id: 'wa-3', name: 'Team Group', preview: 'New project kickoff scheduled for next week', time: '3h ago', unread: false },
-  ])
+  const [conversations, setConversations] = useState([])
   const [selectedConversation, setSelectedConversation] = useState(null)
+  const [messages, setMessages] = useState([])
   const [draftReply, setDraftReply] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [sending, setSending] = useState(false)
+  const [mobileView, setMobileView] = useState(false)
 
   useEffect(() => {
-    if (conversations.length > 0) {
-      setSelectedConversation(conversations[0])
-    }
+    fetchConversations()
+    const handleResize = () => setMobileView(window.innerWidth < 768)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const stats = {
-    unread: conversations.filter(c => c.unread).length,
-    replied: 8,
-    pending: 3,
+  const fetchConversations = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await axios.get('/api/whatsapp')
+      setConversations(res.data)
+      if (res.data.length > 0 && !selectedConversation) {
+        setSelectedConversation(res.data[0])
+        fetchMessages(res.data[0].id)
+      }
+    } catch (err) {
+      console.error('Failed to fetch WhatsApp conversations:', err)
+      setError('Failed to load WhatsApp conversations. Ensure the server is running.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const mockMessages = [
-    { id: 1, sender: 'John', text: 'Hey, did you see the latest updates?', time: '10m ago' },
-    { id: 2, sender: 'Me', text: 'No, what updates?', time: '9m ago' },
-    { id: 3, sender: 'John', text: 'The new feature release is out!', time: '8m ago' },
-  ]
+  const fetchMessages = async (convId) => {
+    setMessagesLoading(true)
+    try {
+      const res = await axios.get(`/api/whatsapp/conversation/${convId}`)
+      setMessages(res.data.messages || [])
+    } catch (err) {
+      console.error('Failed to fetch messages:', err)
+      setMessages([])
+    } finally {
+      setMessagesLoading(false)
+    }
+  }
 
-  return (
-    <div className="grid grid-cols-3 gap-4 h-full">
-      {/* Left: Conversation List */}
-      <div className="col-span-1 card flex flex-col">
-        <div className="p-4 border-b dark:border-[#1A1A24] border-gray-200">
-          <h2 className="font-bold dark:text-[#E0E0E6] text-gray-900 font-mono mb-4">
-            CONVERSATIONS
-          </h2>
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between">
-              <span className="dark:text-[#7A7A85] text-gray-500">Unread</span>
-              <span className="font-bold text-red-500">{stats.unread}</span>
+  const handleSelectConversation = (conv) => {
+    setSelectedConversation(conv)
+    fetchMessages(conv.id)
+    if (mobileView) {
+      setMobileView(false)
+    }
+  }
+
+  const handleBackToList = () => {
+    setSelectedConversation(null)
+  }
+
+  const handleSendReply = async () => {
+    if (!draftReply.trim() || !selectedConversation) return
+    
+    setSending(true)
+    try {
+      await axios.post('/api/whatsapp/reply', {
+        to: selectedConversation.name,
+        content: draftReply,
+      })
+      setDraftReply('')
+      alert('Reply submitted for approval!')
+    } catch (err) {
+      console.error('Failed to send reply:', err)
+      alert('Failed to submit reply.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const stats = {
+    unread: conversations.reduce((sum, c) => sum + (c.unread || 0), 0),
+    total: conversations.length,
+    pending: conversations.filter(c => c.pending).length,
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin text-[#00FF88]" />
+        <p className="text-[#7A7A85] font-mono">LOADING WHATSAPP...</p>
+      </div>
+    )
+  }
+
+  // Mobile view: show either list or conversation
+  if (mobileView) {
+    if (selectedConversation) {
+      return (
+        <div className="flex flex-col h-[calc(100vh-140px)]">
+          {/* Header */}
+          <div className="p-4 border-b dark:border-[#1A1A24] border-gray-200 flex items-center gap-3">
+            <button onClick={handleBackToList} className="p-1">
+              <ArrowLeft size={20} className="dark:text-[#00FF88] text-blue-500" />
+            </button>
+            <div>
+              <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900">
+                {selectedConversation.name}
+              </h3>
+              <p className="text-xs dark:text-[#7A7A85] text-gray-500">
+                {selectedConversation.messageCount} message(s)
+              </p>
             </div>
-            <div className="flex justify-between">
-              <span className="dark:text-[#7A7A85] text-gray-500">Replied Today</span>
-              <span className="font-bold">{stats.replied}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="dark:text-[#7A7A85] text-gray-500">Pending</span>
-              <span className="font-bold text-orange-500">{stats.pending}</span>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#0B1929]">
+            {messagesLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="animate-spin text-[#00FF88]" />
+              </div>
+            ) : messages.length > 0 ? (
+              messages.map(msg => (
+                <div key={msg.id} className={`flex ${msg.sender === 'Me' || msg.type === 'outgoing' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`
+                    max-w-[85%] px-4 py-2 rounded-lg
+                    ${msg.sender === 'Me' || msg.type === 'outgoing'
+                      ? 'bg-[#005C4B] text-white'
+                      : 'dark:bg-[#202C33] dark:text-[#E0E0E6] bg-gray-100 text-gray-900'
+                    }
+                  `}>
+                    <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                    <p className={`text-[10px] mt-1 text-right ${msg.sender === 'Me' || msg.type === 'outgoing' ? 'text-white/60' : 'dark:text-[#8696A0]'}`}>
+                      {new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center justify-center h-full text-[#8696A0] text-sm">
+                No messages
+              </div>
+            )}
+          </div>
+
+          {/* Reply Box */}
+          <div className="p-3 border-t dark:border-[#1A1A24] border-gray-200 bg-[#0F1A2E]">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={draftReply}
+                onChange={(e) => setDraftReply(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendReply()}
+                placeholder="Type a reply..."
+                className="flex-1 px-4 py-2 rounded-full dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-sm"
+              />
+              <button 
+                onClick={handleSendReply}
+                disabled={sending || !draftReply.trim()}
+                className="p-2 rounded-full bg-[#00FF88] text-[#0F1A2E] disabled:opacity-50"
+              >
+                {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+              </button>
             </div>
           </div>
         </div>
+      )
+    }
 
+    return (
+      <div className="flex flex-col h-[calc(100vh-140px)]">
+        {/* Header */}
+        <div className="p-4 border-b dark:border-[#1A1A24] border-gray-200">
+          <h2 className="font-bold dark:text-[#E0E0E6] text-gray-900 font-mono">
+            WHATSAPP
+          </h2>
+          <div className="flex gap-4 mt-2 text-xs">
+            <span className="text-red-500 font-bold">Unread: {stats.unread}</span>
+            <span className="dark:text-[#7A7A85]">Total: {stats.total}</span>
+          </div>
+        </div>
+
+        {/* Conversations */}
         <div className="flex-1 overflow-y-auto">
-          {conversations.map(conv => (
-            <div
-              key={conv.id}
-              onClick={() => setSelectedConversation(conv)}
-              className={`
-                px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer transition-colors
-                ${selectedConversation?.id === conv.id
-                  ? 'dark:bg-[#00FF88]/10 bg-blue-50'
-                  : 'hover:dark:bg-[#1A1A24] hover:bg-gray-50'
-                }
-              `}
-            >
-              <div className="flex justify-between items-start gap-2 mb-1">
-                <p className={`font-semibold text-sm truncate ${conv.unread ? 'dark:text-[#E0E0E6] text-gray-900' : 'dark:text-[#7A7A85] text-gray-600'}`}>
-                  {conv.name}
-                </p>
-                {conv.unread && <div className="w-2 h-2 rounded-full bg-red-500 mt-1 flex-shrink-0" />}
+          {conversations.length > 0 ? (
+            conversations.map(conv => (
+              <div
+                key={conv.id}
+                onClick={() => handleSelectConversation(conv)}
+                className="px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer hover:dark:bg-[#1A1A24] transition-colors"
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#25D366]/20 flex items-center justify-center">
+                      <Phone size={18} className="text-[#25D366]" />
+                    </div>
+                    <div>
+                      <p className={`font-semibold text-sm ${conv.unread > 0 ? 'dark:text-[#E0E0E6] text-gray-900' : 'dark:text-[#7A7A85] text-gray-600'}`}>
+                        {conv.name}
+                      </p>
+                      <p className="text-xs dark:text-[#7A7A85] text-gray-600 truncate max-w-[200px]">
+                        {conv.preview}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs dark:text-[#7A7A85] text-gray-500">
+                      {new Date(conv.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {conv.unread > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-[#00FF88] text-[#0F1A2E] text-[10px] font-bold flex items-center justify-center">
+                        {conv.unread}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <p className="text-xs dark:text-[#7A7A85] text-gray-600 truncate">
-                {conv.preview}
-              </p>
-              <p className="text-xs dark:text-[#7A7A85] text-gray-500 mt-1">
-                {conv.time}
-              </p>
+            ))
+          ) : (
+            <div className="p-8 text-center text-[#7A7A85] font-mono italic text-sm">
+              NO CONVERSATIONS FOUND
             </div>
-          ))}
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Desktop view
+  return (
+    <div className="grid grid-cols-3 gap-4 h-[calc(100vh-140px)]">
+      {/* Left: Conversation List */}
+      <div className="col-span-1 card flex flex-col border-r dark:border-[#1A1A24] border-gray-200">
+        {/* Header */}
+        <div className="p-4 border-b dark:border-[#1A1A24] border-gray-200 bg-[#0F1A2E]">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold dark:text-[#E0E0E6] text-gray-900 font-mono flex items-center gap-2">
+              <Phone size={18} className="text-[#25D366]" />
+              WHATSAPP
+            </h2>
+            <button onClick={fetchConversations} className="p-1.5 rounded dark:bg-[#1A1A24] hover:dark:bg-[#2A3E5F] transition-colors">
+              <Loader2 size={14} className="dark:text-[#00FF88]" />
+            </button>
+          </div>
+          <div className="flex gap-4 mt-2 text-xs">
+            <span className="dark:text-[#7A7A85]">Total: <span className="font-bold dark:text-[#E0E0E6]">{stats.total}</span></span>
+            <span className="text-red-500 font-bold">Unread: {stats.unread}</span>
+          </div>
+        </div>
+
+        {/* Conversations */}
+        <div className="flex-1 overflow-y-auto">
+          {error && (
+            <div className="p-4 text-center text-red-400 text-xs font-mono">
+              <AlertCircle size={16} className="mx-auto mb-1" />
+              {error}
+            </div>
+          )}
+          
+          {conversations.length > 0 ? (
+            conversations.map(conv => (
+              <div
+                key={conv.id}
+                onClick={() => handleSelectConversation(conv)}
+                className={`
+                  px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer transition-colors
+                  ${selectedConversation?.id === conv.id
+                    ? 'dark:bg-[#00FF88]/10 bg-blue-50'
+                    : 'hover:dark:bg-[#1A1A24] hover:bg-gray-50'
+                  }
+                `}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#25D366]/20 flex items-center justify-center">
+                      <Phone size={18} className="text-[#25D366]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`font-semibold text-sm ${conv.unread > 0 ? 'dark:text-[#E0E0E6] text-gray-900' : 'dark:text-[#7A7A85] text-gray-600'}`}>
+                        {conv.name}
+                      </p>
+                      <p className="text-xs dark:text-[#7A7A85] text-gray-600 truncate max-w-[150px]">
+                        {conv.preview}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs dark:text-[#7A7A85] text-gray-500">
+                      {new Date(conv.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {conv.unread > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-[#00FF88] text-[#0F1A2E] text-[10px] font-bold flex items-center justify-center">
+                        {conv.unread}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-12 text-center text-[#7A7A85] font-mono italic text-xs">
+              NO CONVERSATIONS FOUND
+            </div>
+          )}
         </div>
       </div>
 
       {/* Right: Chat View */}
-      <div className="col-span-2 card flex flex-col">
+      <div className="col-span-2 card flex flex-col bg-[#0B1929]">
         {selectedConversation ? (
           <>
             {/* Header */}
-            <div className="p-4 border-b dark:border-[#1A1A24] border-gray-200">
-              <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 text-lg">
-                {selectedConversation.name}
-              </h3>
-              <p className="text-xs dark:text-[#7A7A85] text-gray-500 mt-1">
-                Last message {selectedConversation.time}
-              </p>
+            <div className="p-4 border-b dark:border-[#1A1A24] border-gray-200 bg-[#0F1A2E] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#25D366]/20 flex items-center justify-center">
+                  <Phone size={18} className="text-[#25D366]" />
+                </div>
+                <div>
+                  <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900">
+                    {selectedConversation.name}
+                  </h3>
+                  <p className="text-xs dark:text-[#8696A0] text-gray-500">
+                    {selectedConversation.messageCount} message(s)
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button className="p-2 rounded-full dark:bg-[#1A1A24] hover:dark:bg-[#2A3E5F] transition-colors">
+                  <Video size={18} className="dark:text-[#00FF88]" />
+                </button>
+                <button className="p-2 rounded-full dark:bg-[#1A1A24] hover:dark:bg-[#2A3E5F] transition-colors">
+                  <Phone size={18} className="dark:text-[#00FF88]" />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {mockMessages.map(msg => (
-                <div key={msg.id} className={`flex ${msg.sender === 'Me' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`
-                    max-w-xs px-4 py-2 rounded-lg
-                    ${msg.sender === 'Me'
-                      ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
-                      : 'dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-900'
-                    }
-                  `}>
-                    <p className="text-sm">{msg.text}</p>
-                    <p className={`text-xs mt-1 ${msg.sender === 'Me' ? 'dark:text-[#0A0A0F]/60' : 'dark:text-[#7A7A85]'}`}>
-                      {msg.time}
-                    </p>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#0B1929]">
+              {messagesLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="animate-spin text-[#00FF88]" />
+                </div>
+              ) : messages.length > 0 ? (
+                messages.map(msg => (
+                  <div key={msg.id} className={`flex ${msg.sender === 'Me' || msg.type === 'outgoing' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`
+                      max-w-md px-4 py-2 rounded-lg
+                      ${msg.sender === 'Me' || msg.type === 'outgoing'
+                        ? 'bg-[#005C4B] text-white'
+                        : 'dark:bg-[#202C33] dark:text-[#E0E0E6] bg-gray-100 text-gray-900'
+                      }
+                    `}>
+                      <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                      <p className={`text-[10px] mt-1 text-right ${msg.sender === 'Me' || msg.type === 'outgoing' ? 'text-white/60' : 'dark:text-[#8696A0]'}`}>
+                        {new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-[#8696A0]">
+                    <Phone size={48} className="mx-auto mb-4 opacity-30" />
+                    <p className="text-sm">No messages to display</p>
+                    <p className="text-xs mt-1">Messages will appear here</p>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
 
-            {/* Draft Reply */}
-            <div className="p-4 border-t dark:border-[#1A1A24] border-gray-200 space-y-3">
-              <textarea
-                value={draftReply}
-                onChange={(e) => setDraftReply(e.target.value)}
-                placeholder="Type draft reply..."
-                className="w-full px-3 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-gray-900 resize-none"
-                rows={3}
-              />
-              
+            {/* Reply Box */}
+            <div className="p-3 border-t dark:border-[#1A1A24] border-gray-200 bg-[#0F1A2E]">
               <div className="flex gap-2">
-                <button className="flex items-center gap-2 flex-1 px-3 py-2 rounded font-medium text-sm dark:bg-green-500/20 dark:text-green-400 bg-green-50 text-green-700 hover:dark:bg-green-500/30">
-                  <Send size={16} />
-                  Approve & Send
+                <button className="p-2 rounded-full dark:bg-[#1A1A24] hover:dark:bg-[#2A3E5F] transition-colors">
+                  <Edit3 size={18} className="dark:text-[#00FF88]" />
                 </button>
-                <button className="flex items-center gap-2 px-3 py-2 rounded font-medium text-sm dark:bg-blue-500/20 dark:text-blue-400 bg-blue-50 text-blue-700">
-                  <Edit3 size={16} />
-                </button>
-                <button className="flex items-center gap-2 px-3 py-2 rounded font-medium text-sm dark:bg-gray-500/20 dark:text-gray-400 bg-gray-50 text-gray-700">
-                  <SkipBack size={16} />
-                </button>
-                <button className="flex items-center gap-2 px-3 py-2 rounded font-medium text-sm dark:bg-orange-500/20 dark:text-orange-400 bg-orange-50 text-orange-700">
-                  <Zap size={16} />
+                <input
+                  type="text"
+                  value={draftReply}
+                  onChange={(e) => setDraftReply(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendReply()}
+                  placeholder="Type a reply..."
+                  className="flex-1 px-4 py-2 rounded-full dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-sm"
+                />
+                <button 
+                  onClick={handleSendReply}
+                  disabled={sending || !draftReply.trim()}
+                  className="p-2 rounded-full bg-[#00FF88] text-[#0F1A2E] disabled:opacity-50 hover:opacity-90 transition-opacity"
+                >
+                  {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
                 </button>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="dark:text-[#7A7A85] text-gray-500">Select a conversation</p>
+          <div className="flex flex-col items-center justify-center h-full text-[#8696A0]">
+            <Phone size={64} className="mb-4 opacity-20" />
+            <p className="text-lg font-semibold mb-2">WhatsApp Dashboard</p>
+            <p className="text-sm">Select a conversation to view messages</p>
           </div>
         )}
       </div>

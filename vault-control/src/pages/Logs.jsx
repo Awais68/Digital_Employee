@@ -1,17 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Download, RefreshCw } from 'lucide-react'
+import { Download, RefreshCw, Loader2, AlertCircle } from 'lucide-react'
 import axios from 'axios'
-
-// Dummy data for logs
-const DUMMY_LOGS = Array.from({ length: 100 }, (_, i) => ({
-  id: `log-${i}`,
-  timestamp: new Date(Date.now() - i * 3600000).toISOString(),
-  service: ['Gmail', 'WhatsApp', 'LinkedIn', 'Twitter', 'Facebook', 'Odoo'][Math.floor(Math.random() * 6)],
-  action: ['email_send', 'payment_process', 'post_published', 'file_synced', 'email_received'][Math.floor(Math.random() * 5)],
-  target: i % 2 === 0 ? 'user@example.com' : 'project-vault/updates',
-  status: ['success', 'failed', 'pending'][Math.floor(Math.random() * 3)],
-  details: { info: 'System operation completed successfully', code: 200 }
-}));
 
 export default function Logs() {
   const [logs, setLogs] = useState([])
@@ -24,6 +13,8 @@ export default function Logs() {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [expandedLog, setExpandedLog] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [totalLogs, setTotalLogs] = useState(0)
 
   const limit = 50
 
@@ -37,7 +28,7 @@ export default function Logs() {
 
   const fetchLogs = async () => {
     setLoading(true)
-    /*
+    setError(null)
     try {
       const query = new URLSearchParams({
         service: filters.service,
@@ -48,22 +39,13 @@ export default function Logs() {
       })
       const res = await axios.get(`/api/logs?${query}`)
       setLogs(res.data.logs)
+      setTotalLogs(res.data.total)
     } catch (err) {
       console.error('Failed to fetch logs:', err)
+      setError('Failed to load logs. Please try again.')
     } finally {
       setLoading(false)
     }
-    */
-    setTimeout(() => {
-      let filtered = [...DUMMY_LOGS]
-      if (filters.service !== 'All') filtered = filtered.filter(l => l.service === filters.service)
-      if (filters.action !== 'All') filtered = filtered.filter(l => l.action === filters.action)
-      if (filters.status !== 'All') filtered = filtered.filter(l => l.status === filters.status)
-      
-      const paginated = filtered.slice(page * limit, (page + 1) * limit)
-      setLogs(paginated)
-      setLoading(false)
-    }, 500)
   }
 
   const services = ['All', 'Gmail', 'WhatsApp', 'LinkedIn', 'Twitter', 'Facebook', 'Odoo']
@@ -171,6 +153,15 @@ export default function Logs() {
         </div>
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg flex items-center gap-3 text-red-400 font-mono text-sm">
+          <AlertCircle size={20} />
+          {error}
+          <button onClick={fetchLogs} className="ml-auto underline hover:opacity-80">Retry</button>
+        </div>
+      )}
+
       {/* Logs Table */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
@@ -188,7 +179,10 @@ export default function Logs() {
               {loading ? (
                 <tr>
                   <td colSpan="5" className="px-4 py-8 text-center">
-                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 dark:border-[#00FF88] border-blue-500" />
+                    <div className="flex flex-col items-center space-y-3">
+                      <Loader2 className="animate-spin text-[#00FF88]" size={24} />
+                      <span className="text-[#7A7A85] font-mono text-xs">LOADING LOGS...</span>
+                    </div>
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
@@ -242,7 +236,7 @@ export default function Logs() {
       {/* Pagination */}
       <div className="flex items-center justify-between">
         <div className="text-sm dark:text-[#7A7A85] text-gray-600">
-          Showing {page * limit + 1} - {Math.min((page + 1) * limit, logs.length)} of {logs.length} logs
+          Showing {page * limit + 1} - {Math.min((page + 1) * limit, totalLogs)} of {totalLogs} logs
         </div>
         <div className="flex gap-2">
           <button

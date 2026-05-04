@@ -175,7 +175,7 @@ export default function Emails() {
                   <button 
                     onClick={() => handleAction('approve', 'Approved')}
                     disabled={actionLoading}
-                    className="flex items-center justify-center gap-2 flex-1 px-4 py-3 rounded font-black text-xs dark:bg-[#00FF88] dark:text-[#0A0A0F] uppercase tracking-widest disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 flex-1 px-4 py-3 rounded font-black text-xs dark:bg-[#00FF88] dark:text-white bg-green-500 text-white uppercase tracking-widest disabled:opacity-50"
                   >
                     {actionLoading ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
                     Approve & Move
