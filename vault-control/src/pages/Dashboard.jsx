@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   TrendingUp, TrendingDown, MessageSquare, Mail,
   Linkedin, Twitter, Facebook, Instagram, RefreshCw, Loader2, AlertCircle,
+  Clock, CheckCircle, XCircle, FileText, Zap,
 } from 'lucide-react'
 import {
   BarChart, Bar, Cell, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, AreaChart, Area, PieChart, Pie,
 } from 'recharts'
 import axios from 'axios'
 
@@ -164,12 +166,64 @@ export default function Dashboard() {
     .map(p => ({ name: p.name, value: p.incoming, fill: p.color }))
     .sort((a, b) => b.value - a.value)
 
+  // Line chart data: derive from recent activity timestamps
+  const getTrendData = () => {
+    const hours = ['12h ago', '10h', '8h', '6h', '4h', '2h', 'Now']
+    const distribution = Array(hours.length).fill(0).map(() => ({ approvals: 0, emails: 0, social: 0 }))
+    
+    recentActivity.forEach(activity => {
+      const activityTime = new Date(activity.timestamp || Date.now())
+      const hoursAgo = Math.floor((Date.now() - activityTime.getTime()) / (1000 * 60 * 60))
+      const index = Math.min(Math.floor(hoursAgo / 2), hours.length - 1)
+      
+      if (index >= 0 && index < hours.length) {
+        const type = activity.type?.toLowerCase() || ''
+        if (type.includes('approval') || type.includes('approve') || type.includes('reject')) {
+          distribution[index].approvals++
+        } else if (type.includes('email')) {
+          distribution[index].emails++
+        } else if (type.includes('social') || type.includes('post') || type.includes('linkedin') || type.includes('twitter')) {
+          distribution[index].social++
+        } else {
+          // Default: add to approvals as general activity
+          distribution[index].approvals++
+        }
+      }
+    })
+
+    return hours.map((hour, i) => ({
+      time: hour,
+      Approvals: distribution[i].approvals,
+      Emails: distribution[i].emails,
+      Social: distribution[i].social,
+    }))
+  }
+
+  // Pie chart data: action type distribution
+  const getPieData = () => {
+    const typeCounts = {}
+    recentActivity.forEach(activity => {
+      const type = activity.action || activity.type || 'other'
+      typeCounts[type] = (typeCounts[type] || 0) + 1
+    })
+
+    const colors = ['#00FF88', '#1DA1F2', '#FFB800', '#EA4335', '#8B5CF6', '#10B981']
+    return Object.entries(typeCounts)
+      .map(([name, value], i) => ({ name: name.replace(/_/g, ' '), value, fill: colors[i % colors.length] }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6)
+  }
+
   const funnelData = [
     { stage: 'Inbox',     value: vaultCounts['Inbox']            || 0, fill: '#00FF88' },
     { stage: 'Pending',   value: vaultCounts['Pending_Approval'] || 0, fill: '#00D966' },
     { stage: 'Approved',  value: vaultCounts['Approved']         || 0, fill: '#00B050' },
     { stage: 'Completed', value: vaultCounts['Done']             || 0, fill: '#008800' },
   ]
+
+  const trendData = getTrendData()
+  const pieData = getPieData()
+  const totalActivities = recentActivity.length
 
   const handleRefresh = async () => {
     setLoading(true)
@@ -260,7 +314,129 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* ── Quick Stats Row ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Activity', value: totalActivities, icon: Zap, color: 'text-[#00FF88]', bg: 'dark:bg-[#00FF88]/10 bg-green-50', border: 'dark:border-[#00FF88]/30 border-green-200' },
+          { label: 'Pending Review', value: pendingApprovals.length, icon: Clock, color: 'text-[#FFB800]', bg: 'dark:bg-[#FFB800]/10 bg-yellow-50', border: 'dark:border-[#FFB800]/30 border-yellow-200' },
+          { label: 'Approved', value: vaultCounts['Approved'] || 0, icon: CheckCircle, color: 'text-[#10B981]', bg: 'dark:bg-[#10B981]/10 bg-green-50', border: 'dark:border-[#10B981]/30 border-green-200' },
+          { label: 'Rejected', value: vaultCounts['Rejected'] || 0, icon: XCircle, color: 'text-[#EF4444]', bg: 'dark:bg-[#EF4444]/10 bg-red-50', border: 'dark:border-[#EF4444]/30 border-red-200' },
+        ].map(stat => {
+          const Icon = stat.icon
+          return (
+            <div key={stat.label} className={`card p-4 border ${stat.border}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs dark:text-[#7A7A85] text-gray-500 uppercase tracking-wide">{stat.label}</p>
+                  <p className={`text-2xl font-bold ${stat.color} mt-1`}>{stat.value}</p>
+                </div>
+                <div className={`p-3 rounded-lg ${stat.bg}`}>
+                  <Icon size={20} className={stat.color} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
       {/* ── Charts ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Activity Trend (Line + Area) */}
+        <div className="card p-6">
+          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
+            📈 ACTIVITY TREND
+          </h2>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <defs>
+                <linearGradient id="colorApprovals" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#00FF88" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#00FF88" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorEmails" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#1DA1F2" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#1DA1F2" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorSocial" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="time" stroke="#7A7A85" style={{ fontSize: '11px' }} />
+              <YAxis stroke="#7A7A85" style={{ fontSize: '11px' }} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{
+                  background: '#1B2A48',
+                  border: '1px solid #2A3E5F',
+                  borderRadius: '8px',
+                  color: '#E0E0E6',
+                  fontSize: '12px',
+                }}
+              />
+              <Area type="monotone" dataKey="Approvals" stroke="#00FF88" fillOpacity={1} fill="url(#colorApprovals)" strokeWidth={2} />
+              <Area type="monotone" dataKey="Emails" stroke="#1DA1F2" fillOpacity={1} fill="url(#colorEmails)" strokeWidth={2} />
+              <Area type="monotone" dataKey="Social" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorSocial)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Action Type Distribution (Pie) */}
+        <div className="card p-6">
+          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
+            🎯 ACTION DISTRIBUTION
+          </h2>
+          {pieData.length > 0 ? (
+            <div className="flex items-center gap-4">
+              <ResponsiveContainer width="55%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={4}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: '#1B2A48',
+                      border: '1px solid #2A3E5F',
+                      borderRadius: '8px',
+                      color: '#E0E0E6',
+                      fontSize: '12px',
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex-1 space-y-2">
+                {pieData.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ background: item.fill }} />
+                      <span className="dark:text-[#B0C4FF] text-gray-700 capitalize">{item.name}</span>
+                    </div>
+                    <span className="font-bold dark:text-[#E0E0E6] text-gray-900">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-[280px]">
+              <p className="dark:text-[#7A7A85] text-gray-500 text-sm">No activity data yet</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Second Row Charts ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Actions Funnel */}
@@ -324,6 +500,59 @@ export default function Dashboard() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      {/* ── Recent Activity Feed ── */}
+      <div className="card p-6">
+        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono flex items-center gap-2">
+          <Clock size={18} className="dark:text-[#00FF88] text-green-600" />
+          RECENT ACTIVITY
+        </h2>
+        {recentActivity.length > 0 ? (
+          <div className="space-y-3 max-h-80 overflow-auto pr-2">
+            {recentActivity.slice(0, 15).map((activity, i) => {
+              const action = activity.action || activity.type || 'unknown'
+              const isSuccess = activity.status === 'success' || action.includes('approve')
+              const isWarning = activity.status === 'warning' || action.includes('pending')
+              
+              return (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200 hover:dark:bg-[#2A3E5F] hover:bg-gray-100 transition-colors">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    isSuccess 
+                      ? 'dark:bg-[#00FF88]/20 bg-green-100' 
+                      : isWarning 
+                      ? 'dark:bg-[#FFB800]/20 bg-yellow-100' 
+                      : 'dark:bg-[#FF4444]/20 bg-red-100'
+                  }`}>
+                    {isSuccess ? (
+                      <CheckCircle size={16} className="dark:text-[#00FF88] text-green-600" />
+                    ) : isWarning ? (
+                      <Clock size={16} className="dark:text-[#FFB800] text-yellow-600" />
+                    ) : (
+                      <XCircle size={16} className="dark:text-[#FF4444] text-red-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium dark:text-[#E0E0E6] text-gray-900 truncate">
+                      {activity.message || activity.description || action.replace(/_/g, ' ')}
+                    </p>
+                    <p className="text-xs dark:text-[#7A7A85] text-gray-500">
+                      {activity.service || activity.target || 'system'}
+                    </p>
+                  </div>
+                  <span className="text-xs dark:text-[#7A7A85] text-gray-400 whitespace-nowrap">
+                    {activity.timestamp ? new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <FileText size={32} className="mx-auto dark:text-[#7A7A85] text-gray-400 mb-3" />
+            <p className="dark:text-[#7A7A85] text-gray-500 text-sm">No recent activity</p>
+          </div>
+        )}
       </div>
 
       {/* ── Vault Status ── */}
