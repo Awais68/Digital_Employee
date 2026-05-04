@@ -465,51 +465,87 @@ def post_to_instagram(
             try:
                 shared = False
                 
+                # Wait for Share button to become enabled
+                time.sleep(3)
+                
                 # Try 1: Exact "Share" button
                 share_btn = page.get_by_role("button", name="Share", exact=True)
                 if share_btn.count() > 0:
-                    share_btn.click()
-                    shared = True
-                else:
+                    try:
+                        share_btn.wait_for(state="visible", timeout=10000)
+                        share_btn.click()
+                        shared = True
+                        print("   Shared via exact Share button")
+                    except Exception as e:
+                        print(f"   Share button click failed: {e}")
+                
+                if not shared:
                     # Try 2: Any button containing "Share"
                     share_btn = page.get_by_role("button", name="Share")
                     if share_btn.count() > 0:
-                        share_btn.first.click()
-                        shared = True
-                    else:
-                        # Try 3: Look for Share by text
-                        share_btn = page.get_by_text("Share", exact=True)
-                        if share_btn.count() > 0:
-                            share_btn.click()
+                        try:
+                            share_btn.first.click()
                             shared = True
-                        else:
-                            # Try 4: JavaScript click
-                            js_click_result = page.evaluate("""
-                                () => {
-                                    const buttons = Array.from(document.querySelectorAll('button'));
-                                    for (const btn of buttons) {
-                                        if (btn.textContent.trim() === 'Share') {
-                                            btn.click();
-                                            return {clicked: true};
-                                        }
-                                    }
-                                    return {clicked: false};
+                            print("   Shared via Share button (first)")
+                        except Exception:
+                            pass
+                
+                if not shared:
+                    # Try 3: Look for Share by text
+                    share_btn = page.get_by_text("Share", exact=True)
+                    if share_btn.count() > 0:
+                        try:
+                            share_btn.first.click()
+                            shared = True
+                            print("   Shared via Share text")
+                        except Exception:
+                            pass
+                
+                if not shared:
+                    # Try 4: JavaScript click
+                    print("   Trying JavaScript click for Share...")
+                    js_click_result = page.evaluate("""
+                        () => {
+                            const buttons = Array.from(document.querySelectorAll('button'));
+                            for (const btn of buttons) {
+                                if (btn.textContent.trim() === 'Share') {
+                                    btn.click();
+                                    return {clicked: true, method: 'js'};
                                 }
-                            """)
-                            if js_click_result.get('clicked'):
-                                shared = True
-                                logger.info("Share button clicked via JavaScript")
-                            else:
-                                logger.warning("Could not find Share button")
-
+                            }
+                            // Also try by aria-label
+                            const byLabel = Array.from(document.querySelectorAll('[aria-label*="Share"]'));
+                            for (const el of byLabel) {
+                                if (el.tagName === 'BUTTON' || el.tagName === 'DIV') {
+                                    el.click();
+                                    return {clicked: true, method: 'aria-label'};
+                                }
+                            }
+                            return {clicked: false};
+                        }
+                    """)
+                    if js_click_result.get('clicked'):
+                        shared = True
+                        print(f"   Shared via JavaScript ({js_click_result.get('method')})")
+                    else:
+                        print("   Could not find Share button via JavaScript")
+                
                 if shared:
-                    time.sleep(5)
-                    page.wait_for_load_state("networkidle")
+                    print("   Waiting for post to complete...")
+                    time.sleep(10)
+                    # Wait for navigation or success indicator
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=15000)
+                    except Exception:
+                        pass
                     logger.info("Instagram post submitted successfully")
-
+                    
                     result["success"] = True
                     result["message"] = "Post successfully created on Instagram"
                     result["post_url"] = "https://www.instagram.com"
+                else:
+                    result["message"] = "Could not find Share button using any selector"
+                    logger.warning("Could not find Share button")
 
             except Exception as e:
                 result["message"] = f"Could not share post: {e}"

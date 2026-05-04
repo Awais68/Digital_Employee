@@ -307,28 +307,67 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
             # Find the post editor and fill content
             print("✍️  Filling post content...")
             editor_found = False
-            editor_selectors = [
-                "div.ql-editor[contenteditable='true']",
-                "div[contenteditable='true']",
-                "div.artdeco-editor",
-                "div.ck-content",
-                "div[data-placeholder*='What do you want to talk about']",
-                "div[data-placeholder*='Write something']",
-            ]
             
-            for selector in editor_selectors:
-                try:
-                    editor = page.locator(selector).first
-                    if editor.is_visible(timeout=5000):  # Increased timeout
-                        # Clear and fill content
-                        editor.click()
-                        page.wait_for_timeout(500)
-                        editor.fill(content)
-                        editor_found = True
-                        print(f"   Filled content using selector: {selector}")
-                        break
-                except Exception:
-                    continue
+            # Try JavaScript approach first to find contenteditable
+            try:
+                print("   Trying JavaScript to find editor...")
+                editor_info = page.evaluate("""
+                    () => {
+                        // Find all contenteditable elements
+                        const editable = document.querySelectorAll('[contenteditable="true"]');
+                        for (let el of editable) {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                return {found: true, tag: el.tagName, class: el.className};
+                            }
+                        }
+                        return {found: false};
+                    }
+                """)
+                if editor_info.get('found'):
+                    print(f"   Found editor via JS: {editor_info}")
+                    # Click and fill using JavaScript
+                    page.evaluate(f"""
+                        (content) => {{
+                            const editable = document.querySelectorAll('[contenteditable="true"]');
+                            for (let el of editable) {{
+                                if (el.offsetHeight > 0 && el.offsetWidth > 0) {{
+                                    el.focus();
+                                    el.textContent = content;
+                                    // Trigger input event
+                                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                                    return true;
+                                }}
+                            }}
+                            return false;
+                        }}
+                    """, content)
+                    editor_found = True
+                    print("   Filled content via JavaScript")
+            except Exception as e:
+                print(f"   JS approach failed: {e}")
+            
+            # Fallback to selector approach
+            if not editor_found:
+                editor_selectors = [
+                    "div[contenteditable='true']",
+                    "div.ql-editor",
+                    "p[contenteditable='true']",
+                    ".editor-content [contenteditable='true']",
+                    "[data-placeholder] [contenteditable='true']",
+                ]
+                
+                for selector in editor_selectors:
+                    try:
+                        editor = page.locator(selector).first
+                        if editor.is_visible(timeout=3000):
+                            editor.click()
+                            page.wait_for_timeout(500)
+                            editor.fill(content)
+                            editor_found = True
+                            print(f"   Filled content using selector: {selector}")
+                            break
+                    except Exception:
+                        continue
             
             if not editor_found:
                 return {

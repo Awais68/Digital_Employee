@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Send, Edit2, Trash2, Archive, Mail, Loader2, AlertCircle,
   CheckCircle2, Reply, Forward, CornerDownLeft, FileText,
-  ChevronDown, ChevronUp, Eye, Sparkles,
+  ChevronDown, ChevronUp, Eye, Sparkles, Square, CheckSquare,
 } from 'lucide-react'
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
@@ -52,6 +52,9 @@ export default function Emails() {
   const [replyLoading, setReplyLoading] = useState(false)
   const [replySuccess, setReplySuccess] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+  const [selectedForBulk, setSelectedForBulk] = useState(new Set())
+  const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [showBulkMove, setShowBulkMove] = useState(false)
   const replyRef = useRef(null)
   const { success, error: toastError } = useToast()
 
@@ -149,6 +152,51 @@ export default function Emails() {
     }
   }
 
+  const toggleBulkSelect = (id) => {
+    setSelectedForBulk(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAllEmails = () => {
+    if (selectedForBulk.size === emails.length) {
+      setSelectedForBulk(new Set())
+    } else {
+      setSelectedForBulk(new Set(emails.map(e => e.id)))
+    }
+  }
+
+  const handleBulkMove = async (toFolder) => {
+    if (selectedForBulk.size === 0) return
+    
+    setBulkActionLoading(true)
+    const selectedIds = Array.from(selectedForBulk)
+    
+    try {
+      await Promise.all(
+        selectedIds.map(id =>
+          axios.post('/api/emails/move', {
+            id,
+            fromFolder: selectedFolder,
+            toFolder,
+          })
+        )
+      )
+      success(`${selectedIds.length} email(s) moved to ${toFolder.replace('_', ' ')}`)
+      setSelectedForBulk(new Set())
+      setShowBulkMove(false)
+      fetchEmails()
+    } catch (err) {
+      console.error('Bulk move failed:', err)
+      toastError('Failed to move emails')
+    } finally {
+      setBulkActionLoading(false)
+    }
+  }
+
   const getPriorityColor = (priority) => {
     switch (priority?.toLowerCase()) {
       case 'high': return 'dark:bg-red-500/20 dark:text-red-400 bg-red-50 text-red-700'
@@ -199,7 +247,51 @@ export default function Emails() {
       </div>
 
       {/* Middle: Email List */}
-      <div className="col-span-1 border-r dark:border-[#1A1A24] overflow-y-auto">
+      <div className="col-span-1 border-r dark:border-[#1A1A24] flex flex-col">
+        {/* Bulk Actions Bar */}
+        {selectedForBulk.size > 0 && (
+          <div className="p-3 border-b dark:border-[#1A1A24] bg-[#00FF88]/5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold dark:text-[#00FF88]">{selectedForBulk.size} selected</span>
+              <button
+                onClick={() => setSelectedForBulk(new Set())}
+                className="text-xs dark:text-[#7A7A85] hover:dark:text-[#E0E0E6]"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="flex gap-1 flex-wrap">
+              {['Approved', 'Done', 'Needs_Action', 'Rejected'].map(folder => (
+                <button
+                  key={folder}
+                  onClick={() => handleBulkMove(folder)}
+                  disabled={bulkActionLoading}
+                  className="px-2 py-1 rounded text-[10px] font-bold dark:bg-[#1A1A24] dark:text-[#E0E0E6] hover:dark:bg-[#2A2A3A] disabled:opacity-50 transition-colors"
+                >
+                  → {folder.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Select All */}
+        {emails.length > 0 && (
+          <button
+            onClick={selectAllEmails}
+            className="flex items-center gap-2 px-4 py-2 border-b dark:border-[#1A1A24] text-xs dark:text-[#7A7A85] hover:dark:bg-[#1A1A24]/50 transition-colors"
+          >
+            {selectedForBulk.size === emails.length ? (
+              <CheckSquare size={14} className="dark:text-[#00FF88]" />
+            ) : (
+              <Square size={14} />
+            )}
+            {selectedForBulk.size === emails.length ? 'Deselect All' : 'Select All'}
+          </button>
+        )}
+
+        {/* Email List */}
+        <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 space-y-4">
             <Loader2 className="animate-spin text-[#00FF88]" />
@@ -225,22 +317,40 @@ export default function Emails() {
                   ? 'dark:bg-[#1A1A24] border-l-4 border-l-[#00FF88]'
                   : 'hover:dark:bg-[#1A1A24]/50 border-l-4 border-l-transparent'
                 }
+                ${selectedForBulk.has(email.id) ? 'dark:bg-[#00FF88]/5' : ''}
               `}
             >
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${getPriorityColor(email.priority || email.frontmatter?.priority)}`}>
-                  {email.priority || email.frontmatter?.priority || 'normal'}
-                </span>
-                <span className="text-[9px] dark:text-[#7A7A85] font-mono">
-                  {new Date(email.time || email.createdAt).toLocaleDateString()}
-                </span>
+              <div className="flex items-start gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleBulkSelect(email.id)
+                  }}
+                  className="mt-1 flex-shrink-0"
+                >
+                  {selectedForBulk.has(email.id) ? (
+                    <CheckSquare size={14} className="dark:text-[#00FF88]" />
+                  ) : (
+                    <Square size={14} className="dark:text-[#7A7A85] opacity-0 group-hover:opacity-100 transition-opacity" />
+                  )}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${getPriorityColor(email.priority || email.frontmatter?.priority)}`}>
+                      {email.priority || email.frontmatter?.priority || 'normal'}
+                    </span>
+                    <span className="text-[9px] dark:text-[#7A7A85] font-mono">
+                      {new Date(email.time || email.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="font-bold dark:text-[#E0E0E6] text-sm truncate mb-0.5">
+                    {email.from || email.frontmatter?.from || 'Unknown'}
+                  </p>
+                  <p className="text-xs dark:text-[#7A7A85] truncate">
+                    {email.subject || email.frontmatter?.subject || 'No subject'}
+                  </p>
+                </div>
               </div>
-              <p className="font-bold dark:text-[#E0E0E6] text-sm truncate mb-0.5">
-                {email.from || email.frontmatter?.from || 'Unknown'}
-              </p>
-              <p className="text-xs dark:text-[#7A7A85] truncate">
-                {email.subject || email.frontmatter?.subject || 'No subject'}
-              </p>
             </div>
           ))
         ) : (
@@ -248,6 +358,7 @@ export default function Emails() {
             NO EMAILS FOUND
           </div>
         )}
+        </div>
       </div>
 
       {/* Right: Email Preview + Reply */}

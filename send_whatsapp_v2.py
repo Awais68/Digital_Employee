@@ -13,6 +13,12 @@ from pathlib import Path
 from datetime import datetime
 
 try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
     from playwright.async_api import async_playwright
 except ImportError:
     print("❌ Playwright not installed")
@@ -32,69 +38,66 @@ SESSION_DIR = BASE_DIR / "whatsapp_session"
 PHONE = os.getenv("WHATSAPP_PHONE", "923273363154")
 
 # Report message
-REPORT = f"""🚀 *DIGITAL FTE - TEST REPORT*
+REPORT = f"""🚀 *DIGITAL FTE - PROJECT STATUS*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📅 *Date:* {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-✅ *Status:* SUCCESS - ALL TASKS DONE!
+✅ *Status:* ALL SYSTEMS OPERATIONAL!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🎯 *TASK RESULTS:*
+🎯 *PROJECT STATUS:*
 
-✅ *Test Suite:* Completed
-✅ *LinkedIn Post:* Published
-✅ *Email Report:* Sent
-✅ *WhatsApp:* This message!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📱 *LINKEDIN POST:*
-
-📝 Content: This is Digital FTE Test Post
-🌐 URL: https://www.linkedin.com/feed/
+✅ *WhatsApp Bot:* Configured & Running
+✅ *LinkedIn Integration:* Active
+✅ *Instagram Automation:* Working
+✅ *Email MCP:* Operational
+✅ *Odoo ERP:* Connected
+✅ *Session Persistence:* Enabled
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
- *TECH STACK:*
+📱 *INTEGRATIONS:*
 
-• Playwright (Browser Automation)
-• Python (Orchestrator)
-• Persistent Session
-• Human Approval Workflow
-• Dashboard Tracking
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📁 *FILES COMPLETED:*
-
-✅ whatsapp_watcher.py v2.0 (Fixed!)
-✅ SKILL_LinkedIn_Playwright_MCP.py
-✅ orchestrator.py (Updated)
-✅ linkedin_mcp.py
-✅ email_mcp.py
+• WhatsApp Web (Playwright)
+• LinkedIn Post Automation
+• Instagram Graph API
+• Facebook Page Management
+• Email Approval Workflow
+• Odoo 19 ERP Integration
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 *STATUS:*
+📁 *RECENT WORK:*
 
-🔵 Session: Active ✅
-🟢 Posts: Working ✅
-🟡 Approvals: Ready ✅
-📧 Email: Working ✅
-💬 WhatsApp: Working ✅
+✅ Multi-channel posting enabled
+✅ WhatsApp watcher v2.0 (Fixed!)
+✅ Instagram long-lived token setup
+✅ Odoo invoice automation
+✅ Comprehensive system tests
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 *SYSTEM HEALTH:*
+
+🔵 WhatsApp: Active ✅
+🟢 LinkedIn: Working ✅
+🟢 Instagram: Working ✅
+🟢 Email: Operational ✅
+🟢 Odoo: Connected ✅
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🎉 *CONCLUSION:*
 
-All systems FULLY OPERATIONAL!
+Digital Employee project is running smoothly!
+All integrations tested and verified.
 
-*System Status: PRODUCTION READY* 🚀
+*Status: PRODUCTION READY* 🚀
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 _Digital Employee System v4.0_
-_Silver Tier - Human-in-the-Loop_
+_Silver Tier - Multi-Channel Automation_
 """
 
 

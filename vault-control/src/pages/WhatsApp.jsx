@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Send, Zap, SkipBack, Edit3, Loader2, AlertCircle, ArrowLeft, Phone, Video } from 'lucide-react'
+import { Send, Zap, SkipBack, Edit3, Loader2, AlertCircle, ArrowLeft, Phone, Video, Activity, MessageSquare, Clock, CheckCircle2, Wifi, WifiOff } from 'lucide-react'
 import axios from 'axios'
+import { useToast } from '../context/ToastContext'
 
 export default function WhatsApp() {
   const [conversations, setConversations] = useState([])
@@ -12,14 +13,35 @@ export default function WhatsApp() {
   const [error, setError] = useState(null)
   const [sending, setSending] = useState(false)
   const [mobileView, setMobileView] = useState(false)
+  const [systemStatus, setSystemStatus] = useState(null)
+  const [statusLoading, setStatusLoading] = useState(true)
+  const [showStatusPanel, setShowStatusPanel] = useState(false)
+  const { success, error: toastError } = useToast()
 
   useEffect(() => {
     fetchConversations()
+    fetchSystemStatus()
     const handleResize = () => setMobileView(window.innerWidth < 768)
     handleResize()
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  const fetchSystemStatus = async () => {
+    setStatusLoading(true)
+    try {
+      const [servicesRes, healthRes] = await Promise.all([
+        axios.get('/api/system/services'),
+        axios.get('/api/system/health'),
+      ])
+      setSystemStatus({ services: servicesRes.data, health: healthRes.data })
+    } catch (err) {
+      console.error('Failed to fetch system status:', err)
+      setSystemStatus(null)
+    } finally {
+      setStatusLoading(false)
+    }
+  }
 
   const fetchConversations = async () => {
     setLoading(true)
@@ -233,7 +255,115 @@ export default function WhatsApp() {
 
   // Desktop view
   return (
-    <div className="grid grid-cols-3 gap-4 h-[calc(100vh-140px)]">
+    <div className="space-y-4">
+      {/* Status Report Panel */}
+      {showStatusPanel && (
+        <div className="card p-6 border-[#25D366]/30">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 font-mono flex items-center gap-2">
+              <Activity size={18} className="text-[#25D366]" />
+              WHATSAPP SYSTEM STATUS
+            </h2>
+            <button
+              onClick={() => setShowStatusPanel(false)}
+              className="p-1.5 rounded dark:bg-[#1A1A24] hover:dark:bg-[#2A2A3A] transition-colors"
+            >
+              <ArrowLeft size={14} className="dark:text-[#7A7A85]" />
+            </button>
+          </div>
+
+          {/* Overall Health */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="p-3 rounded-lg dark:bg-[#1A1A24] bg-gray-50">
+              <p className="text-xs dark:text-[#7A7A85] text-gray-500 font-mono">CONVERSATIONS</p>
+              <p className="text-2xl font-bold dark:text-[#25D366] text-green-600">{stats.total}</p>
+            </div>
+            <div className="p-3 rounded-lg dark:bg-[#1A1A24] bg-gray-50">
+              <p className="text-xs dark:text-[#7A7A85] text-gray-500 font-mono">UNREAD</p>
+              <p className="text-2xl font-bold text-red-500">{stats.unread}</p>
+            </div>
+            <div className="p-3 rounded-lg dark:bg-[#1A1A24] bg-gray-50">
+              <p className="text-xs dark:text-[#7A7A85] text-gray-500 font-mono">MESSAGES</p>
+              <p className="text-2xl font-bold dark:text-[#00FF88] text-blue-600">
+                {conversations.reduce((sum, c) => sum + (c.messageCount || 0), 0)}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg dark:bg-[#1A1A24] bg-gray-50">
+              <p className="text-xs dark:text-[#7A7A85] text-gray-500 font-mono">PENDING REPLIES</p>
+              <p className="text-2xl font-bold dark:text-[#FFB800] text-orange-600">{stats.pending}</p>
+            </div>
+          </div>
+
+          {/* Service Status */}
+          {statusLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="animate-spin text-[#25D366]" size={24} />
+              <span className="text-xs dark:text-[#7A7A85] ml-2">Checking services...</span>
+            </div>
+          ) : systemStatus ? (
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold dark:text-[#E0E0E6] text-gray-900 font-mono">SERVICE STATUS</h3>
+              {systemStatus.services.map(svc => (
+                <div key={svc.name} className="flex items-center justify-between p-3 rounded-lg dark:bg-[#1A1A24] bg-gray-50">
+                  <div className="flex items-center gap-3">
+                    {svc.status === 'running' ? (
+                      <Wifi size={16} className="text-[#25D366]" />
+                    ) : (
+                      <WifiOff size={16} className="text-red-500" />
+                    )}
+                    <span className="text-sm dark:text-[#E0E0E6] text-gray-900">{svc.name}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className={`text-xs font-bold ${
+                      svc.status === 'running' ? 'text-[#25D366]' : 'text-red-500'
+                    }`}>
+                      {svc.status}
+                    </span>
+                    <span className="text-xs dark:text-[#7A7A85] text-gray-500">
+                      {svc.lastActivity}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between mt-4 p-3 rounded-lg dark:bg-[#1A1A24] bg-gray-50">
+                <span className="text-sm font-bold dark:text-[#E0E0E6] text-gray-900">Overall Health</span>
+                <span className={`text-sm font-bold ${
+                  systemStatus.health.overall === 'ok' ? 'text-[#25D366]' :
+                  systemStatus.health.overall === 'warning' ? 'text-yellow-500' : 'text-red-500'
+                }`}>
+                  {systemStatus.health.overall.toUpperCase()}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <AlertCircle size={24} className="mx-auto mb-2 text-red-500" />
+              <p className="text-xs dark:text-[#7A7A85]">Unable to fetch system status</p>
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={fetchSystemStatus}
+              disabled={statusLoading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium dark:bg-[#25D366]/20 dark:text-[#25D366] hover:dark:bg-[#25D366]/30 disabled:opacity-50 transition-colors"
+            >
+              <Zap size={14} />
+              Refresh Status
+            </button>
+            <button
+              onClick={fetchConversations}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium dark:bg-[#1A1A24] dark:text-[#E0E0E6] hover:dark:bg-[#2A2A3A] transition-colors"
+            >
+              <MessageSquare size={14} />
+              Refresh Conversations
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-4 h-[calc(100vh-140px)]">
       {/* Left: Conversation List */}
       <div className="col-span-1 card flex flex-col border-r dark:border-[#1A1A24] border-gray-200">
         {/* Header */}
@@ -243,9 +373,17 @@ export default function WhatsApp() {
               <Phone size={18} className="text-[#25D366]" />
               WHATSAPP
             </h2>
-            <button onClick={fetchConversations} className="p-1.5 rounded dark:bg-[#1A1A24] hover:dark:bg-[#2A3E5F] transition-colors">
-              <Loader2 size={14} className="dark:text-[#00FF88]" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowStatusPanel(!showStatusPanel)}
+                className={`p-1.5 rounded transition-colors ${showStatusPanel ? 'dark:bg-[#25D366]/20' : 'dark:bg-[#1A1A24] hover:dark:bg-[#2A3E5F]'}`}
+              >
+                <Activity size={14} className="text-[#25D366]" />
+              </button>
+              <button onClick={fetchConversations} className="p-1.5 rounded dark:bg-[#1A1A24] hover:dark:bg-[#2A3E5F] transition-colors">
+                <Loader2 size={14} className="dark:text-[#00FF88]" />
+              </button>
+            </div>
           </div>
           <div className="flex gap-4 mt-2 text-xs">
             <span className="dark:text-[#7A7A85]">Total: <span className="font-bold dark:text-[#E0E0E6]">{stats.total}</span></span>
@@ -405,6 +543,7 @@ export default function WhatsApp() {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }

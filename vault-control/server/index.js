@@ -25,6 +25,7 @@ import whatsappRouter from './routes/whatsapp.js'
 import vaultRouter from './routes/vault.js'
 import exportRouter from './routes/export.js'
 import authRouter from './routes/auth.js'
+import todosRouter from './routes/todos.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -105,6 +106,7 @@ app.use('/api/odoo', odooRouter)
 app.use('/api/whatsapp', whatsappRouter)
 app.use('/api/vault', vaultRouter)
 app.use('/api/export', exportRouter)
+app.use('/api/todos', todosRouter)
 
 // Serve React app
 if (existsSync(join(distPath, 'index.html'))) {

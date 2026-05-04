@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Send, Save, Upload, Calendar, Sparkles, Copy, Check, Loader2, AlertCircle } from 'lucide-react'
+import {
+  Send, Save, Upload, Calendar, Sparkles, Copy, Check, Loader2,
+  AlertCircle, Trash2, Edit2, Clock, CheckCircle2, Eye,
+  Linkedin, Facebook, Instagram, Twitter, Hash, Image,
+} from 'lucide-react'
 import axios from 'axios'
+import { useToast } from '../context/ToastContext'
 
 const platforms = [
-  { id: 'linkedin', name: 'LinkedIn', limit: 3000, color: '#0A66C2' },
-  { id: 'facebook', name: 'Facebook', limit: 63206, color: '#1877F2' },
-  { id: 'instagram', name: 'Instagram', limit: 2200, color: '#E4405F' },
-  { id: 'twitter', name: 'Twitter', limit: 280, color: '#1DA1F2' },
+  { id: 'linkedin', name: 'LinkedIn', limit: 3000, color: '#0A66C2', icon: Linkedin, handleFormat: '@name', hashtagMax: 5 },
+  { id: 'facebook', name: 'Facebook', limit: 63206, color: '#1877F2', icon: Facebook, handleFormat: '@name', hashtagMax: 10 },
+  { id: 'instagram', name: 'Instagram', limit: 2200, color: '#E4405F', icon: Instagram, handleFormat: '@name', hashtagMax: 30 },
+  { id: 'twitter', name: 'Twitter', limit: 280, color: '#1DA1F2', icon: Twitter, handleFormat: '@name', hashtagMax: 3 },
 ]
 
 export default function SocialMedia() {
@@ -16,12 +21,7 @@ export default function SocialMedia() {
   const [showSchedule, setShowSchedule] = useState(false)
   const [activeTab, setActiveTab] = useState('compose')
   const [topic, setTopic] = useState('')
-  const [generatedPosts, setGeneratedPosts] = useState({
-    twitter: [],
-    linkedin: [],
-    facebook: '',
-    instagram: '',
-  })
+  const [generatedPosts, setGeneratedPosts] = useState({})
   const [isGenerating, setIsGenerating] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -29,6 +29,14 @@ export default function SocialMedia() {
   const [queue, setQueue] = useState([])
   const [history, setHistory] = useState([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [draftId, setDraftId] = useState(null)
+  const [editingDraft, setEditingDraft] = useState(false)
+  const { success, error: toastError, warning } = useToast()
+
+  useEffect(() => {
+    fetchData()
+  }, [])
 
   const fetchData = async () => {
     setLoading(true)
@@ -48,10 +56,6 @@ export default function SocialMedia() {
     }
   }
 
-  useEffect(() => {
-    fetchData()
-  }, [])
-
   const charCount = (platform) => {
     const p = platforms.find(x => x.id === platform)
     return { current: content.length, max: p.limit }
@@ -62,11 +66,14 @@ export default function SocialMedia() {
     return current > max
   }
 
+  const getHashtags = (text) => {
+    const matches = text.match(/#[\w]+/g)
+    return matches || []
+  }
+
   const togglePlatform = (id) => {
     setSelectedPlatforms(prev => 
-      prev.includes(id) 
-        ? prev.filter(x => x !== id)
-        : [...prev, id]
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     )
   }
 
@@ -75,21 +82,78 @@ export default function SocialMedia() {
     
     setIsSubmitting(true)
     try {
-      await axios.post('/api/social/post', {
+      const res = await axios.post('/api/social/post', {
         content,
         platforms: selectedPlatforms,
-        scheduleTime: showSchedule ? scheduleTime : null,
+        scheduleTime: showSchedule && scheduleTime ? scheduleTime : null,
+        draftId,
       })
-      setContent('')
-      setScheduleTime('')
-      setShowSchedule(false)
-      fetchData() // Refresh queue
-      alert('Post submitted for approval!')
+      
+      if (res.data.success) {
+        if (showSchedule && scheduleTime) {
+          success(`Post scheduled for ${selectedPlatforms.join(', ')}`)
+        } else {
+          success(`Post sent for approval - check Approvals tab to publish`)
+        }
+        setContent('')
+        setDraftId(null)
+        setScheduleTime('')
+        setShowSchedule(false)
+        setEditingDraft(false)
+        fetchData()
+      } else {
+        toastError(res.data.message || 'Failed to create post')
+      }
     } catch (err) {
       console.error('Failed to create post:', err)
-      alert('Failed to submit post.')
+      toastError(err.response?.data?.message || 'Failed to submit post')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleSaveDraft = async () => {
+    if (!content.trim()) return
+    
+    try {
+      const res = await axios.post('/api/social/draft', {
+        content,
+        platforms: selectedPlatforms,
+        scheduleTime: showSchedule && scheduleTime ? scheduleTime : null,
+      })
+      success('Draft saved')
+      fetchData()
+    } catch (err) {
+      console.error('Failed to save draft:', err)
+      toastError('Failed to save draft')
+    }
+  }
+
+  const handleDeleteDraft = async (id) => {
+    try {
+      await axios.delete(`/api/social/draft/${id}`)
+      success('Draft deleted')
+      fetchData()
+    } catch (err) {
+      toastError('Failed to delete draft')
+    }
+  }
+
+  const handleEditDraft = (draft) => {
+    setContent(draft.content || draft.preview)
+    setDraftId(draft.id)
+    setSelectedPlatforms(draft.platforms || ['linkedin'])
+    setEditingDraft(true)
+    setActiveTab('compose')
+  }
+
+  const handlePublishNow = async (draft) => {
+    try {
+      await axios.post(`/api/social/draft/${draft.id}/publish`)
+      success('Draft published')
+      fetchData()
+    } catch (err) {
+      toastError('Failed to publish')
     }
   }
 
@@ -97,27 +161,107 @@ export default function SocialMedia() {
     if (!topic.trim()) return
 
     setIsGenerating(true)
-    // Simulate AI generation for now as requested, but we could hook this to an MCP
     setTimeout(() => {
       setGeneratedPosts({
         twitter: [
-          `🚀 Exciting news about ${topic}! Just launched our latest initiative. The future is here! #innovation`,
-          `Did you know? ${topic} is transforming the industry. Join us on this amazing journey! 🌟`,
+          `🚀 Exciting news about ${topic}! The future is here! #innovation`,
+          `Did you know? ${topic} is transforming the industry. Join us! 🌟`,
         ],
         linkedin: [
           `We're thrilled to announce our new approach to ${topic}. This represents a significant milestone in our journey to deliver exceptional value to our stakeholders.`,
         ],
-        facebook: `🎉 Big news! We're excited to share our latest development in ${topic}. Check out the full story and let us know what you think!`,
-        instagram: `✨ The future of ${topic} starts now ✨\n\nWe're thrilled to unveil what we've been building. #innovation #future #${topic.replace(/\s+/g, '')}`,
+        facebook: `🎉 Big news! We're excited to share our latest development in ${topic}. Check out the full story!`,
+        instagram: `✨ The future of ${topic} starts now ✨\n\nWe're thrilled to unveil what we've been building. #innovation #${topic.replace(/\s+/g, '')}`,
       })
       setIsGenerating(false)
     }, 1500)
+  }
+
+  const useGeneratedPost = (platform, text) => {
+    setContent(text)
+    setSelectedPlatforms([platform])
+    setActiveTab('compose')
+    setShowPreview(true)
+    success(`Loaded ${platform} post`)
   }
 
   const copyToClipboard = (text, id) => {
     navigator.clipboard.writeText(text)
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  // Platform Preview Component
+  const PlatformPreview = ({ platform, content: postContent }) => {
+    const p = platforms.find(x => x.id === platform)
+    if (!p) return null
+    const Icon = p.icon
+
+    const hashtags = getHashtags(postContent)
+    const hasImage = postContent.includes('📸') || postContent.includes('🖼️') || postContent.includes('🎨')
+
+    return (
+      <div className="rounded-xl overflow-hidden border dark:border-[#1A1A24] border-gray-200 bg-white dark:bg-[#0F1A2E]">
+        {/* Platform Header */}
+        <div className="flex items-center gap-2 p-3 border-b dark:border-[#1A1A24] border-gray-100">
+          <Icon size={16} style={{ color: p.color }} />
+          <span className="text-xs font-bold" style={{ color: p.color }}>{p.name} Preview</span>
+          <span className="ml-auto text-xs dark:text-[#7A7A85] text-gray-400">
+            {postContent.length}/{p.limit}
+          </span>
+        </div>
+
+        {/* Content Preview */}
+        <div className="p-4">
+          {/* User Avatar + Name */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-10 h-10 rounded-full dark:bg-[#1A1A24] bg-gray-100" />
+            <div>
+              <p className="text-sm font-bold dark:text-[#E0E0E6] text-gray-900">Your Company</p>
+              <p className="text-xs dark:text-[#7A7A85] text-gray-500">@yourcompany · Just now</p>
+            </div>
+          </div>
+
+          {/* Post Content */}
+          <p className="text-sm dark:text-[#E0E0E6] text-gray-900 whitespace-pre-wrap mb-3 leading-relaxed">
+            {postContent || <span className="italic dark:text-[#7A7A85] text-gray-400">Your post will appear here...</span>}
+          </p>
+
+          {/* Image Placeholder */}
+          {hasImage && (
+            <div className="rounded-lg dark:bg-[#1A1A24] bg-gray-100 h-40 mb-3 flex items-center justify-center">
+              <Image size={24} className="dark:text-[#7A7A85] text-gray-400" />
+            </div>
+          )}
+
+          {/* Hashtag Warning */}
+          {hashtags.length > p.hashtagMax && (
+            <div className="flex items-center gap-1 text-xs text-yellow-500 mb-2">
+              <AlertCircle size={12} />
+              Max {p.hashtagMax} hashtags for {p.name} (using {hashtags.length})
+            </div>
+          )}
+
+          {/* Engagement Bar */}
+          {postContent && (
+            <div className="flex items-center justify-between pt-3 border-t dark:border-[#1A1A24] border-gray-100 text-xs dark:text-[#7A7A85] text-gray-500">
+              <span>💬 0</span>
+              <span>🔄 0</span>
+              <span>❤️ 0</span>
+              <span>📤</span>
+            </div>
+          )}
+        </div>
+
+        {/* Character Bar */}
+        <div className="h-1 dark:bg-[#1A1A24] bg-gray-100">
+          <div
+            className={`h-full transition-all ${isOverLimit(platform) ? 'bg-red-500' : postContent.length / p.limit > 0.8 ? 'bg-yellow-500' : 'bg-green-500'}`}
+            style={{ width: `${Math.min((postContent.length / p.limit) * 100, 100)}%` }}
+          />
+        </div>
+      </div>
+    )
   }
 
   if (loading && activeTab !== 'compose' && activeTab !== 'generate') {
@@ -133,26 +277,145 @@ export default function SocialMedia() {
     <div className="space-y-6">
       {/* Tabs */}
       <div className="flex gap-4 border-b dark:border-[#1A1A24] border-gray-200 overflow-x-auto">
-        {['compose', 'generate', 'queue', 'history'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-3 font-medium text-sm border-b-2 transition-all capitalize flex items-center gap-2 ${
-              activeTab === tab
-                ? 'dark:border-[#00FF88] dark:text-[#00FF88] border-blue-500 text-blue-600'
-                : 'dark:border-transparent dark:text-[#7A7A85] border-transparent text-gray-500'
-            }`}
-          >
-            {tab === 'generate' && <Sparkles size={16} />}
-            {tab}
-          </button>
-        ))}
+        {[
+          { id: 'compose', label: 'Compose', icon: Edit2 },
+          { id: 'generate', label: 'AI Generate', icon: Sparkles },
+          { id: 'queue', label: 'Queue', icon: Clock },
+          { id: 'history', label: 'History', icon: CheckCircle2 },
+        ].map(tab => {
+          const Icon = tab.icon
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 font-medium text-sm border-b-2 transition-all capitalize flex items-center gap-2 ${
+                activeTab === tab.id
+                  ? 'dark:border-[#00FF88] dark:text-[#00FF88] border-blue-500 text-blue-600'
+                  : 'dark:border-transparent dark:text-[#7A7A85] border-transparent text-gray-500'
+              }`}
+            >
+              <Icon size={16} />
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg flex items-center gap-3 text-red-400 font-mono text-sm">
           <AlertCircle size={20} />
           {error}
+        </div>
+      )}
+
+      {/* Compose Tab */}
+      {activeTab === 'compose' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Editor */}
+          <div className="lg:col-span-2 space-y-6">
+            {editingDraft && (
+              <div className="flex items-center gap-2 p-3 rounded-lg dark:bg-[#FFB800]/10 bg-yellow-50 border dark:border-[#FFB800]/30 border-yellow-200">
+                <Edit2 size={16} className="dark:text-[#FFB800] text-yellow-600" />
+                <span className="text-sm dark:text-[#E0E0E6] text-gray-900">Editing draft</span>
+                <button onClick={() => { setEditingDraft(false); setDraftId(null); setContent('') }} className="ml-auto text-xs dark:text-[#7A7A85] underline">Cancel</button>
+              </div>
+            )}
+
+            <div className="card p-6">
+              <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
+                {editingDraft ? 'EDIT DRAFT' : 'COMPOSE POST'}
+              </h2>
+              
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Write your post content here..."
+                className="w-full px-4 py-3 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 min-h-[200px] font-mono text-sm"
+              />
+
+              {/* Platform Selection */}
+              <div className="my-6">
+                <p className="text-sm font-semibold dark:text-[#E0E0E6] mb-3 font-mono">TARGET PLATFORMS</p>
+                <div className="flex flex-wrap gap-2">
+                  {platforms.map(p => {
+                    const Icon = p.icon
+                    const limit = charCount(p.id)
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => togglePlatform(p.id)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all ${
+                          selectedPlatforms.includes(p.id)
+                            ? 'text-[#0A0A0F]'
+                            : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] bg-gray-100'
+                        }`}
+                        style={selectedPlatforms.includes(p.id) ? { backgroundColor: p.color } : {}}
+                      >
+                        <Icon size={14} />
+                        {p.name}
+                        {isOverLimit(p.id) && <AlertCircle size={12} />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Schedule */}
+              <div className="mb-4">
+                <button
+                  onClick={() => setShowSchedule(!showSchedule)}
+                  className="flex items-center gap-2 text-sm dark:text-[#7A7A85] text-gray-500 hover:dark:text-[#E0E0E6]"
+                >
+                  <Calendar size={16} />
+                  {showSchedule ? 'Hide Schedule' : 'Schedule for later'}
+                </button>
+                {showSchedule && (
+                  <input
+                    type="datetime-local"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="mt-2 px-4 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-sm"
+                  />
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={handlePost}
+                  disabled={isSubmitting || !content.trim() || selectedPlatforms.some(isOverLimit)}
+                  className="flex items-center justify-center gap-2 flex-1 px-4 py-3 rounded font-bold dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={18} />}
+                  {editingDraft ? 'UPDATE' : showSchedule && scheduleTime ? 'SCHEDULE' : 'SUBMIT FOR APPROVAL'}
+                </button>
+                <button
+                  onClick={handleSaveDraft}
+                  disabled={!content.trim()}
+                  className="flex items-center gap-2 px-4 py-3 rounded font-medium dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-700 disabled:opacity-50"
+                >
+                  <Save size={16} />
+                  Save Draft
+                </button>
+                <button
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="flex items-center gap-2 px-4 py-3 rounded font-medium dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-700"
+                >
+                  <Eye size={16} />
+                  Preview
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Panel */}
+          {showPreview && (
+            <div className="lg:col-span-1 space-y-4">
+              {selectedPlatforms.map(platform => (
+                <PlatformPreview key={platform} platform={platform} content={content} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -184,94 +447,105 @@ export default function SocialMedia() {
             </div>
           </div>
 
-          {/* Generated Results UI (Truncated for brevity, same as original structure) */}
-          {generatedPosts.linkedin.length > 0 && (
+          {/* Generated Results */}
+          {Object.keys(generatedPosts).length > 0 && (
             <div className="space-y-4">
-               {generatedPosts.linkedin.map((post, idx) => (
-                 <div key={idx} className="card p-4 border-l-4 border-[#0A66C2]">
-                   <p className="text-sm dark:text-[#E0E0E6] mb-3">{post}</p>
-                   <button 
-                    onClick={() => {setContent(post); setActiveTab('compose')}}
-                    className="text-xs dark:text-[#00FF88] font-bold"
-                   >
-                     USE THIS POST
-                   </button>
-                 </div>
-               ))}
+              {platforms.map(p => {
+                const posts = generatedPosts[p.id]
+                if (!posts || posts.length === 0) return null
+                const Icon = p.icon
+                return (
+                  <div key={p.id} className="card p-6">
+                    <h3 className="font-bold dark:text-[#E0E0E6] text-sm mb-4 flex items-center gap-2">
+                      <Icon size={16} style={{ color: p.color }} />
+                      {p.name} ({posts.length} options)
+                    </h3>
+                    <div className="space-y-3">
+                      {(Array.isArray(posts) ? posts : [posts]).map((post, idx) => (
+                        <div key={idx} className="p-4 rounded-lg dark:bg-[#1A1A24] bg-gray-50 border dark:border-[#1A1A24] border-gray-200">
+                          <p className="text-sm dark:text-[#E0E0E6] mb-3">{post}</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => useGeneratedPost(p.id, post)}
+                              className="text-xs font-bold dark:text-[#00FF88] text-green-600 hover:underline"
+                            >
+                              USE THIS →
+                            </button>
+                            <button
+                              onClick={() => copyToClipboard(post, `${p.id}-${idx}`)}
+                              className="flex items-center gap-1 text-xs dark:text-[#7A7A85] text-gray-500 hover:dark:text-[#E0E0E6]"
+                            >
+                              {copiedId === `${p.id}-${idx}` ? <Check size={12} /> : <Copy size={12} />}
+                              {copiedId === `${p.id}-${idx}` ? 'Copied' : 'Copy'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Compose Tab */}
-      {activeTab === 'compose' && (
-        <div className="space-y-6">
-          <div className="card p-6">
-            <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
-              COMPOSE POST
-            </h2>
-            
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Write your post content here..."
-              className="w-full px-4 py-3 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 min-h-[200px]"
-            />
-
-            {/* Platform Selection */}
-            <div className="my-6">
-              <p className="text-sm font-semibold dark:text-[#E0E0E6] mb-3 font-mono">TARGET PLATFORMS</p>
-              <div className="flex flex-wrap gap-2">
-                {platforms.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => togglePlatform(p.id)}
-                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
-                      selectedPlatforms.includes(p.id)
-                        ? 'bg-[#00FF88] text-[#0A0A0F]'
-                        : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] bg-gray-100'
-                    }`}
-                  >
-                    {p.name.toUpperCase()} {isOverLimit(p.id) && '⚠️'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handlePost}
-                disabled={isSubmitting || !content.trim()}
-                className="flex items-center justify-center gap-2 flex-1 px-4 py-3 rounded font-bold dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white disabled:opacity-50"
-              >
-                {isSubmitting ? <Loader2 className="animate-spin" /> : <Send size={18} />}
-                SUBMIT FOR APPROVAL
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
       {/* Queue Tab */}
       {activeTab === 'queue' && (
         <div className="space-y-4">
-          {queue.length > 0 ? queue.map(post => (
+          {queue.length > 0 ? queue.map(post => {
+            const postPlatforms = post.platforms ? post.platforms.split(',') : [post.platform || 'unknown']
+            return (
             <div key={post.id} className="card p-4 border-l-4 border-yellow-500">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <p className="text-sm dark:text-[#E0E0E6] mb-2">{post.preview}...</p>
-                  <div className="flex gap-2">
+                  <p className="text-sm dark:text-[#E0E0E6] mb-2">{post.preview?.trim().substring(0, 150) || 'Draft'}...</p>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-500 font-bold uppercase">
-                      PENDING APPROVAL
+                      {post.status || 'PENDING'}
                     </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded dark:bg-[#1A1A24] dark:text-[#7A7A85]">
+                    {postPlatforms.map(p => (
+                      <span key={p} className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold uppercase">
+                        {p}
+                      </span>
+                    ))}
+                    {post.scheduleTime && (
+                      <span className="text-[10px] px-2 py-0.5 rounded dark:bg-blue-500/20 dark:text-blue-400 bg-blue-50 text-blue-600 flex items-center gap-1">
+                        <Clock size={10} />
+                        Scheduled: {new Date(post.scheduleTime).toLocaleString()}
+                      </span>
+                    )}
+                    <span className="text-[10px] dark:text-[#7A7A85]">
                       {new Date(post.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleEditDraft(post)}
+                    className="p-2 rounded dark:bg-[#1A1A24] dark:text-[#E0E0E6] hover:dark:bg-[#2A2A3A] transition-colors"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  {!post.scheduleTime && (
+                    <button
+                      onClick={() => handlePublishNow(post)}
+                      className="p-2 rounded dark:bg-[#00FF88]/20 dark:text-[#00FF88] hover:dark:bg-[#00FF88]/30 transition-colors"
+                    >
+                      <Send size={14} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDeleteDraft(post.id)}
+                    className="p-2 rounded dark:bg-red-500/20 dark:text-red-400 hover:dark:bg-red-500/30 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             </div>
-          )) : (
+            )
+          }) : (
             <p className="text-center py-12 text-[#7A7A85] font-mono italic">QUEUE IS EMPTY</p>
           )}
         </div>
@@ -284,16 +558,13 @@ export default function SocialMedia() {
             <div key={post.id} className="card p-4 border-l-4 border-[#00FF88]">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <p className="text-sm dark:text-[#E0E0E6] mb-2">{post.preview}...</p>
-                  <div className="flex gap-4">
+                  <p className="text-sm dark:text-[#E0E0E6] mb-2">{post.preview?.substring(0, 150) || 'Post'}...</p>
+                  <div className="flex items-center gap-4">
                     <span className="text-[10px] px-2 py-0.5 rounded bg-[#00FF88]/20 text-[#00FF88] font-bold uppercase">
                       POSTED
                     </span>
                     <span className="text-[10px] dark:text-[#7A7A85]">
-                      {new Date(post.date).toLocaleDateString()}
-                    </span>
-                    <span className="text-[10px] dark:text-[#00FF88] font-mono">
-                      ❤️ {post.engagement?.likes || 0}
+                      {new Date(post.date || post.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
