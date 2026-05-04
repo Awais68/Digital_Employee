@@ -111,6 +111,6 @@ INSERT INTO users (username, email, password_hash, role)
 VALUES (
     'admin',
     'admin@vault-control.local',
-    '$2b$10$rHx9YmKqL5pQ8vN2wJ3tXeGzKjF4mP6nR8sT0uV2wX4yZ6aB8cD0E',
+    '2ba5ff8cc914a32fce0072aa46bde39d:46fa69884fe47a1a211b0d9983fa84f79cea846168b6b6d34bfc47de06142bea847bead8a0f7a5485dc46ef777d28fade6af2e16f68b38d314922c6ed607309b',
     'admin'
 ) ON CONFLICT (username) DO NOTHING;

@@ -11,3 +11,6 @@ dist/
 !server/database/*.js
 !server/database/*.sql
 !server/database/*.sh
+
+# Allow example env
+!.env.example
