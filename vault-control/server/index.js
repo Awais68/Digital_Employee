@@ -22,6 +22,7 @@ import systemRouter from './routes/system.js'
 import logsRouter from './routes/logs.js'
 import odooRouter from './routes/odoo.js'
 import whatsappRouter from './routes/whatsapp.js'
+import vaultRouter from './routes/vault.js'
 import authRouter from './routes/auth.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -101,6 +102,7 @@ app.use('/api/system', systemRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/odoo', odooRouter)
 app.use('/api/whatsapp', whatsappRouter)
+app.use('/api/vault', vaultRouter)
 
 // Serve React app
 if (existsSync(join(distPath, 'index.html'))) {

@@ -13,6 +13,7 @@ import SocialMedia from "./pages/SocialMedia";
 import Accounting from "./pages/Accounting";
 import CloudStatus from "./pages/CloudStatus";
 import Logs from "./pages/Logs";
+import VaultEditor from "./pages/VaultEditor";
 import { Loader2, Lock } from "lucide-react";
 
 function LoginPage() {
@@ -236,6 +237,8 @@ function AppContent() {
         return <CloudStatus />;
       case "logs":
         return <Logs />;
+      case "vault":
+        return <VaultEditor />;
       default:
         return <Dashboard />;
     }

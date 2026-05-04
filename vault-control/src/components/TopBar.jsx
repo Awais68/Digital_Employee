@@ -12,6 +12,7 @@ const pageNames = {
   accounting: 'Accounting',
   cloud: 'Cloud Status',
   logs: 'Logs',
+  vault: 'Vault Editor',
 }
 
 const folderIcons = {

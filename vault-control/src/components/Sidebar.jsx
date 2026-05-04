@@ -1,6 +1,7 @@
 import {
   Home, Mail, MessageCircle, CheckSquare, Share2,
   DollarSign, Cloud, FileText, Menu, X, ChevronLeft, CheckCircle2,
+  FolderOpen,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -14,6 +15,7 @@ const menuItems = [
   { id: 'accounting',label: 'Accounting',   icon: DollarSign,    badge: null   },
   { id: 'cloud',     label: 'Cloud Status', icon: Cloud,         badge: null   },
   { id: 'logs',      label: 'Logs',         icon: FileText,      badge: null   },
+  { id: 'vault',     label: 'Vault Editor', icon: FolderOpen,    badge: null   },
 ]
 
 export default function Sidebar({ currentPage, setCurrentPage }) {
