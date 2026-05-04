@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider, useToast } from "./context/ToastContext";
 import { useWebSocket } from "./hooks/useWebSocket";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import Dashboard from "./pages/Dashboard";
@@ -220,27 +221,27 @@ function AppContent() {
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
-        return <Dashboard />;
+        return <ErrorBoundary fallbackTitle="Dashboard Error"><Dashboard /></ErrorBoundary>;
       case "approvals":
-        return <Approvals />;
+        return <ErrorBoundary fallbackTitle="Approvals Error"><Approvals /></ErrorBoundary>;
       case "emails":
-        return <Emails />;
+        return <ErrorBoundary fallbackTitle="Emails Error"><Emails /></ErrorBoundary>;
       case "whatsapp":
-        return <WhatsApp />;
+        return <ErrorBoundary fallbackTitle="WhatsApp Error"><WhatsApp /></ErrorBoundary>;
       case "todos":
-        return <Todos />;
+        return <ErrorBoundary fallbackTitle="Todos Error"><Todos /></ErrorBoundary>;
       case "social":
-        return <SocialMedia />;
+        return <ErrorBoundary fallbackTitle="Social Media Error"><SocialMedia /></ErrorBoundary>;
       case "accounting":
-        return <Accounting />;
+        return <ErrorBoundary fallbackTitle="Accounting Error"><Accounting /></ErrorBoundary>;
       case "cloud":
-        return <CloudStatus />;
+        return <ErrorBoundary fallbackTitle="Cloud Status Error"><CloudStatus /></ErrorBoundary>;
       case "logs":
-        return <Logs />;
+        return <ErrorBoundary fallbackTitle="Logs Error"><Logs /></ErrorBoundary>;
       case "vault":
-        return <VaultEditor />;
+        return <ErrorBoundary fallbackTitle="Vault Editor Error"><VaultEditor /></ErrorBoundary>;
       default:
-        return <Dashboard />;
+        return <ErrorBoundary fallbackTitle="Dashboard Error"><Dashboard /></ErrorBoundary>;
     }
   };
 

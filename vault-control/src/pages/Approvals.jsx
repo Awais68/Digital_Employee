@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
-import { CheckCircle, XCircle, Clock, DollarSign, Mail, Share2, Loader2, AlertCircle, Undo2, Trash2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { CheckCircle, XCircle, Clock, DollarSign, Mail, Share2, Loader2, AlertCircle, Undo2, Trash2, Edit2, Save, X, FileText } from 'lucide-react'
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 
 const TABS = ['pending', 'approved', 'rejected']
 
@@ -21,8 +22,9 @@ const typeColors = {
 export default function Approvals() {
   const [activeTab, setActiveTab] = useState('pending')
   const [approvals, setApprovals] = useState([])
-  const [editingId, setEditingId] = useState(null)
+  const [editMode, setEditMode] = useState(null) // id of item being edited
   const [editContent, setEditContent] = useState('')
+  const [editFrontmatter, setEditFrontmatter] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(null)
@@ -60,7 +62,6 @@ export default function Approvals() {
   const handleApprove = async (id) => {
     setActionLoading(id)
     
-    // Optimistic update
     const itemToRemove = approvals.find(a => a.id === id)
     setApprovals(prev => prev.filter(a => a.id !== id))
     
@@ -69,9 +70,9 @@ export default function Approvals() {
       success('Item approved successfully')
       setShowUndo({ action: 'approved', item: itemToRemove, id })
       setTimeout(() => setShowUndo(null), 5000)
+      if (editMode === id) setEditMode(null)
     } catch (err) {
       console.error('Failed to approve:', err)
-      // Rollback
       setApprovals(prev => [...prev, itemToRemove])
       toastError('Failed to approve item')
     } finally {
@@ -91,6 +92,7 @@ export default function Approvals() {
       success('Item rejected')
       setShowUndo({ action: 'rejected', item: itemToRemove, id })
       setTimeout(() => setShowUndo(null), 5000)
+      if (editMode === id) setEditMode(null)
     } catch (err) {
       console.error('Failed to reject:', err)
       setApprovals(prev => [...prev, itemToRemove])
@@ -100,18 +102,39 @@ export default function Approvals() {
     }
   }
 
+  // Save edits before approving
+  const handleSaveEdit = async (id) => {
+    setActionLoading('edit')
+    try {
+      await axios.put(`/api/approvals/${id}`, {
+        content: editContent,
+        frontmatter: editFrontmatter,
+      })
+      setApprovals(prev => prev.map(a => 
+        a.id === id ? { ...a, content: editContent, ...editFrontmatter } : a
+      ))
+      setEditMode(null)
+      success('Changes saved')
+    } catch (err) {
+      console.error('Failed to save edits:', err)
+      toastError('Failed to save changes')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const startEdit = (approval) => {
+    setEditMode(approval.id)
+    setEditContent(approval.content || '')
+    setEditFrontmatter(approval.frontmatter || {})
+  }
+
   // Undo last action
   const handleUndo = async () => {
     if (!showUndo) return
     
     try {
-      if (showUndo.action === 'approved') {
-        // Move back from Approved to Pending
-        await axios.post(`/api/approvals/${showUndo.id}/undo`)
-      } else {
-        // Move back from Rejected to Pending
-        await axios.post(`/api/approvals/${showUndo.id}/undo`)
-      }
+      await axios.post(`/api/approvals/${showUndo.id}/undo`)
       setApprovals(prev => [showUndo.item, ...prev])
       setShowUndo(null)
       info('Action undone')
@@ -127,7 +150,6 @@ export default function Approvals() {
     setActionLoading('bulk')
     const selectedIds = Array.from(selectedForBulk)
     
-    // Optimistic update
     setApprovals(prev => prev.filter(a => !selectedIds.includes(a.id)))
     setSelectedForBulk(new Set())
     
@@ -148,11 +170,8 @@ export default function Approvals() {
   const toggleBulkSelect = (id) => {
     setSelectedForBulk(prev => {
       const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
@@ -164,6 +183,28 @@ export default function Approvals() {
       setSelectedForBulk(new Set(approvals.map(a => a.id)))
     }
   }
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onApprove: () => {
+      if (activeTab === 'pending' && approvals.length > 0) {
+        handleApprove(approvals[0].id)
+      }
+    },
+    onReject: () => {
+      if (activeTab === 'pending' && approvals.length > 0) {
+        handleReject(approvals[0].id)
+      }
+    },
+    onSave: () => {
+      if (editMode) {
+        handleSaveEdit(editMode)
+      }
+    },
+    onClose: () => {
+      if (editMode) setEditMode(null)
+    },
+  })
 
   const formatTime = (date) => {
     const d = new Date(date)
@@ -260,6 +301,14 @@ export default function Approvals() {
         )}
       </div>
 
+      {/* Keyboard Shortcuts Hint */}
+      <div className="flex items-center gap-4 text-xs dark:text-[#7A7A85] text-gray-500">
+        <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded dark:bg-[#1A1A24] bg-gray-100 font-mono text-[10px]">Ctrl+Enter</kbd> Approve first</span>
+        <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded dark:bg-[#1A1A24] bg-gray-100 font-mono text-[10px]">Ctrl+Del</kbd> Reject first</span>
+        <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded dark:bg-[#1A1A24] bg-gray-100 font-mono text-[10px]">Ctrl+S</kbd> Save edits</span>
+        <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded dark:bg-[#1A1A24] bg-gray-100 font-mono text-[10px]">Esc</kbd> Close editor</span>
+      </div>
+
       {/* Error Message */}
       {error && (
         <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg flex items-center gap-3 text-red-400 font-mono text-sm">
@@ -285,9 +334,10 @@ export default function Approvals() {
             const itemType = getItemType(approval)
             const Icon = typeIcons[itemType] || Share2
             const isSelected = selectedForBulk.has(approval.id)
+            const isEditing = editMode === approval.id
             
             return (
-              <div key={approval.id} className={`card p-6 transition-all ${isSelected ? 'dark:bg-[#00FF88]/5 border-[#00FF88]' : ''}`}>
+              <div key={approval.id} className={`card p-6 transition-all ${isSelected ? 'dark:bg-[#00FF88]/5 border-[#00FF88]' : ''} ${isEditing ? 'dark:bg-[#1A1A24] border-[#00FF88]/50' : ''}`}>
                 <div className="flex items-start gap-4">
                   {/* Bulk Select Checkbox */}
                   {activeTab === 'pending' && (
@@ -311,6 +361,20 @@ export default function Approvals() {
                           ${approval.amount.toFixed ? approval.amount.toFixed(2) : approval.amount}
                         </span>
                       )}
+                      <div className="ml-auto flex items-center gap-1">
+                        {isEditing ? (
+                          <>
+                            <span className="text-xs dark:text-[#00FF88] text-green-600 font-bold">EDITING</span>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => startEdit(approval)}
+                            className="p-1.5 rounded dark:text-[#7A7A85] text-gray-400 hover:dark:bg-[#1A1A24] hover:bg-gray-100 transition-colors"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Title */}
@@ -318,10 +382,63 @@ export default function Approvals() {
                       {approval.title || approval.subject || approval.filename || 'Untitled'}
                     </h3>
 
-                    {/* Description */}
-                    <p className="text-sm dark:text-[#7A7A85] text-gray-600 mb-4">
-                      {approval.description || approval.preview || 'No description available'}
-                    </p>
+                    {/* Description / Content */}
+                    {isEditing ? (
+                      <div className="space-y-3">
+                        {/* Frontmatter Editor */}
+                        <div>
+                          <label className="text-xs dark:text-[#7A7A85] text-gray-500 font-bold mb-1 block">METADATA</label>
+                          <textarea
+                            value={Object.entries(editFrontmatter).map(([k, v]) => `${k}: ${v}`).join('\n')}
+                            onChange={(e) => {
+                              const lines = e.target.value.split('\n')
+                              const newFm = {}
+                              lines.forEach(line => {
+                                const match = line.match(/^([^:]+):\s*(.+)$/)
+                                if (match) newFm[match[1].trim()] = match[2].trim()
+                              })
+                              setEditFrontmatter(newFm)
+                            }}
+                            rows={3}
+                            className="w-full px-3 py-2 rounded-lg dark:bg-[#0A0A0F] dark:text-[#E0E0E6] bg-gray-50 text-gray-900 text-xs font-mono resize-none"
+                          />
+                        </div>
+
+                        {/* Content Editor */}
+                        <div>
+                          <label className="text-xs dark:text-[#7A7A85] text-gray-500 font-bold mb-1 block">CONTENT</label>
+                          <textarea
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            rows={6}
+                            className="w-full px-3 py-2 rounded-lg dark:bg-[#0A0A0F] dark:text-[#E0E0E6] bg-gray-50 text-gray-900 text-sm font-mono resize-none"
+                          />
+                        </div>
+
+                        {/* Editor Actions */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleSaveEdit(approval.id)}
+                            disabled={actionLoading === 'edit'}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded font-medium text-sm dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white disabled:opacity-50"
+                          >
+                            {actionLoading === 'edit' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                            Save Changes
+                          </button>
+                          <button
+                            onClick={() => setEditMode(null)}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded font-medium text-sm dark:text-[#7A7A85] text-gray-500 hover:dark:bg-[#1A1A24]"
+                          >
+                            <X size={14} />
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm dark:text-[#7A7A85] text-gray-600 mb-4">
+                        {approval.description || approval.preview || approval.content?.substring(0, 200) || 'No description available'}
+                      </p>
+                    )}
 
                     {/* Timestamps */}
                     <div className="flex items-center gap-6 text-xs">
@@ -344,11 +461,11 @@ export default function Approvals() {
 
                   {/* Actions */}
                   <div className="flex flex-col gap-2 min-w-fit">
-                    {activeTab === 'pending' && (
+                    {activeTab === 'pending' && !isEditing && (
                       <>
                         <button
                           onClick={() => handleApprove(approval.id)}
-                          disabled={actionLoading === approval.id}
+                          disabled={actionLoading === approval.id || actionLoading === 'edit'}
                           className="flex items-center gap-2 px-3 py-2 rounded font-medium text-sm dark:bg-green-500/20 dark:text-green-400 bg-green-50 text-green-700 hover:dark:bg-green-500/30 hover:bg-green-100 transition-colors disabled:opacity-50"
                         >
                           {actionLoading === approval.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
@@ -356,7 +473,7 @@ export default function Approvals() {
                         </button>
                         <button
                           onClick={() => handleReject(approval.id)}
-                          disabled={actionLoading === approval.id}
+                          disabled={actionLoading === approval.id || actionLoading === 'edit'}
                           className="flex items-center gap-2 px-3 py-2 rounded font-medium text-sm dark:bg-red-500/20 dark:text-red-400 bg-red-50 text-red-700 hover:dark:bg-red-500/30 hover:bg-red-100 transition-colors disabled:opacity-50"
                         >
                           <XCircle size={16} />
@@ -366,6 +483,7 @@ export default function Approvals() {
                     )}
                     {activeTab === 'approved' && (
                       <button className="flex items-center gap-2 px-3 py-2 rounded font-medium text-sm dark:bg-gray-500/20 dark:text-gray-400 bg-gray-50 text-gray-700">
+                        <FileText size={16} />
                         View Details
                       </button>
                     )}
