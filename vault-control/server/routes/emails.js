@@ -1,5 +1,7 @@
 import express from 'express'
-import { readVaultFiles, getVaultPath, moveFile } from '../vault-reader.js'
+import { readVaultFiles, getVaultPath, moveFile, writeFile } from '../vault-reader.js'
+import fs from 'fs'
+import path from 'path'
 
 const router = express.Router()
 
@@ -82,6 +84,46 @@ router.post('/move', (req, res) => {
   } catch (err) {
     console.error('Error moving email:', err)
     res.status(500).json({ error: 'Failed to move email', message: err.message })
+  }
+})
+
+// SAVE reply as approval
+router.post('/reply', (req, res) => {
+  try {
+    const { originalId, originalFrom, originalSubject, replySubject, replyBody, template } = req.body
+
+    const id = `REPLY_${Date.now()}`
+    const pendingPath = getVaultPath('Pending_Approval')
+    
+    if (!fs.existsSync(pendingPath)) {
+      fs.mkdirSync(pendingPath, { recursive: true })
+    }
+
+    const frontmatter = {
+      title: replySubject,
+      type: 'EMAIL_REPLY',
+      to: originalFrom,
+      originalSubject,
+      originalId,
+      template: template || 'custom',
+      priority: 'medium',
+      createdAt: new Date().toISOString(),
+    }
+
+    const filePath = path.join(pendingPath, `${id}.md`)
+    const success = writeFile(filePath, frontmatter, replyBody)
+
+    if (success) {
+      if (global.broadcast) {
+        global.broadcast({ type: 'approval_changed', action: 'added', id })
+      }
+      res.json({ success: true, message: 'Reply saved to Pending_Approval', id })
+    } else {
+      res.status(500).json({ success: false, message: 'Failed to save reply' })
+    }
+  } catch (err) {
+    console.error('Error saving email reply:', err)
+    res.status(500).json({ error: 'Failed to save reply', message: err.message })
   }
 })
 
