@@ -1,4 +1,6 @@
 import express from 'express'
+import { execSync } from 'child_process'
+import path from 'path'
 import {
   getServiceStatus,
   getSystemHealth,
@@ -9,6 +11,7 @@ import {
   refreshAndBroadcast,
 } from '../system-status.js'
 import { readVaultFiles, searchVaultFiles } from '../vault-reader.js'
+import fs from 'fs'
 
 const router = express.Router()
 
@@ -94,6 +97,67 @@ router.get('/search', (req, res) => {
     res.json(results)
   } catch (err) {
     res.status(500).json({ error: 'Search failed', message: err.message })
+  }
+})
+
+// GET worker status
+router.get('/workers', (req, res) => {
+  try {
+    const VAULT_PARENT = path.resolve(process.cwd(), '..')
+    const pidFile = path.join(VAULT_PARENT, '.workers.pid')
+    
+    const pids = fs.existsSync(pidFile) ? JSON.parse(fs.readFileSync(pidFile, 'utf-8')) : {}
+    const workers = {}
+    
+    const workerList = ['orchestrator', 'whatsapp_watcher', 'gmail_watcher']
+    
+    for (const name of workerList) {
+      const pid = pids[name]
+      let running = false
+      
+      if (pid) {
+        try {
+          process.kill(pid, 0)
+          running = true
+        } catch {
+          running = false
+        }
+      }
+      
+      workers[name] = { name, running, pid: running ? pid : null }
+    }
+    
+    res.json({ workers })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get worker status', message: err.message })
+  }
+})
+
+// POST start workers
+router.post('/workers/start', (req, res) => {
+  try {
+    const VAULT_PARENT = path.resolve(process.cwd(), '..')
+    const cmd = `cd "${VAULT_PARENT}" && python3 workers.py start`
+    const output = execSync(cmd, { timeout: 10000 }).toString()
+    
+    refreshAndBroadcast()
+    res.json({ success: true, message: 'Workers started', output })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to start workers', message: err.message })
+  }
+})
+
+// POST stop workers
+router.post('/workers/stop', (req, res) => {
+  try {
+    const VAULT_PARENT = path.resolve(process.cwd(), '..')
+    const cmd = `cd "${VAULT_PARENT}" && python3 workers.py stop`
+    const output = execSync(cmd, { timeout: 10000 }).toString()
+    
+    refreshAndBroadcast()
+    res.json({ success: true, message: 'Workers stopped', output })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to stop workers', message: err.message })
   }
 })
 

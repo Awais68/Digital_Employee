@@ -5,9 +5,10 @@ import { createServer } from 'http'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync } from 'fs'
+import net from 'net'
 import chokidar from 'chokidar'
 import { refreshAndBroadcast, getVaultCounts, getRecentActivity, getPendingApprovals, getServiceStatus } from './system-status.js'
-import { testConnection, closePool } from './database/connection.js'
+import { testConnection, initializeSchema, closePool } from './database/connection.js'
 import { generateCSRFToken, verifyCSRF } from './database/csrf.js'
 import { authenticateToken, authenticateApiKey, optionalAuth } from './database/auth.js'
 import { rateLimiter, authRateLimiter } from './database/rateLimiter.js'
@@ -42,9 +43,14 @@ const wss = new WebSocketServer({ server })
 
 // Initialize database
 let dbConnected = false
-testConnection().then(connected => {
+async function initDatabase() {
+  const connected = await testConnection()
   dbConnected = connected
-})
+  if (connected) {
+    await initializeSchema()
+  }
+  return dbConnected
+}
 
 // Security headers
 app.use((req, res, next) => {
@@ -237,10 +243,56 @@ async function gracefulShutdown() {
 process.on('SIGTERM', gracefulShutdown)
 process.on('SIGINT', gracefulShutdown)
 
+// Auto-select port from fallback list
+const FALLBACK_PORTS = [3000, 3001, 3002, 3003]
+
+function checkPort(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer()
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(false)
+      } else {
+        resolve(false)
+      }
+      server.close()
+    })
+    server.once('listening', () => {
+      server.close()
+      resolve(true)
+    })
+    server.listen(port)
+  })
+}
+
+async function findFreePort(ports) {
+  for (const port of ports) {
+    const isFree = await checkPort(port)
+    if (isFree) {
+      console.log(`[INFO] Port ${port} is available`)
+      return port
+    }
+    console.warn(`[WARN] Port ${port} is in use, skipping...`)
+  }
+  return null
+}
+
 // Start servers
-server.listen(PORT, () => {
-  console.log(`[HTTP] Server running on http://localhost:${PORT}`)
-  console.log(`[WebSocket] Server running on ws://localhost:${PORT}`)
-  console.log(`[Auth] ${ENABLE_AUTH ? 'Enabled' : 'Disabled (dev mode)'}`)
-  console.log(`[Database] ${dbConnected ? 'Connected' : 'Not connected (file-based mode)'}`)
+initDatabase().then(async () => {
+  const startPort = parseInt(process.env.PORT || '3000')
+  const portsToTry = [startPort, ...FALLBACK_PORTS.filter(p => p !== startPort)]
+  console.log(`[INFO] Trying ports: ${portsToTry.join(', ')}`)
+  
+  const freePort = await findFreePort(portsToTry)
+  if (!freePort) {
+    console.error('[ERROR] All ports are in use. Please free up a port.')
+    process.exit(1)
+  }
+
+  server.listen(freePort, () => {
+    console.log(`[HTTP] Server running on http://localhost:${freePort}`)
+    console.log(`[WebSocket] Server running on ws://localhost:${freePort}`)
+    console.log(`[Auth] ${ENABLE_AUTH ? 'Enabled' : 'Disabled (dev mode)'}`)
+    console.log(`[Database] ${dbConnected ? 'Connected' : 'Not connected (file-based mode)'}`)
+  })
 })

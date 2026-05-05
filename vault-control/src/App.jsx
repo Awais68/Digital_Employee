@@ -221,7 +221,7 @@ function AppContent() {
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
-        return <ErrorBoundary fallbackTitle="Dashboard Error"><Dashboard /></ErrorBoundary>;
+        return <ErrorBoundary fallbackTitle="Dashboard Error"><Dashboard setCurrentPage={setCurrentPage} /></ErrorBoundary>;
       case "approvals":
         return <ErrorBoundary fallbackTitle="Approvals Error"><Approvals /></ErrorBoundary>;
       case "emails":

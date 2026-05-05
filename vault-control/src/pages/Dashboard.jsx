@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   TrendingUp, TrendingDown, MessageSquare, Mail,
   Linkedin, Twitter, Facebook, Instagram, RefreshCw, Loader2, AlertCircle,
-  Clock, CheckCircle, XCircle, FileText, Zap,
+  Clock, CheckCircle, XCircle, FileText, Zap, Play, Square, Cpu, Rocket,
 } from 'lucide-react'
 import {
   BarChart, Bar, Cell, XAxis, YAxis,
@@ -12,12 +12,12 @@ import {
 import axios from 'axios'
 
 const platforms = [
-  { name: 'WhatsApp',  icon: MessageSquare, color: '#25D366', inboxKey: 'WhatsApp',  doneKey: null },
-  { name: 'LinkedIn',  icon: Linkedin,       color: '#0A66C2', inboxKey: 'LinkedIn',  doneKey: 'linkedInPosts' },
-  { name: 'Facebook',  icon: Facebook,       color: '#1877F2', inboxKey: 'Facebook',  doneKey: null },
-  { name: 'Instagram', icon: Instagram,      color: '#E4405F', inboxKey: 'Instagram', doneKey: null },
-  { name: 'Gmail',     icon: Mail,           color: '#EA4335', inboxKey: 'Inbox',     doneKey: 'Done' },
-  { name: 'Twitter',   icon: Twitter,        color: '#1DA1F2', inboxKey: 'Twitter',   doneKey: null },
+  { name: 'WhatsApp',  icon: MessageSquare, color: '#25D366', inboxKey: 'WhatsApp',  doneKey: null, page: 'whatsapp' },
+  { name: 'LinkedIn',  icon: Linkedin,       color: '#0A66C2', inboxKey: 'LinkedIn',  doneKey: 'linkedInPosts', page: 'social' },
+  { name: 'Facebook',  icon: Facebook,       color: '#1877F2', inboxKey: 'Facebook',  doneKey: null, page: 'social' },
+  { name: 'Instagram', icon: Instagram,      color: '#E4405F', inboxKey: 'Instagram', doneKey: null, page: 'social' },
+  { name: 'Gmail',     icon: Mail,           color: '#EA4335', inboxKey: 'Inbox',     doneKey: 'Done', page: 'emails' },
+  { name: 'Twitter',   icon: Twitter,        color: '#1DA1F2', inboxKey: 'Twitter',   doneKey: null, page: 'social' },
 ]
 
 // ─── Pokémon-style stat bar ────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ function StatBar({ label, value, maxValue = 100, color }) {
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────────
 
-export default function Dashboard() {
+export default function Dashboard({ setCurrentPage }) {
   const [vaultCounts,      setVaultCounts]      = useState({})
   const [services,         setServices]         = useState([])
   const [pendingApprovals, setPendingApprovals] = useState([])
@@ -57,6 +57,10 @@ export default function Dashboard() {
   const [wsConnected,      setWsConnected]      = useState(false)
   const [lastUpdate,       setLastUpdate]       = useState(new Date())
   const [error,            setError]            = useState(null)
+  const [workers,          setWorkers]          = useState({})
+  const [workerLoading,    setWorkerLoading]    = useState(false)
+  const [autoPublishing,   setAutoPublishing]   = useState(false)
+  const [publishResult,    setPublishResult]    = useState(null)
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -71,34 +75,105 @@ export default function Dashboard() {
       setLastUpdate(new Date())
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err)
-      setError('Failed to connect to backend. Please ensure the server is running.')
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        setError('Authentication failed. Please sign in again.')
+      } else if (err.response?.status === 500) {
+        setError('Server error. Please try again later.')
+      } else {
+        setError('Failed to connect to backend. Please ensure the server is running.')
+      }
     } finally {
       setLoading(false)
     }
   }, [])
+
+  const fetchWorkerStatus = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/system/workers')
+      setWorkers(res.data.workers)
+    } catch (err) {
+      console.error('Failed to fetch worker status:', err)
+    }
+  }, [])
+
+  const startWorkers = async () => {
+    setWorkerLoading(true)
+    try {
+      await axios.post('/api/system/workers/start')
+      await fetchWorkerStatus()
+    } catch (err) {
+      console.error('Failed to start workers:', err)
+    } finally {
+      setWorkerLoading(false)
+    }
+  }
+
+  const stopWorkers = async () => {
+    setWorkerLoading(true)
+    try {
+      await axios.post('/api/system/workers/stop')
+      await fetchWorkerStatus()
+    } catch (err) {
+      console.error('Failed to stop workers:', err)
+    } finally {
+      setWorkerLoading(false)
+    }
+  }
+
+  const handleAutoPublish = async () => {
+    setAutoPublishing(true)
+    setPublishResult(null)
+    try {
+      const res = await axios.post('/api/social/auto-publish')
+      setPublishResult(res.data)
+      await fetchDashboardData()
+    } catch (err) {
+      console.error('Failed to auto-publish:', err)
+      setPublishResult({ success: false, error: err.message })
+    } finally {
+      setAutoPublishing(false)
+    }
+  }
+
+  // Fetch worker status on mount
+  useEffect(() => {
+    fetchWorkerStatus()
+    const interval = setInterval(fetchWorkerStatus, 30000)
+    return () => clearInterval(interval)
+  }, [fetchWorkerStatus])
 
   // ── WebSocket ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     fetchDashboardData()
 
-    // Connect to WebSocket server (port 3000 for both dev and production)
+    // Connect to WebSocket server - try multiple ports
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsPort = window.location.port === '5173' ? '3000' : window.location.port
-    const wsUrl = `${protocol}//${window.location.hostname}${wsPort ? ':' + wsPort : ''}`
+    const hostname = window.location.hostname
+    const wsPorts = ['3000', '3001', '3002', '3003']
     
-    let ws = new WebSocket(wsUrl)
+    let ws = null
     let reconnectTimer = null
     let retryCount = 0
+    let currentPortIndex = 0
     const maxRetries = 10
 
-    const connect = () => {
+    const tryConnect = () => {
+      if (currentPortIndex >= wsPorts.length) {
+        console.error('[WebSocket] All ports failed, waiting to retry...')
+        currentPortIndex = 0
+        reconnectTimer = setTimeout(tryConnect, 10000)
+        return
+      }
+
+      const wsUrl = `${protocol}//${hostname}:${wsPorts[currentPortIndex]}`
+      console.log(`[WebSocket] Trying ${wsUrl}...`)
       ws = new WebSocket(wsUrl)
 
       ws.onopen = () => {
         setWsConnected(true)
         retryCount = 0
-        console.log('Dashboard Stream Connected')
+        console.log(`[WebSocket] Connected on port ${wsPorts[currentPortIndex]}`)
       }
 
       ws.onmessage = (event) => {
@@ -118,12 +193,13 @@ export default function Dashboard() {
 
       ws.onclose = () => {
         setWsConnected(false)
+        currentPortIndex++
         
         if (retryCount < maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, retryCount), 30000)
           retryCount++
           console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${retryCount}/${maxRetries})`)
-          reconnectTimer = setTimeout(connect, delay)
+          reconnectTimer = setTimeout(tryConnect, delay)
         }
       }
 
@@ -132,7 +208,7 @@ export default function Dashboard() {
       }
     }
 
-    connect()
+    tryConnect()
 
     return () => {
       if (reconnectTimer) clearTimeout(reconnectTimer)
@@ -282,6 +358,83 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── Worker Status & Auto-Publish ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Worker Status */}
+        <div className="card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 font-mono flex items-center gap-2">
+              <Cpu size={18} className="dark:text-[#00FF88] text-green-600" />
+              BACKGROUND WORKERS
+            </h2>
+            <div className="flex gap-2">
+              <button onClick={startWorkers} disabled={workerLoading} className="p-2 rounded-lg dark:bg-[#00FF88]/20 bg-green-50 hover:dark:bg-[#00FF88]/30 transition-colors disabled:opacity-50">
+                <Play size={14} className="dark:text-[#00FF88] text-green-600" />
+              </button>
+              <button onClick={stopWorkers} disabled={workerLoading} className="p-2 rounded-lg dark:bg-red-500/20 bg-red-50 hover:dark:bg-red-500/30 transition-colors disabled:opacity-50">
+                <Square size={14} className="dark:text-red-400 text-red-600" />
+              </button>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {Object.entries(workers).map(([name, worker]) => (
+              <div key={name} className={`flex items-center justify-between p-3 rounded-lg ${worker.running ? 'dark:bg-[#00FF88]/5 bg-green-50 border dark:border-[#00FF88]/20 border-green-200' : 'dark:bg-red-500/5 bg-red-50 border dark:border-red-500/20 border-red-200'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-2.5 h-2.5 rounded-full ${worker.running ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <div>
+                    <p className="text-sm font-semibold dark:text-[#E0E0E6] text-gray-900 capitalize">{name.replace('_', ' ')}</p>
+                    <p className="text-xs dark:text-[#7A7A85] text-gray-500">{worker.running ? `Running (PID ${worker.pid})` : 'Stopped'}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {Object.keys(workers).length === 0 && (
+              <p className="text-center text-sm dark:text-[#7A7A85] text-gray-500 py-4">Loading worker status...</p>
+            )}
+          </div>
+        </div>
+
+        {/* Auto-Publish */}
+        <div className="card p-6">
+          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono flex items-center gap-2">
+            <Rocket size={18} className="dark:text-[#1DA1F2] text-blue-600" />
+            AUTO-PUBLISH POSTS
+          </h2>
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-3xl font-bold dark:text-[#FFB800] text-yellow-600">{pendingApprovals.length}</p>
+                  <p className="text-xs dark:text-[#B0C4FF] text-gray-600 mt-1">Pending approval</p>
+                </div>
+                <button
+                  onClick={handleAutoPublish}
+                  disabled={autoPublishing || pendingApprovals.length === 0}
+                  className="px-6 py-3 rounded-lg font-bold dark:bg-[#00FF88] dark:text-[#0F1A2E] bg-blue-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105"
+                >
+                  {autoPublishing ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : (
+                    <Rocket size={20} />
+                  )}
+                  <span className="ml-2">{autoPublishing ? 'Publishing...' : 'Publish All'}</span>
+                </button>
+              </div>
+            </div>
+
+            {publishResult && (
+              <div className={`p-3 rounded-lg text-sm ${publishResult.success ? 'dark:bg-[#00FF88]/10 bg-green-50 text-green-600' : 'dark:bg-red-500/10 bg-red-50 text-red-600'}`}>
+                {publishResult.success ? (
+                  <p>Published {publishResult.published}/{publishResult.total} posts successfully</p>
+                ) : (
+                  <p>Publishing failed: {publishResult.message || publishResult.error}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* ── Platform Activity ── */}
       <div className="card p-6">
         <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-6 font-mono">
@@ -293,7 +446,8 @@ export default function Dashboard() {
             return (
               <div
                 key={platform.name}
-                className="p-4 rounded-lg dark:bg-[#0F1A2E] bg-gray-50 hover:dark:bg-[#1B2A48] hover:bg-gray-100 transition-all border dark:border-[#2A3E5F] border-gray-200"
+                onClick={() => platform.page && setCurrentPage?.(platform.page)}
+                className="p-4 rounded-lg dark:bg-[#0F1A2E] bg-gray-50 hover:dark:bg-[#1B2A48] hover:bg-gray-100 transition-all border dark:border-[#2A3E5F] border-gray-200 cursor-pointer"
               >
                 <div className="flex items-center gap-2 mb-4">
                   <Icon size={22} style={{ color: platform.color }} />
@@ -317,14 +471,18 @@ export default function Dashboard() {
       {/* ── Quick Stats Row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Activity', value: totalActivities, icon: Zap, color: 'text-[#00FF88]', bg: 'dark:bg-[#00FF88]/10 bg-green-50', border: 'dark:border-[#00FF88]/30 border-green-200' },
-          { label: 'Pending Review', value: pendingApprovals.length, icon: Clock, color: 'text-[#FFB800]', bg: 'dark:bg-[#FFB800]/10 bg-yellow-50', border: 'dark:border-[#FFB800]/30 border-yellow-200' },
-          { label: 'Approved', value: vaultCounts['Approved'] || 0, icon: CheckCircle, color: 'text-[#10B981]', bg: 'dark:bg-[#10B981]/10 bg-green-50', border: 'dark:border-[#10B981]/30 border-green-200' },
-          { label: 'Rejected', value: vaultCounts['Rejected'] || 0, icon: XCircle, color: 'text-[#EF4444]', bg: 'dark:bg-[#EF4444]/10 bg-red-50', border: 'dark:border-[#EF4444]/30 border-red-200' },
+          { label: 'Total Activity', value: totalActivities, icon: Zap, color: 'text-[#00FF88]', bg: 'dark:bg-[#00FF88]/10 bg-green-50', border: 'dark:border-[#00FF88]/30 border-green-200', action: null },
+          { label: 'Pending Review', value: pendingApprovals.length, icon: Clock, color: 'text-[#FFB800]', bg: 'dark:bg-[#FFB800]/10 bg-yellow-50', border: 'dark:border-[#FFB800]/30 border-yellow-200', action: 'approvals' },
+          { label: 'Approved', value: vaultCounts['Approved'] || 0, icon: CheckCircle, color: 'text-[#10B981]', bg: 'dark:bg-[#10B981]/10 bg-green-50', border: 'dark:border-[#10B981]/30 border-green-200', action: null },
+          { label: 'Rejected', value: vaultCounts['Rejected'] || 0, icon: XCircle, color: 'text-[#EF4444]', bg: 'dark:bg-[#EF4444]/10 bg-red-50', border: 'dark:border-[#EF4444]/30 border-red-200', action: 'approvals' },
         ].map(stat => {
           const Icon = stat.icon
           return (
-            <div key={stat.label} className={`card p-4 border ${stat.border}`}>
+            <div
+              key={stat.label}
+              onClick={() => stat.action && setCurrentPage?.(stat.action)}
+              className={`card p-4 border ${stat.border} ${stat.action ? 'cursor-pointer hover:scale-[1.02] transition-all' : ''}`}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs dark:text-[#7A7A85] text-gray-500 uppercase tracking-wide">{stat.label}</p>
@@ -516,7 +674,11 @@ export default function Dashboard() {
               const isWarning = activity.status === 'warning' || action.includes('pending')
               
               return (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200 hover:dark:bg-[#2A3E5F] hover:bg-gray-100 transition-colors">
+                <div
+                  key={i}
+                  onClick={() => setCurrentPage?.('logs')}
+                  className="flex items-center gap-3 p-3 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200 hover:dark:bg-[#2A3E5F] hover:bg-gray-100 transition-colors cursor-pointer"
+                >
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                     isSuccess 
                       ? 'dark:bg-[#00FF88]/20 bg-green-100' 
@@ -564,7 +726,8 @@ export default function Dashboard() {
           {Object.entries(vaultCounts).map(([folder, count]) => (
             <div
               key={folder}
-              className="p-4 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200"
+              onClick={() => setCurrentPage?.('vault')}
+              className="p-4 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200 cursor-pointer hover:dark:bg-[#2A3E5F] hover:bg-gray-100 transition-all"
             >
               <p className="text-xs dark:text-[#B0C4FF] text-gray-600 uppercase tracking-wide mb-2">
                 {folder.replace(/_/g, ' ')}
@@ -587,7 +750,8 @@ export default function Dashboard() {
             return (
               <div
                 key={service.name}
-                className={`p-4 rounded-lg border transition-all ${
+                onClick={() => setCurrentPage?.('logs')}
+                className={`p-4 rounded-lg border transition-all cursor-pointer hover:scale-[1.02] ${
                   isRunning
                     ? 'dark:bg-gradient-to-br dark:from-[#1B2A48] dark:to-[#0F1A2E] dark:border-[#00FF88]/30 bg-green-50 border-green-200'
                     : isWarning
@@ -638,7 +802,10 @@ export default function Dashboard() {
 
       {/* ── Pending Actions ── */}
       <div className="card p-6 bg-gradient-to-r dark:from-[#00FF88]/5 dark:to-[#1DA1F2]/5 from-green-50 to-blue-50 border dark:border-[#00FF88]/20 border-blue-200">
-        <div className="flex items-center justify-between">
+        <div
+          onClick={() => setCurrentPage?.('approvals')}
+          className="flex items-center justify-between cursor-pointer"
+        >
           <div>
             <p className="text-sm dark:text-[#B0C4FF] text-gray-600 font-mono">⚡ PENDING ACTIONS</p>
             <p className="text-4xl font-bold dark:text-[#00FF88] text-green-600 mt-2">
@@ -647,7 +814,7 @@ export default function Dashboard() {
           </div>
           <div className="text-right">
             <p className="text-xs dark:text-[#B0C4FF] text-gray-500">Requires review</p>
-            <button className="mt-3 px-4 py-2 rounded-lg font-medium dark:bg-[#00FF88] dark:text-[#0F1A2E] bg-blue-500 text-white hover:opacity-90 transition-all">
+            <button onClick={() => setCurrentPage?.('approvals')} className="mt-3 px-4 py-2 rounded-lg font-medium dark:bg-[#00FF88] dark:text-[#0F1A2E] bg-blue-500 text-white hover:opacity-90 transition-all">
               Review Now
             </button>
           </div>

@@ -149,11 +149,23 @@ export default function SocialMedia() {
 
   const handlePublishNow = async (draft) => {
     try {
-      await axios.post(`/api/social/draft/${draft.id}/publish`)
+      const res = await axios.post(`/api/social/draft/${draft.id}/publish`)
       success('Draft published')
       fetchData()
     } catch (err) {
-      toastError('Failed to publish')
+      const data = err.response?.data
+      let msg = 'Failed to publish'
+      if (data?.message) {
+        msg = data.message
+      }
+      if (data?.results) {
+        const details = Object.entries(data.results)
+          .filter(([, r]) => !r.success)
+          .map(([p, r]) => `${p}: ${r.message || r.error || 'unknown error'}`)
+          .join('; ')
+        if (details) msg += ` — ${details}`
+      }
+      toastError(msg)
     }
   }
 
@@ -495,14 +507,15 @@ export default function SocialMedia() {
         <div className="space-y-4">
           {queue.length > 0 ? queue.map(post => {
             const postPlatforms = post.platforms ? post.platforms.split(',') : [post.platform || 'unknown']
+            const isApproved = post.status === 'approved'
             return (
-            <div key={post.id} className="card p-4 border-l-4 border-yellow-500">
+            <div key={post.id} className={`card p-4 border-l-4 ${isApproved ? 'border-green-500' : 'border-yellow-500'}`}>
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <p className="text-sm dark:text-[#E0E0E6] mb-2">{post.preview?.trim().substring(0, 150) || 'Draft'}...</p>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-500 font-bold uppercase">
-                      {post.status || 'PENDING'}
+                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${isApproved ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
+                      {isApproved ? 'APPROVED — READY TO PUBLISH' : (post.status || 'PENDING')}
                     </span>
                     {postPlatforms.map(p => (
                       <span key={p} className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold uppercase">

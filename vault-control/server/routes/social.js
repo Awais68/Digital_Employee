@@ -2,7 +2,7 @@ import express from 'express'
 import { readVaultFiles, getVaultPath, writeFile } from '../vault-reader.js'
 import fs from 'fs'
 import path from 'path'
-import { execSync } from 'child_process'
+import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 
@@ -44,21 +44,34 @@ router.get('/', (req, res) => {
   }
 })
 
-// GET all social posts (drafts + queued)
+// GET all social posts (drafts + queued + approved)
 router.get('/drafts', (req, res) => {
   try {
-    const files = readVaultFiles('Pending_Approval')
-    const drafts = files
-      .filter(f => f.frontmatter.type === 'post' || f.filename.includes('POST') || f.filename.includes('SOCIAL'))
+    const isSocialPost = f => f.frontmatter.type === 'post' || f.filename.includes('POST') || f.filename.includes('SOCIAL')
+
+    const pendingFiles = readVaultFiles('Pending_Approval')
+    const pendingDrafts = pendingFiles
+      .filter(isSocialPost)
       .map(file => ({
         id: file.id,
         ...file.frontmatter,
         preview: file.content.substring(0, 150),
         createdAt: file.createdAt.toISOString(),
-        status: 'pending_approval'
+        status: 'pending_approval',
       }))
 
-    res.json(drafts)
+    const approvedFiles = readVaultFiles('Approved')
+    const approvedDrafts = approvedFiles
+      .filter(isSocialPost)
+      .map(file => ({
+        id: file.id,
+        ...file.frontmatter,
+        preview: file.content.substring(0, 150),
+        createdAt: file.createdAt.toISOString(),
+        status: 'approved',
+      }))
+
+    res.json([...pendingDrafts, ...approvedDrafts])
   } catch (err) {
     console.error('Error fetching social drafts:', err)
     res.status(500).json({ error: 'Failed to fetch social drafts', message: err.message })
@@ -218,13 +231,19 @@ router.delete('/draft/:id', (req, res) => {
 router.post('/draft/:id/publish', (req, res) => {
   try {
     const { id } = req.params
-    const pendingPath = getVaultPath('Pending_Approval')
-    const donePath = getVaultPath('Done')
-    
-    const sourcePath = path.join(pendingPath, `${id}.md`)
-    if (!fs.existsSync(sourcePath)) {
-      return res.status(404).json({ error: 'Draft not found' })
+    const pendingFilePath = path.join(getVaultPath('Pending_Approval'), `${id}.md`)
+    const approvedFilePath = path.join(getVaultPath('Approved'), `${id}.md`)
+
+    let sourcePath = null
+    if (fs.existsSync(approvedFilePath)) {
+      sourcePath = approvedFilePath
+    } else if (fs.existsSync(pendingFilePath)) {
+      sourcePath = pendingFilePath
+    } else {
+      return res.status(404).json({ success: false, message: 'Draft not found in Approved or Pending_Approval' })
     }
+
+    const donePath = getVaultPath('Done')
     
     // Read file content and frontmatter
     const fileContent = fs.readFileSync(sourcePath, 'utf-8')
@@ -247,71 +266,234 @@ router.post('/draft/:id/publish', (req, res) => {
     console.log(`[Publish] Posting to platforms: ${platforms.join(', ')}`)
     console.log(`[Publish] Content: ${content.substring(0, 100)}...`)
     
-    const results = {}
-    const VAULT_PARENT = path.resolve(process.cwd(), '../..')
+    const VAULT_PARENT = path.resolve(__dirname, '../../..')
+    const publishScript = path.join(VAULT_PARENT, 'publish_post.py')
     
-    // Post to each platform using Python scripts
+    if (!fs.existsSync(publishScript)) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Publish script not found. Please ensure publish_post.py exists in the vault root.' 
+      })
+    }
+    
+    const results = {}
+    let allSucceeded = true
+
+    // Post to each platform using the unified publish script
     for (const platform of platforms) {
       try {
-        if (platform === 'linkedin') {
-          console.log(`[Publish] Running LinkedIn post...`)
-          const escapedContent = content.replace(/"/g, '\\"').replace(/\n/g, '\\n')
-          const cmd = `cd "${VAULT_PARENT}" && python3 -c "from Agent_Skills.SKILL_LInkedin_Playwright_MCP import post_to_linkedin; import json; res = post_to_linkedin('${escapedContent}'); print(json.dumps(res))"`
-          
-          const output = execSync(cmd, { timeout: 120000 }).toString()
-          const jsonMatch = output.match(/\{.*\}/s)
-          const result = jsonMatch ? JSON.parse(jsonMatch[0]) : { success: false, message: 'No output' }
-          results.linkedin = result
-          console.log(`[Publish] LinkedIn result:`, result)
-          
-        } else if (platform === 'facebook') {
-          console.log(`[Publish] Running Facebook post...`)
-          const escapedContent = content.replace(/"/g, '\\"').replace(/\n/g, '\\n')
-          const cmd = `cd "${VAULT_PARENT}" && python3 -c "from Agent_Skills.SKILL_Facebook_Instagram_Post import post_to_facebook; import json; res = post_to_facebook('${escapedContent}'); print(json.dumps(res))"`
-          
-          const output = execSync(cmd, { timeout: 120000 }).toString()
-          const jsonMatch = output.match(/\{.*\}/s)
-          const result = jsonMatch ? JSON.parse(jsonMatch[0]) : { success: false, message: 'No output' }
-          results.facebook = result
-          console.log(`[Publish] Facebook result:`, result)
-          
-        } else if (platform === 'instagram') {
-          console.log(`[Publish] Running Instagram post...`)
-          const imagePath = path.join(VAULT_PARENT, 'instagram_post_20260420.jpg')
-          const escapedContent = content.replace(/"/g, '\\"').replace(/\n/g, '\\n')
-          const escapedImagePath = imagePath.replace(/"/g, '\\"')
-          const cmd = `cd "${VAULT_PARENT}" && python3 -c "from Agent_Skills.SKILL_Facebook_Instagram_Post import post_to_instagram; import json; res = post_to_instagram('${escapedContent}', '${escapedImagePath}'); print(json.dumps(res))"`
-          
-          const output = execSync(cmd, { timeout: 120000 }).toString()
-          const jsonMatch = output.match(/\{.*\}/s)
-          const result = jsonMatch ? JSON.parse(jsonMatch[0]) : { success: false, message: 'No output' }
-          results.instagram = result
-          console.log(`[Publish] Instagram result:`, result)
+        console.log(`[Publish] Running ${platform} post...`)
+
+        const result = spawnSync('python3', ['publish_post.py', sourcePath, platform], {
+          cwd: VAULT_PARENT,
+          encoding: 'utf8',
+          timeout: 120000,
+          maxBuffer: 10 * 1024 * 1024,
+        })
+
+        if (result.error) {
+          console.error(`[Publish] spawn error for ${platform}:`, result.error.message)
+          results[platform] = { success: false, message: result.error.message, stderr: '' }
+          allSucceeded = false
+          continue
         }
+
+        // Capture stderr for diagnostics
+        const stderr = (result.stderr || '').trim()
+        if (stderr) {
+          console.error(`[Publish] ${platform} stderr:`, stderr)
+        }
+
+        // Find JSON output in stdout
+        const stdout = (result.stdout || '').trim()
+        const lines = stdout.split('\n')
+        let lastJson = null
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const parsed = JSON.parse(lines[i])
+            lastJson = parsed
+            break
+          } catch {}
+        }
+
+        const exitCode = result.status
+
+        if (lastJson && lastJson.results && lastJson.results[platform]) {
+          results[platform] = { ...lastJson.results[platform] }
+          // Enrich with stderr for debugging
+          if (stderr) {
+            results[platform].stderr = stderr
+          }
+        } else {
+          results[platform] = {
+            success: false,
+            message: exitCode !== 0
+              ? `Script exited with code ${exitCode}. ${stderr || stdout}`
+              : 'No valid response from publish script',
+            stderr,
+          }
+        }
+
+        if (!results[platform].success) {
+          allSucceeded = false
+        }
+
+        console.log(`[Publish] ${platform} result:`, results[platform])
+
       } catch (err) {
         console.error(`[Publish] Error posting to ${platform}:`, err.message)
         results[platform] = { success: false, message: err.message }
+        allSucceeded = false
       }
     }
-    
-    // Move to Done folder
+
+    // Move to Done folder ONLY if ALL platforms succeeded
     const destPath = path.join(donePath, `${id}.md`)
     fs.mkdirSync(donePath, { recursive: true })
-    fs.renameSync(sourcePath, destPath)
-    
-    if (global.broadcast) {
-      global.broadcast({ type: 'approval_changed', action: 'published', id, results })
+
+    if (allSucceeded) {
+      fs.renameSync(sourcePath, destPath)
+      if (global.broadcast) {
+        global.broadcast({ type: 'approval_changed', action: 'published', id, results })
+      }
+    } else {
+      // Update frontmatter with error status, keep in Pending_Approval
+      try {
+        const fileContent = fs.readFileSync(sourcePath, 'utf-8')
+        const updated = fileContent.replace(
+          /(status:\s*)pending_approval/,
+          '$1publish_failed'
+        )
+        fs.writeFileSync(sourcePath, updated, 'utf-8')
+      } catch (writeErr) {
+        console.error('[Publish] Failed to update status:', writeErr.message)
+      }
+      if (global.broadcast) {
+        global.broadcast({ type: 'approval_changed', action: 'publish_failed', id, results })
+      }
     }
-    
-    const allSuccess = Object.values(results).every(r => r.success)
-    res.json({ 
-      success: allSuccess, 
-      message: allSuccess ? 'Successfully posted!' : 'Some posts failed',
-      results 
+
+    const failedPlatforms = Object.entries(results)
+      .filter(([, r]) => !r.success)
+      .map(([p]) => p)
+
+    res.status(allSucceeded ? 200 : 500).json({
+      success: allSucceeded,
+      message: allSucceeded
+        ? 'Successfully posted to all platforms!'
+        : `Failed to post to: ${failedPlatforms.join(', ')}`,
+      results,
     })
   } catch (err) {
     console.error('Error publishing draft:', err)
     res.status(500).json({ error: 'Failed to publish', message: err.message })
+  }
+})
+
+// AUTO-APPROVE AND PUBLISH ALL pending posts
+router.post('/auto-publish', (req, res) => {
+  try {
+    const files = readVaultFiles('Pending_Approval')
+    const socialPosts = files.filter(f => 
+      f.frontmatter.type === 'post' || 
+      f.filename.includes('POST') || 
+      f.filename.includes('SOCIAL')
+    )
+    
+    if (socialPosts.length === 0) {
+      return res.json({ success: false, message: 'No pending social posts to publish' })
+    }
+    
+    const publishResults = []
+    
+    for (const post of socialPosts) {
+      try {
+        const postPath = getVaultPath('Pending_Approval', post.filename)
+        const fileContent = fs.readFileSync(postPath, 'utf-8')
+        
+        let platforms = []
+        const fmMatch = fileContent.match(/^---\n([\s\S]*?)\n---/)
+        if (fmMatch) {
+          const fm = fmMatch[1]
+          const platformsMatch = fm.match(/platforms?:\s*(.+)/)
+          if (platformsMatch) {
+            platforms = platformsMatch[1].split(',').map(p => p.trim().toLowerCase())
+          }
+        }
+        
+        if (platforms.length === 0) platforms = ['linkedin']
+        
+        const VAULT_PARENT = path.resolve(__dirname, '../../..')
+
+        const result = spawnSync('python3', ['publish_post.py', postPath, ...platforms], {
+          cwd: VAULT_PARENT,
+          encoding: 'utf8',
+          timeout: 120000,
+          maxBuffer: 10 * 1024 * 1024,
+        })
+
+        const stderr = (result.stderr || '').trim()
+        if (stderr) {
+          console.error(`[Auto-Publish] ${post.filename} stderr:`, stderr)
+        }
+
+        const stdout = (result.stdout || '').trim()
+        const lines = stdout.split('\n')
+        let lastJson = null
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const parsed = JSON.parse(lines[i])
+            lastJson = parsed
+            break
+          } catch {}
+        }
+
+        const exitCode = result.status
+        const allSucceeded = exitCode === 0 && lastJson && lastJson.success
+
+        if (allSucceeded) {
+          const donePath = getVaultPath('Done')
+          fs.mkdirSync(donePath, { recursive: true })
+          const destPath = path.join(donePath, post.filename)
+          fs.renameSync(postPath, destPath)
+        }
+
+        publishResults.push({
+          id: post.id,
+          filename: post.filename,
+          platforms,
+          success: allSucceeded,
+          details: lastJson?.results || {},
+          stderr: stderr || null,
+          exitCode,
+        })
+        
+      } catch (err) {
+        console.error(`[Auto-Publish] Error for ${post.filename}:`, err.message)
+        publishResults.push({
+          id: post.id,
+          filename: post.filename,
+          success: false,
+          error: err.message
+        })
+      }
+    }
+    
+    if (global.broadcast) {
+      global.broadcast({ type: 'dashboard_update', message: `Auto-published ${publishResults.filter(r => r.success).length} posts` })
+    }
+    
+    const successCount = publishResults.filter(r => r.success).length
+    res.json({
+      success: successCount > 0,
+      total: publishResults.length,
+      published: successCount,
+      results: publishResults
+    })
+    
+  } catch (err) {
+    console.error('Error in auto-publish:', err)
+    res.status(500).json({ error: 'Failed to auto-publish', message: err.message })
   }
 })
 
