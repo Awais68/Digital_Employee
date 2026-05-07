@@ -3,10 +3,8 @@
 test_social_media.py - Comprehensive test for Facebook & Instagram integration
 """
 
-import json
 import sys
 from pathlib import Path
-from datetime import datetime
 
 # Add project root to path
 BASE_DIR = Path(__file__).resolve().parent

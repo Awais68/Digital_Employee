@@ -318,8 +318,8 @@ export default function Approvals() {
         </div>
       )}
 
-      {/* Approvals Grid */}
-      <div className="space-y-4">
+      {/* Approvals Grid - content-visibility for rendering performance (rendering-content-visibility) */}
+      <div className="space-y-4 content-visibility-auto" style={{ containIntrinsicSize: '0 2000px' }}>
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="animate-spin text-[#00FF88]" size={32} />
@@ -356,11 +356,11 @@ export default function Approvals() {
                       <span className={`badge ${typeColors[itemType] || 'badge-other'}`}>
                         {itemType}
                       </span>
-                      {approval.amount && (
+                      {approval.amount !== null && approval.amount !== undefined ? (
                         <span className="text-lg font-bold text-red-500">
                           ${approval.amount.toFixed ? approval.amount.toFixed(2) : approval.amount}
                         </span>
-                      )}
+                      ) : null}
                       <div className="ml-auto flex items-center gap-1">
                         {isEditing ? (
                           <>

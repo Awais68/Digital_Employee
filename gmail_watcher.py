@@ -31,7 +31,6 @@ import os
 import sys
 import json
 import time
-import signal
 import logging
 import subprocess
 import base64
@@ -39,7 +38,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Set
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 # Environment loading
 try:
@@ -232,7 +231,7 @@ class BaseWatcher:
 
     def log_action(self, action: str, details: str, level: str = "info") -> None:
         """Log an action with timestamp."""
-        log_entry = {
+        {
             'timestamp': datetime.now().isoformat(),
             'action': action,
             'details': details,
@@ -351,11 +350,12 @@ class GmailWatcher(BaseWatcher):
             logger.error(f"Authentication failed: {e}")
             return False
 
-    def fetch_unread_emails(self, max_results: int = MAX_RESULTS) -> List[Dict]:
+    def fetch_emails(self, query: str, max_results: int = MAX_RESULTS) -> List[Dict]:
         """
-        Fetch unread + important emails from Gmail.
+        Fetch emails from Gmail using a specific query.
 
         Args:
+            query: Gmail search query string
             max_results: Maximum emails to fetch
 
         Returns:
@@ -366,9 +366,6 @@ class GmailWatcher(BaseWatcher):
             return []
 
         try:
-            # Query: unread, in inbox, not promotions/social, important
-            query = "is:unread in:inbox -category:promotions -category:social"
-
             logger.info(f"Fetching emails with query: {query}")
 
             response = self.service.users().messages().list(
@@ -378,7 +375,7 @@ class GmailWatcher(BaseWatcher):
             ).execute()
 
             messages = response.get('messages', [])
-            logger.info(f"Found {len(messages)} unread emails")
+            logger.info(f"Found {len(messages)} emails for query")
 
             if not messages:
                 return []
@@ -405,6 +402,39 @@ class GmailWatcher(BaseWatcher):
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
             return []
+
+    def fetch_unread_emails(self, max_results: int = MAX_RESULTS) -> List[Dict]:
+        """
+        Fetch unread emails from Gmail using improved query.
+        Also fetches recent emails to catch already-read but unprocessed emails.
+
+        Args:
+            max_results: Maximum emails to fetch per query
+
+        Returns:
+            List of email message dicts (deduplicated)
+        """
+        # Query 1: Unread emails (excluding forums and updates, but keeping promotions and social)
+        query1 = "is:unread in:inbox -category:forums -category:updates"
+
+        # Query 2: Recent emails (last 24h) to catch already-read emails
+        query2 = "in:inbox newer_than:1d -category:forums"
+
+        # Fetch from both queries
+        emails1 = self.fetch_emails(query1, max_results)
+        emails2 = self.fetch_emails(query2, max_results)
+
+        # Merge and deduplicate by email ID
+        seen_ids = set()
+        merged = []
+        for email in emails1 + emails2:
+            eid = email['id']
+            if eid not in seen_ids:
+                seen_ids.add(eid)
+                merged.append(email)
+
+        logger.info(f"Total unique emails after merging queries: {len(merged)}")
+        return merged
 
     def parse_email(self, message: Dict) -> EmailData:
         """
@@ -479,7 +509,7 @@ class GmailWatcher(BaseWatcher):
     def _assess_priority(self, email_dict: Dict) -> str:
         """Assess email priority based on content."""
         subject = email_dict['subject'].lower()
-        from_addr = email_dict['from_addr'].lower()
+        email_dict['from_addr'].lower()
 
         # High priority keywords
         high_keywords = ['urgent', 'asap', 'immediate', 'important', 'action required',
@@ -519,7 +549,7 @@ class GmailWatcher(BaseWatcher):
             try:
                 parsed_date = datetime.strptime(email.date, '%a, %d %b %Y %H:%M:%S %z')
                 formatted_date = parsed_date.strftime('%Y-%m-%d %H:%M:%S %Z')
-            except:
+            except Exception:
                 formatted_date = email.date
 
             # Create markdown with YAML frontmatter
@@ -644,6 +674,51 @@ thread_id: {email.thread_id}
             self.stats['errors'] += 1
             return False
 
+    def _validate_processed_ids(self) -> None:
+        """
+        Check processed IDs and remove any that don't have corresponding draft files.
+        This handles the case where an email was marked processed but no draft was created.
+        """
+        folders_to_check = ['Pending_Approval', 'Approved', 'Done']
+        draft_exists_cache = {}
+
+        for email_id in list(self.processed_ids):
+            # Check if a draft file exists for this email
+            draft_exists = False
+
+            for folder_name in folders_to_check:
+                folder_path = VAULT_ROOT / folder_name
+                if not folder_path.exists():
+                    continue
+
+                if folder_name not in draft_exists_cache:
+                    try:
+                        files = [f for f in os.listdir(folder_path) if os.path.isfile(folder_path / f)]
+                        draft_exists_cache[folder_name] = files
+                    except OSError:
+                        draft_exists_cache[folder_name] = []
+
+                # Check if any file contains this email_id
+                for filename in draft_exists_cache[folder_name]:
+                    if email_id in filename or self._file_contains_email_id(folder_path / filename, email_id):
+                        draft_exists = True
+                        break
+                if draft_exists:
+                    break
+
+            if not draft_exists:
+                logger.info(f"Re-queuing lost email: {email_id}")
+                self.processed_ids.discard(email_id)
+
+    def _file_contains_email_id(self, filepath: Path, email_id: str) -> bool:
+        """Check if a markdown file contains the given email ID."""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+                return email_id in content
+        except Exception:
+            return False
+
     def run(self) -> Dict:
         """
         Run one iteration of the Gmail watcher.
@@ -660,6 +735,9 @@ thread_id: {email.thread_id}
             if not self.authenticate():
                 logger.error("Authentication failed")
                 return self.get_stats()
+
+        # Validate processed IDs - remove orphaned entries
+        self._validate_processed_ids()
 
         # Fetch emails
         emails = self.fetch_unread_emails()
@@ -762,7 +840,7 @@ def start_watcher_in_tmux(interval: int = CHECK_INTERVAL) -> None:
     print(f"✓ Gmail watcher started in tmux session '{TMUX_SESSION_NAME}'")
     print(f"  Interval: {interval} seconds")
     print(f"  Attach: tmux attach -t {TMUX_SESSION_NAME}")
-    print(f"  Detach: Ctrl+b, then d")
+    print("  Detach: Ctrl+b, then d")
     print(f"  Stop:   python3 {script_path.name} --stop")
     print(f"  Logs:   {LOG_FILE}")
 
@@ -785,13 +863,13 @@ def stop_watcher_in_tmux() -> None:
 def show_status() -> None:
     """Show watcher status."""
     if is_watcher_running():
-        print(f"✓ Gmail watcher is RUNNING")
+        print("✓ Gmail watcher is RUNNING")
         print(f"  Session: {TMUX_SESSION_NAME}")
         print(f"  Logs: {LOG_FILE}")
         print(f"  Attach: tmux attach -t {TMUX_SESSION_NAME}")
     else:
         print("✗ Gmail watcher is NOT running")
-        print(f"  Start: python3 gmail_watcher.py --start")
+        print("  Start: python3 gmail_watcher.py --start")
 
 
 def run_authentication() -> None:

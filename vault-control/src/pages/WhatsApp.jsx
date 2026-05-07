@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Send, Zap, SkipBack, Edit3, Loader2, AlertCircle, ArrowLeft, Phone, Video, Activity, MessageSquare, Clock, CheckCircle2, Wifi, WifiOff } from 'lucide-react'
+import { Send, Zap, Edit3, Loader2, AlertCircle, ArrowLeft, Phone, Video, Activity, MessageSquare, Wifi, WifiOff } from 'lucide-react'
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
 
@@ -16,16 +16,7 @@ export default function WhatsApp() {
   const [systemStatus, setSystemStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(true)
   const [showStatusPanel, setShowStatusPanel] = useState(false)
-  const { success, error: toastError } = useToast()
-
-  useEffect(() => {
-    fetchConversations()
-    fetchSystemStatus()
-    const handleResize = () => setMobileView(window.innerWidth < 768)
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  const { success: _success, error: _toastError } = useToast()
 
   const fetchSystemStatus = async () => {
     setStatusLoading(true)
@@ -73,6 +64,16 @@ export default function WhatsApp() {
       setMessagesLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchConversations()
+    fetchSystemStatus()
+    const handleResize = () => setMobileView(window.innerWidth < 768)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSelectConversation = (conv) => {
     setSelectedConversation(conv)
@@ -211,10 +212,11 @@ export default function WhatsApp() {
         <div className="flex-1 overflow-y-auto">
           {conversations.length > 0 ? (
             conversations.map(conv => (
-              <div
+              <button
                 key={conv.id}
                 onClick={() => handleSelectConversation(conv)}
-                className="px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer hover:dark:bg-[#1A1A24] transition-colors"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectConversation(conv) }}
+                className="w-full text-left px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer hover:dark:bg-[#1A1A24] transition-colors"
               >
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex items-center gap-3">
@@ -241,7 +243,7 @@ export default function WhatsApp() {
                     )}
                   </div>
                 </div>
-              </div>
+              </button>
             ))
           ) : (
             <div className="p-8 text-center text-[#7A7A85] font-mono italic text-sm">
@@ -402,11 +404,12 @@ export default function WhatsApp() {
           
           {conversations.length > 0 ? (
             conversations.map(conv => (
-              <div
+              <button
                 key={conv.id}
                 onClick={() => handleSelectConversation(conv)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectConversation(conv) }}
                 className={`
-                  px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer transition-colors
+                  w-full text-left px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer transition-colors
                   ${selectedConversation?.id === conv.id
                     ? 'dark:bg-[#00FF88]/10 bg-blue-50'
                     : 'hover:dark:bg-[#1A1A24] hover:bg-gray-50'
@@ -438,7 +441,7 @@ export default function WhatsApp() {
                     )}
                   </div>
                 </div>
-              </div>
+              </button>
             ))
           ) : (
             <div className="p-12 text-center text-[#7A7A85] font-mono italic text-xs">

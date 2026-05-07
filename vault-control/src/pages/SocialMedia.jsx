@@ -106,7 +106,14 @@ export default function SocialMedia() {
       }
     } catch (err) {
       console.error('Failed to create post:', err)
-      toastError(err.response?.data?.message || 'Failed to submit post')
+      const data = err.response?.data
+      let msg = 'Failed to submit post'
+      if (data?.message) {
+        msg = data.message
+      } else if (data?.error) {
+        msg = data.error
+      }
+      toastError(msg)
     } finally {
       setIsSubmitting(false)
     }
@@ -125,7 +132,8 @@ export default function SocialMedia() {
       fetchData()
     } catch (err) {
       console.error('Failed to save draft:', err)
-      toastError('Failed to save draft')
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to save draft'
+      toastError(msg)
     }
   }
 
@@ -135,14 +143,17 @@ export default function SocialMedia() {
       success('Draft deleted')
       fetchData()
     } catch (err) {
-      toastError('Failed to delete draft')
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Unknown error'
+      toastError(`Failed: ${msg}`)
+      console.error('Delete error:', err.response?.data)
     }
   }
 
   const handleEditDraft = (draft) => {
     setContent(draft.content || draft.preview)
     setDraftId(draft.id)
-    setSelectedPlatforms(draft.platforms || ['linkedin'])
+    const platforms = typeof draft.platforms === 'string' ? draft.platforms.split(',') : (draft.platforms || ['linkedin'])
+    setSelectedPlatforms(platforms)
     setEditingDraft(true)
     setActiveTab('compose')
   }
@@ -189,7 +200,7 @@ export default function SocialMedia() {
     }, 1500)
   }
 
-  const useGeneratedPost = (platform, text) => {
+  const handleUseGeneratedPost = (platform, text) => {
     setContent(text)
     setSelectedPlatforms([platform])
     setActiveTab('compose')
@@ -478,7 +489,7 @@ export default function SocialMedia() {
                           <p className="text-sm dark:text-[#E0E0E6] mb-3">{post}</p>
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => useGeneratedPost(p.id, post)}
+                              onClick={() => handleUseGeneratedPost(p.id, post)}
                               className="text-xs font-bold dark:text-[#00FF88] text-green-600 hover:underline"
                             >
                               USE THIS →
@@ -540,14 +551,13 @@ export default function SocialMedia() {
                   >
                     <Edit2 size={14} />
                   </button>
-                  {!post.scheduleTime && (
-                    <button
+                  <button
                       onClick={() => handlePublishNow(post)}
+                      title="Publish Now"
                       className="p-2 rounded dark:bg-[#00FF88]/20 dark:text-[#00FF88] hover:dark:bg-[#00FF88]/30 transition-colors"
                     >
                       <Send size={14} />
                     </button>
-                  )}
                   <button
                     onClick={() => handleDeleteDraft(post.id)}
                     className="p-2 rounded dark:bg-red-500/20 dark:text-red-400 hover:dark:bg-red-500/30 transition-colors"

@@ -23,12 +23,12 @@ uid = common.authenticate(ODOO_DB, 'admin', ODOO_PASSWORD, {})
 if uid:
     print(f"   ✅ SUCCESS! User ID: {uid}")
 else:
-    print(f"   ❌ Failed")
+    print("   ❌ Failed")
 
 # Test 2: email user
-print(f"\nTest 2: username=awaisniaz720@gmail.com")
+print("\nTest 2: username=awaisniaz720@gmail.com")
 uid = common.authenticate(ODOO_DB, 'awaisniaz720@gmail.com', ODOO_PASSWORD, {})
 if uid:
     print(f"   ✅ SUCCESS! User ID: {uid}")
 else:
-    print(f"   ❌ Failed")
+    print("   ❌ Failed")

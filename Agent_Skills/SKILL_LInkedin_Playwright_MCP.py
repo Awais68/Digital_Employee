@@ -294,10 +294,10 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                     page.click("div:has-text('Start a post')", timeout=5000)
                     create_post_clicked = True
                     print("   Clicked using text match")
-                except Exception as e:
+                except Exception:
                     return {
                         "success": False,
-                        "message": f"Could not find 'Start a post' element. Session may be expired. Try: python3 setup_linkedin_session.py",
+                        "message": "Could not find 'Start a post' element. Session may be expired. Try: python3 setup_linkedin_session.py",
                         "post_url": None
                     }
 
@@ -326,20 +326,20 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                 if editor_info.get('found'):
                     print(f"   Found editor via JS: {editor_info}")
                     # Click and fill using JavaScript
-                    page.evaluate(f"""
-                        (content) => {{
+                    page.evaluate("""
+                        (content) => {
                             const editable = document.querySelectorAll('[contenteditable="true"]');
-                            for (let el of editable) {{
-                                if (el.offsetHeight > 0 && el.offsetWidth > 0) {{
+                            for (let el of editable) {
+                                if (el.offsetHeight > 0 && el.offsetWidth > 0) {
                                     el.focus();
                                     el.textContent = content;
                                     // Trigger input event
-                                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                                    el.dispatchEvent(new Event('input', {bubbles: true}));
                                     return true;
-                                }}
-                            }}
+                                }
+                            }
                             return false;
-                        }}
+                        }
                     """, content)
                     editor_found = True
                     print("   Filled content via JavaScript")
@@ -436,7 +436,7 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                         is_aria_disabled = btn.get_attribute('aria-disabled')
                         
                         if is_disabled or is_aria_disabled == 'true':
-                            print(f"   ⏳ Button is disabled, waiting more... (3s)")
+                            print("   ⏳ Button is disabled, waiting more... (3s)")
                             page.wait_for_timeout(3000)
                             # Try again
                             if btn.is_visible(timeout=5000):
@@ -644,7 +644,7 @@ def save_linkedin_session(cookies_file: Optional[str] = None):
             os.chmod(cookies_file, 0o600)
             
             print(f"\n💾 Session saved to: {cookies_file}")
-            print(f"🔒 File permissions set to: 0600 (owner read/write only)")
+            print("🔒 File permissions set to: 0600 (owner read/write only)")
             print("✅ You can now close the browser")
             
             browser.close()
@@ -725,7 +725,7 @@ def test_linkedin_session():
             if browser:
                 try:
                     browser.close()
-                except:
+                except Exception:
                     pass
             
             error_msg = str(e)
@@ -733,7 +733,7 @@ def test_linkedin_session():
             # If it's a network error, retry
             if "ERR_NETWORK" in error_msg or "net::" in error_msg:
                 if attempt < max_retries - 1:
-                    print(f"   ⚠️  Network error, retrying...")
+                    print("   ⚠️  Network error, retrying...")
                     import time
                     time.sleep(2)
                     continue

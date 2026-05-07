@@ -9,7 +9,6 @@ and moves processed files to the Done folder.
 Usage: python process_needs_action.py
 """
 
-import os
 from pathlib import Path
 from datetime import datetime
 import shutil
@@ -157,7 +156,7 @@ def process_needs_action() -> int:
             content = read_needs_action_file(filepath)
             
             # Step 2 & 3: Create plan file with frontmatter and sections
-            plan_path = create_plan_file(filename, content)
+            create_plan_file(filename, content)
             
             # Step 4: Bronze tier - just acknowledge and mark as processed
             # (Decision is already written in the plan file)
@@ -179,7 +178,7 @@ def process_needs_action() -> int:
 
 def main():
     """Entry point for the script."""
-    print(f"Starting Bronze Tier Orchestrator...")
+    print("Starting Bronze Tier Orchestrator...")
     print(f"Scanning: {NEEDS_ACTION_DIR}")
     print("-" * 50)
     

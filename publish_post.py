@@ -30,7 +30,11 @@ def parse_frontmatter(content):
     for line in match.group(1).split('\n'):
         if ':' in line:
             key, val = line.split(':', 1)
-            val = val.strip().strip('"').strip("'")
+            # Clean the value: strip quotes, brackets, and whitespace
+            val = val.strip().strip('"').strip("'").strip('[]')
+            # Handle comma-separated platforms
+            if ',' in val:
+                val = [p.strip().strip('"').strip("'") for p in val.split(',')]
             frontmatter[key.strip()] = val
     
     body = content[match.end():].strip()
@@ -73,7 +77,12 @@ def main():
         sys.exit(1)
     
     file_path = sys.argv[1]
-    platforms = [p.lower() for p in sys.argv[2:]]
+    # Clean platform names: strip quotes, brackets, convert to lowercase
+    platforms = []
+    for p in sys.argv[2:]:
+        cleaned = p.lower().strip().strip('"').strip("'").strip('[]')
+        if cleaned:
+            platforms.append(cleaned)
     
     if not os.path.exists(file_path):
         print(json.dumps({"success": False, "message": f"File not found: {file_path}"}))
@@ -97,19 +106,21 @@ def main():
     
     for platform in platforms:
         try:
-            print(f"\n[{platform.upper()}] Posting...")
+            # Clean platform name for comparison
+            platform_clean = platform.lower().strip().strip('"').strip("'")
+            print(f"\n[{platform_clean.upper()}] Posting...")
             
-            if platform == 'linkedin':
+            if platform_clean == 'linkedin':
                 result = post_to_linkedin(content)
-            elif platform == 'facebook':
+            elif platform_clean == 'facebook':
                 result = post_to_facebook(content)
-            elif platform == 'instagram':
+            elif platform_clean == 'instagram':
                 img = str(default_image) if default_image.exists() else None
                 result = post_to_instagram(content, img)
-            elif platform == 'twitter':
+            elif platform_clean == 'twitter':
                 result = post_to_twitter(content)
             else:
-                result = {"success": False, "message": f"Unknown platform: {platform}"}
+                result = {"success": False, "message": f"Unknown platform: {platform} (valid: linkedin, facebook, instagram, twitter)"}
             
             results[platform] = result
             print(f"[{platform.upper()}] Result: {json.dumps(result)}")

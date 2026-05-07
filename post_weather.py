@@ -4,9 +4,7 @@ Post weather update to LinkedIn, Facebook, and Instagram.
 """
 
 import sys
-import os
 from pathlib import Path
-from datetime import datetime
 
 BASE_DIR = Path(__file__).parent.resolve()
 sys.path.insert(0, str(BASE_DIR))

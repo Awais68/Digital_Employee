@@ -29,7 +29,6 @@ Author: Digital Employee System
 Tier: Gold v5.0
 """
 
-import os
 import sys
 import json
 import time
@@ -244,7 +243,7 @@ def post_to_facebook(
                         post_box = page.get_by_role("textbox").first
                         post_box.click()
                         time.sleep(2)
-                    except Exception as e2:
+                    except Exception:
                         browser.close()
                         result["message"] = f"Could not open Facebook post composer. UI may have changed. Error: {e}"
                         return result

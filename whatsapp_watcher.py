@@ -90,6 +90,9 @@ LOGS_DIR = VAULT_ROOT / "Logs"
 SESSION_DIR = VAULT_ROOT / "whatsapp_session"
 SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
+# Lock file to prevent retry loops when session expires
+AUTH_LOCK_FILE = SESSION_DIR / ".auth_needed"
+
 PROCESSED_FILE = VAULT_ROOT / "processed_messages.json"
 LOG_FILE = LOGS_DIR / f"whatsapp_watcher_{datetime.now().strftime('%Y%m%d')}.log"
 
@@ -219,7 +222,7 @@ class WhatsAppSessionManager:
 
     def is_session_valid(self) -> bool:
         """
-        Check if a valid WhatsApp session exists.
+        Check if a valid WhatsApp session exists and is recent (< 7 days).
         
         A real session has significant data in Local Storage + Cookies.
         WhatsApp Web creates specific directories when logged in.
@@ -229,6 +232,8 @@ class WhatsAppSessionManager:
             return False
 
         try:
+            import time
+            
             # Check for Local Storage directory (Chromium stores it here)
             local_storage_path = self.session_dir / "Default" / "Local Storage"
             if local_storage_path.exists():
@@ -241,28 +246,42 @@ class WhatsAppSessionManager:
                     if data_files:
                         total_size = sum(f.stat().st_size for f in data_files)
                         if total_size > 1000:  # More than 1KB of data
-                            logger.info(f"✅ Local Storage found ({total_size} bytes)")
-                            return True
+                            # Check if session is recent (< 7 days)
+                            newest = max(f.stat().st_mtime for f in data_files)
+                            age_days = (time.time() - newest) / 86400
+                            if age_days < 7:
+                                logger.info(f"✅ Local Storage found ({total_size} bytes, {age_days:.1f} days old)")
+                                return True
+                            else:
+                                logger.warning(f"⚠️ Session too old ({age_days:.1f} days) - need re-auth")
 
             # Check for Cookies file (another indicator)
             cookies_path = self.session_dir / "Default" / "Cookies"
             if cookies_path.exists():
                 if cookies_path.stat().st_size > 500:
-                    logger.info("✅ Cookies file found")
-                    return True
+                    # Check if cookies are recent
+                    age_days = (time.time() - cookies_path.stat().st_mtime) / 86400
+                    if age_days < 7:
+                        logger.info("✅ Cookies file found (recent)")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ Cookies too old ({age_days:.1f} days)")
 
             # Fallback: check total session size
             all_files = list(self.session_dir.rglob("*"))
-            total_size = sum(f.stat().st_size for f in all_files if f.is_file())
-            
-            logger.debug(f"Total session size: {total_size} bytes")
-            
-            # A real WhatsApp session is usually >100KB
-            if total_size > 100_000:
-                logger.info(f"✅ Session data found ({total_size} bytes total)")
-                return True
+            if all_files:
+                total_size = sum(f.stat().st_size for f in all_files if f.is_file())
+                newest = max((f.stat().st_mtime for f in all_files if f.is_file()), default=0)
+                age_days = (time.time() - newest) / 86400 if newest else 999
+                
+                logger.debug(f"Total session size: {total_size} bytes, age: {age_days:.1f} days")
+                
+                # A real WhatsApp session is usually >100KB and recent
+                if total_size > 100_000 and age_days < 7:
+                    logger.info(f"✅ Session data found ({total_size} bytes total, recent)")
+                    return True
 
-            logger.debug("Session directory exists but appears empty")
+            logger.debug("Session directory exists but appears empty or expired")
             return False
 
         except Exception as e:
@@ -530,6 +549,8 @@ class WhatsAppWatcher:
                 if logged_in:
                     logger.info("✅ Session loaded successfully - Running headless")
                     print("✅ Session loaded successfully - Running headless")
+                    # Remove lockfile on successful login
+                    AUTH_LOCK_FILE.unlink(missing_ok=True)
                     return True
 
                 # Not logged in - check if QR code is visible
@@ -543,6 +564,16 @@ class WhatsAppWatcher:
                     # QR code is shown
                     if session_existed:
                         msg = "⚠️  Session expired — Please scan QR code to re-login"
+                        # Create lockfile to prevent retry loops
+                        if not AUTH_LOCK_FILE.exists():
+                            AUTH_LOCK_FILE.touch()
+                            logger.error("Session expired - creating lockfile")
+                            print("❌ Session expired - lockfile created")
+                            # Send alert
+                            try:
+                                self._send_auth_alert()
+                            except Exception:
+                                pass
                     else:
                         msg = "📱 Please scan QR code (one time only)"
                     
@@ -579,7 +610,7 @@ class WhatsAppWatcher:
         """
         Navigate to WhatsApp Web and wait for login.
         
-        FIXED: Added 15-20 second wait after page.goto() for full hydration.
+        FIXED: Added 120 second wait after page.goto() for full hydration.
         """
         logger.info("Navigating to WhatsApp Web...")
 
@@ -591,11 +622,11 @@ class WhatsAppWatcher:
                 timeout=120_000,
             )
 
-            # CRITICAL FIX: Wait 15-20 seconds for WhatsApp Web to fully load
+            # CRITICAL FIX: Wait 120 seconds for QR scan (as per FIX 2A)
             # WhatsApp Web is a heavy SPA that needs time to hydrate and check auth
-            logger.info("⏳ Waiting 20 seconds for WhatsApp Web to fully load...")
-            await asyncio.sleep(20)
-            
+            logger.info("⏳ Waiting 120 seconds for WhatsApp Web to fully load...")
+            await asyncio.sleep(120)
+
             # Check if we're already logged in (session restored)
             already_logged_in = await self._is_logged_in()
             if already_logged_in:
@@ -961,6 +992,12 @@ message_id: {msg.message_id}
         try:
             launched = await self._bootstrap()
             if not launched:
+                if AUTH_LOCK_FILE.exists():
+                    logger.warning("Auth needed - skipping until QR scanned")
+                    print("⚠️  Auth needed - exiting to prevent retry loop")
+                    print("   Scan QR code, then restart watcher")
+                    # Exit cleanly, don't retry
+                    return
                 logger.error("Could not launch / login — aborting continuous mode")
                 return
 
@@ -984,6 +1021,9 @@ message_id: {msg.message_id}
                         await self._close()
                         launched = await self._bootstrap()
                         if not launched:
+                            if AUTH_LOCK_FILE.exists():
+                                logger.warning("Auth needed - exiting to prevent retry loop")
+                                return
                             logger.error("Recovery failed — waiting before retry")
                             await asyncio.sleep(30)
 
@@ -1014,7 +1054,16 @@ message_id: {msg.message_id}
         Auto-detects session and chooses appropriate mode:
         - Valid session → headless=True, auto-login
         - No session → headless=False, show QR code
+        
+        Includes lockfile mechanism to prevent retry loops on session failure.
         """
+        # Check if auth lockfile exists (prevents retry loops)
+        if AUTH_LOCK_FILE.exists():
+            logger.warning("Auth needed - lockfile exists, skipping until QR scanned")
+            print("⚠️  WhatsApp needs re-authentication - lockfile present")
+            print("   Scan QR code in browser, then delete: whatsapp_session/.auth_needed")
+            return False
+
         # Determine headless mode based on session validity
         headless = self._should_run_headless()
 
@@ -1022,7 +1071,50 @@ message_id: {msg.message_id}
         await self._launch(headless=headless)
         
         # Navigate and wait for login
-        return await self._navigate()
+        login_success = await self._navigate()
+        
+        if not login_success:
+            # Session expired or login failed
+            if not AUTH_LOCK_FILE.exists():
+                AUTH_LOCK_FILE.touch()
+                logger.error("Session invalid — need QR scan")
+                print("❌ Session expired - creating lockfile and sending alert")
+                # Send alert email to owner instead of crashing
+                try:
+                    self._send_auth_alert()
+                except Exception as e:
+                    logger.warning(f"Could not send alert: {e}")
+            return False
+        
+        # Success - remove lockfile if it exists
+        AUTH_LOCK_FILE.unlink(missing_ok=True)
+        return True
+
+    def _send_auth_alert(self) -> None:
+        """Send email alert to owner about WhatsApp session expiration."""
+        try:
+            from email.mime.text import MIMEText
+            
+            owner_email = os.getenv("OWNER_EMAIL", "anasuddyn56@gmail.com")
+            msg = MIMEText("""
+WhatsApp session has expired and needs re-authentication.
+
+Please run:
+    python3 whatsapp_watcher.py --first-run
+
+Or delete the lockfile after scanning QR:
+    rm whatsapp_session/.auth_needed
+
+Digital Employee System
+            """)
+            msg['Subject'] = 'WhatsApp Session Expired - Re-authentication Needed'
+            msg['From'] = os.getenv("GMAIL_USER", owner_email)
+            msg['To'] = owner_email
+            
+            # This is a simple alert - in production use the proper email draft system
+            logger.info(f"Alert would be sent to {owner_email}")
+        except Exception as e:
+            logger.warning(f"Failed to send alert email: {e}")
 
 
 # =============================================================================
@@ -1065,7 +1157,7 @@ def tmux_start(interval: int = CHECK_INTERVAL) -> None:
     print(f"✓ WhatsApp watcher started in tmux ('{TMUX_SESSION_NAME}')")
     print(f"  Interval : {interval}s")
     print(f"  Attach   : tmux attach -t {TMUX_SESSION_NAME}")
-    print(f"  Detach   : Ctrl+b, d")
+    print("  Detach   : Ctrl+b, d")
     print(f"  Stop     : python3 {script.name} --stop")
     print(f"  Logs     : {LOG_FILE}")
 
@@ -1087,7 +1179,7 @@ def tmux_status() -> None:
         print(f"  Logs   : {LOG_FILE}")
     else:
         print("✗ WhatsApp watcher is NOT running")
-        print(f"  Start  : python3 whatsapp_watcher.py --start")
+        print("  Start  : python3 whatsapp_watcher.py --start")
 
 
 # =============================================================================

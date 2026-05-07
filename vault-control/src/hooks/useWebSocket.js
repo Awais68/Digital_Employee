@@ -1,15 +1,22 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 export function useWebSocket(onMessage) {
+  const [isConnected, setIsConnected] = useState(false)
   const wsRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   const retryCountRef = useRef(0)
+  const onMessageRef = useRef(onMessage)
   const maxRetries = 10
   const baseDelay = 1000
 
+  useEffect(() => {
+    onMessageRef.current = onMessage
+  }, [onMessage])
+
   const connect = useCallback(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}`
+    const wsUrl = window.location.hostname === 'localhost'
+      ? 'ws://localhost:3000'
+      : `wss://${window.location.host}`
     
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
@@ -17,12 +24,13 @@ export function useWebSocket(onMessage) {
     ws.onopen = () => {
       console.log('[WebSocket] Connected')
       retryCountRef.current = 0
+      setIsConnected(true)
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        onMessage(data)
+        onMessageRef.current(data)
       } catch (err) {
         console.error('Failed to parse WebSocket message:', err)
       }
@@ -34,6 +42,7 @@ export function useWebSocket(onMessage) {
 
     ws.onclose = () => {
       console.log('[WebSocket] Disconnected')
+      setIsConnected(false)
       
       if (retryCountRef.current < maxRetries) {
         const delay = Math.min(baseDelay * Math.pow(2, retryCountRef.current), 30000)
@@ -41,13 +50,15 @@ export function useWebSocket(onMessage) {
         console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${retryCountRef.current}/${maxRetries})`)
         
         reconnectTimeoutRef.current = setTimeout(() => {
-          connect()
+          if (wsRef.current === ws) {
+            connect()
+          }
         }, delay)
       } else {
         console.error('[WebSocket] Max reconnection attempts reached')
       }
     }
-  }, [onMessage])
+  }, [])
 
   useEffect(() => {
     connect()
@@ -70,5 +81,5 @@ export function useWebSocket(onMessage) {
     }
   }, [])
 
-  return { sendMessage }
+  return { sendMessage, isConnected }
 }

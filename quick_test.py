@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Quick auth test"""
-import os, xmlrpc.client
+import os
+import xmlrpc.client
 from dotenv import load_dotenv
 
 load_dotenv(override=True)

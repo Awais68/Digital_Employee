@@ -52,8 +52,8 @@ try:
         # Update password - Odoo will hash it automatically through the ORM
         # But we're doing direct SQL, so we need to use the proper format
         # Let's use the web interface approach instead
-        print(f"\n⚠️  Direct SQL password update is complex due to Odoo's hashing")
-        print(f"   Using web endpoint instead...")
+        print("\n⚠️  Direct SQL password update is complex due to Odoo's hashing")
+        print("   Using web endpoint instead...")
         
         cursor.close()
         conn.close()
@@ -71,20 +71,20 @@ try:
             "new_password": NEW_PASSWORD
         }
         
-        print(f"\n📡 Sending password reset request...")
+        print("\n📡 Sending password reset request...")
         response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
         
         print(f"Status: {response.status_code}")
         print(f"Response: {response.text}")
         
         if response.status_code == 200 and "true" in response.text.lower():
-            print(f"\n✅ Password reset successful!")
-            print(f"   Username: admin")
+            print("\n✅ Password reset successful!")
+            print("   Username: admin")
             print(f"   New Password: {NEW_PASSWORD}")
-            print(f"\nUpdate your .env file with:")
+            print("\nUpdate your .env file with:")
             print(f"   ODOO_PASSWORD={NEW_PASSWORD}")
         else:
-            print(f"\n❌ Password reset failed")
+            print("\n❌ Password reset failed")
             print("   Try accessing Odoo web interface at http://localhost:8069")
             print("   and reset password manually")
     else:

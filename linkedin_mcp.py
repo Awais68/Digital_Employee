@@ -24,8 +24,6 @@ import sys
 import json
 import logging
 import subprocess
-import base64
-import time
 import re
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -251,7 +249,7 @@ class LinkedInMCP:
             # Set restrictive permissions (owner only)
             os.chmod(session_file, 0o600)
             
-            logger.info(f"💾 LinkedIn session saved successfully")
+            logger.info("💾 LinkedIn session saved successfully")
             logger.info(f"   Session expires: {expires_at.strftime('%Y-%m-%d %H:%M:%S')}")
             
         except Exception as e:
@@ -531,11 +529,11 @@ class LinkedInMCP:
                 post_id = post_data.get('id', '')
 
                 result["success"] = True
-                result["message"] = f"LinkedIn post published successfully"
+                result["message"] = "LinkedIn post published successfully"
                 result["post_id"] = post_id
                 result["post_url"] = f"https://www.linkedin.com/feed/update/{post_id}"
 
-                logger.info(f"✅ LinkedIn post published successfully")
+                logger.info("✅ LinkedIn post published successfully")
                 logger.info(f"   Post ID: {post_id}")
                 logger.info(f"   URL: {result['post_url']}")
 
@@ -1067,7 +1065,7 @@ def main():
 
         content = " ".join(sys.argv[2:])
 
-        print(f"Creating LinkedIn post...")
+        print("Creating LinkedIn post...")
         print(f"Content: {content[:100]}...")
         result = mcp.create_post(content=content)
 
@@ -1116,7 +1114,7 @@ def main():
             mcp._save_session()
             print("✅ Session saved successfully!")
             print(f"   Session file: {SESSION_DIR / 'session.json'}")
-            print(f"   Token expires in: 30 days")
+            print("   Token expires in: 30 days")
         else:
             print("❌ No access token available to save")
 
@@ -1131,7 +1129,7 @@ def main():
                 saved_at = datetime.fromisoformat(session_data.get('saved_at', ''))
                 is_expired = datetime.now() > expires_at
                 
-                print(f"\n📊 LinkedIn Session Status:")
+                print("\n📊 LinkedIn Session Status:")
                 print(f"   Status: {'✅ ACTIVE' if not is_expired else '❌ EXPIRED'}")
                 print(f"   Saved at: {saved_at.strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"   Expires at: {expires_at.strftime('%Y-%m-%d %H:%M:%S')}")

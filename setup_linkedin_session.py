@@ -16,7 +16,6 @@ import sys
 import json
 import time
 from pathlib import Path
-from datetime import datetime
 
 # Colors for terminal output
 GREEN = "\033[92m"
@@ -87,7 +86,7 @@ def save_session():
             page.goto("https://www.linkedin.com/login", timeout=30000)
             
             print(f"\n{YELLOW}⏳ Waiting for you to login...{RESET}")
-            print(f"   (checking every 3 seconds, timeout: 120s)")
+            print("   (checking every 3 seconds, timeout: 120s)")
             print()
             
             # Wait for user to login
@@ -122,7 +121,7 @@ def save_session():
             
             print(f"\n{GREEN}✅ Session saved successfully!{RESET}")
             print(f"   Location: {cookies_file}")
-            print(f"   Permissions: 0600 (owner read/write only)")
+            print("   Permissions: 0600 (owner read/write only)")
             print(f"   Cookies saved: {len(cookies)}")
             print()
             print(f"{GREEN}🎉 You can now close the browser{RESET}")
@@ -151,7 +150,7 @@ def test_session():
     
     if not cookies_file.exists():
         print(f"{RED}❌ No saved session found{RESET}")
-        print(f"   Run this script first to save your LinkedIn session")
+        print("   Run this script first to save your LinkedIn session")
         return False
     
     print(f"{GREEN}🧪 Testing LinkedIn session...{RESET}")
@@ -177,13 +176,13 @@ def test_session():
             
             if "login" in current_url.lower():
                 print(f"{RED}❌ Session expired{RESET}")
-                print(f"   Please re-run this script to save a new session")
+                print("   Please re-run this script to save a new session")
                 browser.close()
                 return False
             else:
                 print(f"{GREEN}✅ Session is valid!{RESET}")
                 print(f"   Current URL: {current_url}")
-                print(f"   You can now post to LinkedIn automatically")
+                print("   You can now post to LinkedIn automatically")
                 browser.close()
                 return True
     

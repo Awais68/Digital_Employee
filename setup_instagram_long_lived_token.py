@@ -79,7 +79,7 @@ def main():
                 print(f"❌ Failed to get permanent token: {perm_result}")
     
     # Step 3: Save to .env
-    print(f"\n💾 Updating .env with new token...")
+    print("\n💾 Updating .env with new token...")
     
     env_path = BASE_DIR / ".env"
     with open(env_path, "r") as f:

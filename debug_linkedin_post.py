@@ -9,8 +9,6 @@ Usage:
     python3 debug_linkedin_post.py
 """
 
-import os
-import sys
 import json
 import time
 from pathlib import Path
@@ -36,7 +34,7 @@ def debug_posting():
     print("=" * 70)
     print()
     print(f"{YELLOW}A visible browser will open and walk through each step.{RESET}")
-    print(f"Watch what happens and note where it fails.")
+    print("Watch what happens and note where it fails.")
     print()
     input(f"{GREEN}Press Enter to start...{RESET}")
     print()
@@ -81,7 +79,7 @@ def debug_posting():
                         clicked = True
                         break
                     else:
-                        print(f"   ⚠️  Not visible")
+                        print("   ⚠️  Not visible")
                 except Exception as e:
                     print(f"   ❌ {str(e)[:50]}")
             
@@ -117,7 +115,7 @@ def debug_posting():
                         filled = True
                         break
                     else:
-                        print(f"   ⚠️  Not visible")
+                        print("   ⚠️  Not visible")
                 except Exception as e:
                     print(f"   ❌ {str(e)[:50]}")
             
@@ -154,7 +152,7 @@ def debug_posting():
                         # Don't click yet - let user verify
                         break
                     else:
-                        print(f"   ⚠️  Not visible")
+                        print("   ⚠️  Not visible")
                 except Exception as e:
                     print(f"   ❌ {str(e)[:50]}")
             
@@ -185,7 +183,7 @@ def debug_posting():
             print(f"{GREEN}✅ Debug complete{RESET}")
             print()
             print(f"{YELLOW}Browser will stay open for 30 seconds for final inspection...{RESET}")
-            print(f"Close it manually when done, or wait for auto-close")
+            print("Close it manually when done, or wait for auto-close")
             
             import time as t
             t.sleep(30)

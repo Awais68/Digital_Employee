@@ -8,10 +8,7 @@ Script to reset Odoo admin password and create an invoice.
 
 import os
 import sys
-import requests
-import json
 import xmlrpc.client
-from requests import Session
 from dotenv import load_dotenv
 
 # Load environment variables from .env
@@ -50,7 +47,7 @@ def reset_user_password():
     try:
         uid = common.authenticate(ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD, {})
         if uid:
-            print(f"\n✅ SUCCESS! Authentication successful:")
+            print("\n✅ SUCCESS! Authentication successful:")
             print(f"   Username: {ODOO_USERNAME}")
             print(f"   User ID: {uid}")
             return uid, ODOO_USERNAME, ODOO_PASSWORD
@@ -80,7 +77,7 @@ def main():
     
     # Step 2: Search for customer "Shaikh Test"
     print(f"\n{'=' * 60}")
-    print(f"Step 2: Searching for customer 'Shaikh Test'...")
+    print("Step 2: Searching for customer 'Shaikh Test'...")
     print(f"{'=' * 60}")
     
     import xmlrpc.client
@@ -115,7 +112,7 @@ def main():
         
         # Step 3: Create the invoice
         print(f"\n{'=' * 60}")
-        print(f"Step 3: Creating invoice...")
+        print("Step 3: Creating invoice...")
         print(f"{'=' * 60}")
         
         invoice_vals = {
@@ -134,10 +131,10 @@ def main():
             [invoice_vals]
         )
         
-        print(f"\n✅ Invoice created successfully!")
+        print("\n✅ Invoice created successfully!")
         print(f"   Invoice ID: {invoice_id}")
         print(f"   Customer: Shaikh Test (ID: {customer_id})")
-        print(f"   Amount: $350.00")
+        print("   Amount: $350.00")
         
         # Read back the invoice details
         invoice = models.execute_kw(
@@ -148,7 +145,7 @@ def main():
         )
         
         if invoice:
-            print(f"\n📄 Invoice Details:")
+            print("\n📄 Invoice Details:")
             print(f"   Invoice Number: {invoice[0].get('name', 'N/A')}")
             print(f"   State: {invoice[0].get('state', 'N/A')}")
             print(f"   Total Amount: ${invoice[0].get('amount_total', 0):.2f}")

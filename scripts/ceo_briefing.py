@@ -458,7 +458,7 @@ def detect_bottlenecks(odoo_data: dict, tasks: list, bank_balance: float) -> lis
 def generate_suggestions(bottlenecks: list, odoo_data: dict, tasks: list, bank_balance: float) -> list:
     """Generate strategic suggestions based on detected conditions."""
     suggestions = []
-    today = datetime.now().date()
+    datetime.now().date()
 
     this_rev = odoo_data.get("this_week", {}).get("total_revenue", 0)
     last_rev = odoo_data.get("last_week", {}).get("total_revenue", 0)
@@ -654,7 +654,7 @@ def generate_briefing(
 
     this_exp = odoo_this_week.get("total_expenses", 0)
     last_exp = odoo_last_week.get("total_expenses", 0)
-    exp_growth = calculate_growth(this_exp, last_exp)
+    calculate_growth(this_exp, last_exp)
 
     this_inv = odoo_this_week.get("invoices_issued", 0)
     last_inv = odoo_last_week.get("invoices_issued", 0)
@@ -753,7 +753,7 @@ classification: confidential
         marker = "  ← Current" if i == len(trend_values) - 1 else ""
         briefing += f"{label}: ${val:>10,.2f}  {bar}{marker}\n"
 
-    briefing += f"""```
+    briefing += """```
 
 ### Cash Position
 
@@ -777,7 +777,6 @@ classification: confidential
     if txns:
         for tx in txns:
             net = tx.get("net", 0)
-            tx_type = "Revenue" if net < 0 else "Expense"  # debit > credit = revenue received
             amount = abs(net)
             briefing += f"| {tx.get('date', '')} | {tx.get('description', '')[:40]} | {'+' if net < 0 else '-'}${amount:,.2f} | {tx.get('partner', 'N/A')} |\n"
     else:
@@ -837,7 +836,7 @@ classification: confidential
         briefing += "*No blocked or overdue tasks.*\n"
 
     # Upcoming Deadlines
-    briefing += f"""
+    briefing += """
 ### Upcoming Deadlines (Next 7 Days)
 
 """
@@ -991,7 +990,7 @@ classification: confidential
         observations.append("Data collected and analyzed. No significant anomalies detected this period.")
 
     briefing += " ".join(observations)
-    briefing += f"""
+    briefing += """
 
 ---
 
@@ -1052,7 +1051,7 @@ def main():
         sys.exit(1)
     except ConnectionError as e:
         logger.error(f"Cannot connect to Odoo: {e}")
-        print(f"WARNING: Cannot connect to Odoo — generating briefing with available data only")
+        print("WARNING: Cannot connect to Odoo — generating briefing with available data only")
         odoo = None
 
     # Fetch Odoo data
@@ -1147,7 +1146,7 @@ def main():
         and datetime.strptime(str(t["due_date"]), "%Y-%m-%d").date() < today.date()
     ])
 
-    log_entry = {
+    {
         "timestamp": today.strftime("%Y-%m-%dT%H:%M:%S"),
         "event": "briefing_generated",
         "status": "success",
@@ -1174,7 +1173,7 @@ def main():
         "error_message": None,
     }
 
-    print(f"\n📊 BRIEFING SUMMARY:")
+    print("\n📊 BRIEFING SUMMARY:")
     print(f"   Revenue This Week: ${this_rev:,.2f} ({'↑' if calculate_growth(this_rev, last_rev) >= 0 else '↓'}{abs(calculate_growth(this_rev, last_rev))}% WoW)")
     print(f"   Tasks Completed: {completed_count}")
     print(f"   Bottlenecks: {len(bottlenecks)}")

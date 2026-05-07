@@ -2,6 +2,7 @@ import { Search, Bell, Moon, Sun, LogOut, User, FileText, FolderOpen, ArrowRight
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
+import NotificationBell from './NotificationBell'
 
 const pageNames = {
   dashboard: 'Dashboard',
@@ -29,7 +30,6 @@ const folderIcons = {
 
 export default function TopBar({ isDark, setIsDark, currentPage, setCurrentPage }) {
   const [searchFocus, setSearchFocus] = useState(false)
-  const [showNotifications, setShowNotifications] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -58,6 +58,7 @@ export default function TopBar({ isDark, setIsDark, currentPage, setCurrentPage 
     }, 300)
 
     return () => clearTimeout(debounceRef.current)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [searchQuery])
 
   const handleResultClick = (result) => {
@@ -145,24 +146,10 @@ export default function TopBar({ isDark, setIsDark, currentPage, setCurrentPage 
         )}
       </div>
 
-      {/* Right: Actions */}
-      <div className="flex items-center gap-3">
-        {/* Notifications */}
-        <div className="relative">
-          <button 
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-lg hover:dark:bg-[#1A1A24] hover:bg-gray-100 transition-colors"
-          >
-            <Bell size={20} className="dark:text-[#7A7A85] text-gray-600" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-          </button>
-          {showNotifications && (
-            <div className="absolute right-0 top-10 w-72 card p-4 shadow-xl z-50">
-              <h3 className="font-bold dark:text-[#E0E0E6] text-sm mb-3">Notifications</h3>
-              <p className="text-xs dark:text-[#7A7A85] text-center py-4">No new notifications</p>
-            </div>
-          )}
-        </div>
+       {/* Right: Actions */}
+       <div className="flex items-center gap-3">
+         {/* Notifications */}
+         <NotificationBell />
 
         {/* Theme Toggle */}
         <button

@@ -51,7 +51,7 @@ def log(message):
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(LOG_FILE, 'a') as f:
             f.write(msg + "\n")
-    except:
+    except Exception:
         pass
 
 def get_pid():
@@ -61,7 +61,7 @@ def get_pid():
     try:
         with open(PID_FILE) as f:
             return json.load(f)
-    except:
+    except Exception:
         return {}
 
 def save_pid(pids):

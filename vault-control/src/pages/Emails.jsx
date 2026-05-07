@@ -63,7 +63,13 @@ export default function Emails() {
     setError(null)
     try {
       const res = await axios.get(`/api/emails?folder=${selectedFolder}`)
-      setEmails(res.data)
+      const emailsWithPriority = res.data.map(email => ({
+        ...email,
+        detectedPriority: detectEmailPriority(email)
+      }))
+      const priorityOrder = { IMMEDIATE: 1, URGENT: 2, NORMAL: 3, INFO: 4 }
+      emailsWithPriority.sort((a, b) => priorityOrder[a.detectedPriority] - priorityOrder[b.detectedPriority])
+      setEmails(emailsWithPriority)
     } catch (err) {
       console.error('Failed to fetch emails:', err)
       setError('Failed to load emails from ' + selectedFolder)
@@ -197,14 +203,59 @@ export default function Emails() {
     }
   }
 
-  const getPriorityColor = (priority) => {
-    switch (priority?.toLowerCase()) {
-      case 'high': return 'dark:bg-red-500/20 dark:text-red-400 bg-red-50 text-red-700'
-      case 'medium': return 'dark:bg-yellow-500/20 dark:text-yellow-400 bg-yellow-50 text-yellow-700'
-      case 'low': return 'dark:bg-green-500/20 dark:text-green-400 bg-green-50 text-green-700'
-      default: return 'dark:bg-gray-500/20 dark:text-gray-400 bg-gray-50 text-gray-700'
+  function detectEmailPriority(email) {
+    const subject = email.subject?.toLowerCase() || ''
+    const from = email.from?.toLowerCase() || ''
+    const body = email.body?.toLowerCase() || ''
+
+    if (subject.includes('urgent') ||
+        subject.includes('immediate') ||
+        subject.includes('critical') ||
+        subject.includes('emergency')) {
+      return 'IMMEDIATE'
     }
+
+    if (subject.includes('important') ||
+        subject.includes('asap') ||
+        subject.includes('follow up') ||
+        from.includes('boss') ||
+        from.includes('client')) {
+      return 'URGENT'
+    }
+
+    if (subject.includes('meeting') ||
+        subject.includes('invoice') ||
+        subject.includes('proposal')) {
+      return 'NORMAL'
+    }
+
+    return 'INFO'
   }
+
+  function getPriorityConfig(priority) {
+    const configs = {
+      IMMEDIATE: { label: '🔴 IMMEDIATE', className: 'dark:bg-red-500/20 dark:text-red-400 bg-red-50 text-red-700 border-l-red-500' },
+      URGENT:    { label: '🟠 URGENT',    className: 'dark:bg-orange-500/20 dark:text-orange-400 bg-orange-50 text-orange-700 border-l-orange-500' },
+      NORMAL:    { label: '🟡 NORMAL',    className: 'dark:bg-yellow-500/20 dark:text-yellow-400 bg-yellow-50 text-yellow-700 border-l-yellow-500' },
+      INFO:      { label: '🟢 INFO',      className: 'dark:bg-green-500/20 dark:text-green-400 bg-green-50 text-green-700 border-l-green-500' },
+    }
+    return configs[priority] || configs['INFO']
+  }
+
+  const getPriorityColor = (priority) => {
+    return getPriorityConfig(priority).className
+  }
+
+  const [filter, setFilter] = useState('All')
+  const [priorityCounts, setPriorityCounts] = useState({ IMMEDIATE: 0, URGENT: 0, NORMAL: 0, INFO: 0 })
+
+  useEffect(() => {
+    const counts = { IMMEDIATE: 0, URGENT: 0, NORMAL: 0, INFO: 0 }
+    emails.forEach(e => { counts[e.detectedPriority]++ })
+    setPriorityCounts(counts)
+  }, [emails])
+
+  const filteredEmails = filter === 'All' ? emails : emails.filter(e => e.detectedPriority === filter)
 
   return (
     <div className="grid grid-cols-4 gap-4 h-[calc(100vh-140px)]">
@@ -246,9 +297,54 @@ export default function Emails() {
         </div>
       </div>
 
-      {/* Middle: Email List */}
-      <div className="col-span-1 border-r dark:border-[#1A1A24] flex flex-col">
-        {/* Bulk Actions Bar */}
+       {/* Middle: Email List */}
+       <div className="col-span-1 border-r dark:border-[#1A1A24] flex flex-col">
+         {/* Priority Filter Bar */}
+         <div className="p-3 border-b dark:border-[#1A1A24] space-y-2">
+           <div className="flex items-center justify-between">
+             <h3 className="text-xs font-black dark:text-[#7A7A85] uppercase tracking-widest font-mono">📧 Inbox</h3>
+             <div className="flex gap-1 text-[9px] font-mono">
+               {['IMMEDIATE', 'URGENT', 'NORMAL', 'INFO'].map(p => (
+                 <button
+                   key={p}
+                   onClick={() => setFilter(filter === p ? 'All' : p)}
+                   className={`px-1.5 py-0.5 rounded font-bold transition-colors ${
+                     filter === p
+                       ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
+                       : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] hover:dark:bg-[#2A2A3A]'
+                   }`}
+                 >
+                   {getPriorityConfig(p).label.split(' ')[0]} {priorityCounts[p] > 0 && priorityCounts[p]}
+                 </button>
+               ))}
+             </div>
+           </div>
+           <div className="flex gap-2 text-[10px] font-mono">
+             {['All', 'Unread'].map(f => (
+               <button
+                 key={f}
+                 onClick={() => setFilter(f)}
+                 className={`px-2 py-0.5 rounded ${filter === f ? 'dark:bg-[#00FF88]/20 dark:text-[#00FF88] text-blue-600' : 'dark:text-[#7A7A85] hover:dark:text-[#E0E0E6]'}`}
+               >
+                 {f}
+               </button>
+             ))}
+             <span className="dark:text-[#7A7A85]">|</span>
+             <select
+               value={filter}
+               onChange={(e) => setFilter(e.target.value)}
+               className="text-[10px] dark:bg-[#1A1A24] dark:text-[#E0E0E6] rounded px-1 py-0.5"
+             >
+               <option value="All">Priority ↓</option>
+               <option value="IMMEDIATE">🔴 IMMEDIATE</option>
+               <option value="URGENT">🟠 URGENT</option>
+               <option value="NORMAL">🟡 NORMAL</option>
+               <option value="INFO">🟢 INFO</option>
+             </select>
+           </div>
+         </div>
+
+         {/* Bulk Actions Bar */}
         {selectedForBulk.size > 0 && (
           <div className="p-3 border-b dark:border-[#1A1A24] bg-[#00FF88]/5 space-y-2">
             <div className="flex items-center justify-between">
@@ -290,70 +386,112 @@ export default function Emails() {
           </button>
         )}
 
-        {/* Email List */}
-        <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <Loader2 className="animate-spin text-[#00FF88]" />
-            <p className="text-[10px] font-mono dark:text-[#7A7A85]">SCANNING VAULT...</p>
-          </div>
-        ) : error ? (
-          <div className="p-4 text-center text-red-400 text-xs font-mono">
-            <AlertCircle className="mx-auto mb-2" size={20} />
-            {error}
-          </div>
-        ) : emails.length > 0 ? (
-          emails.map(email => (
-            <div
-              key={email.id}
-              onClick={() => {
-                setSelectedEmail(email)
-                setShowReply(false)
-                setReplySuccess(false)
-              }}
-              className={`
-                px-4 py-4 border-b dark:border-[#1A1A24] cursor-pointer transition-all relative group
-                ${selectedEmail?.id === email.id
-                  ? 'dark:bg-[#1A1A24] border-l-4 border-l-[#00FF88]'
-                  : 'hover:dark:bg-[#1A1A24]/50 border-l-4 border-l-transparent'
-                }
-                ${selectedForBulk.has(email.id) ? 'dark:bg-[#00FF88]/5' : ''}
-              `}
-            >
-              <div className="flex items-start gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleBulkSelect(email.id)
-                  }}
-                  className="mt-1 flex-shrink-0"
-                >
-                  {selectedForBulk.has(email.id) ? (
-                    <CheckSquare size={14} className="dark:text-[#00FF88]" />
-                  ) : (
-                    <Square size={14} className="dark:text-[#7A7A85] opacity-0 group-hover:opacity-100 transition-opacity" />
-                  )}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${getPriorityColor(email.priority || email.frontmatter?.priority)}`}>
-                      {email.priority || email.frontmatter?.priority || 'normal'}
-                    </span>
-                    <span className="text-[9px] dark:text-[#7A7A85] font-mono">
-                      {new Date(email.time || email.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p className="font-bold dark:text-[#E0E0E6] text-sm truncate mb-0.5">
-                    {email.from || email.frontmatter?.from || 'Unknown'}
-                  </p>
-                  <p className="text-xs dark:text-[#7A7A85] truncate">
-                    {email.subject || email.frontmatter?.subject || 'No subject'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
+        {/* Email List - content-visibility for rendering performance (rendering-content-visibility) */}
+        <div className="flex-1 overflow-y-auto content-visibility-auto" style={{ containIntrinsicSize: '0 5000px' }}>
+         {loading ? (
+           <div className="flex flex-col items-center justify-center py-20 space-y-4">
+             <Loader2 className="animate-spin text-[#00FF88]" />
+             <p className="text-[10px] font-mono dark:text-[#7A7A85]">SCANNING VAULT...</p>
+           </div>
+         ) : error ? (
+           <div className="p-4 text-center text-red-400 text-xs font-mono">
+             <AlertCircle className="mx-auto mb-2" size={20} />
+             {error}
+           </div>
+         ) : filteredEmails.length > 0 ? (
+           ['IMMEDIATE', 'URGENT', 'NORMAL', 'INFO'].map(priority => {
+             const priorityEmails = filteredEmails.filter(e => e.detectedPriority === priority)
+             if (priorityEmails.length === 0) return null
+             return (
+               <div key={priority}>
+                 <div className={`text-[9px] font-black px-4 py-1 uppercase tracking-widest ${getPriorityConfig(priority).className}`}>
+                   {getPriorityConfig(priority).label} ({priorityEmails.length})
+                 </div>
+                 {priorityEmails.map(email => (
+                   <div
+                     key={email.id}
+                     onClick={() => {
+                       setSelectedEmail(email)
+                       setShowReply(false)
+                       setReplySuccess(false)
+                     }}
+                     className={`
+                       px-4 py-4 border-b dark:border-[#1A1A24] cursor-pointer transition-all relative group
+                       ${selectedEmail?.id === email.id
+                         ? 'dark:bg-[#1A1A24] border-l-4 border-l-[#00FF88]'
+                         : 'hover:dark:bg-[#1A1A24]/50 border-l-4 border-l-transparent'
+                       }
+                       ${selectedForBulk.has(email.id) ? 'dark:bg-[#00FF88]/5' : ''}
+                     `}
+                   >
+                     <div className="flex items-start gap-2">
+                       <button
+                         onClick={(e) => {
+                           e.stopPropagation()
+                           toggleBulkSelect(email.id)
+                         }}
+                         className="mt-1 flex-shrink-0"
+                       >
+                         {selectedForBulk.has(email.id) ? (
+                           <CheckSquare size={14} className="dark:text-[#00FF88]" />
+                         ) : (
+                           <Square size={14} className="dark:text-[#7A7A85] opacity-0 group-hover:opacity-100 transition-opacity" />
+                         )}
+                       </button>
+                       <div className="flex-1 min-w-0">
+                         <div className="flex items-center justify-between mb-1">
+                           <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${getPriorityColor(email.detectedPriority)}`}>
+                             {email.detectedPriority}
+                           </span>
+                           <span className="text-[9px] dark:text-[#7A7A85] font-mono">
+                             {new Date(email.time || email.createdAt).toLocaleDateString()}
+                           </span>
+                         </div>
+                         <p className="font-bold dark:text-[#E0E0E6] text-sm truncate mb-0.5">
+                           {email.from || email.frontmatter?.from || 'Unknown'}
+                         </p>
+                         <p className="text-xs dark:text-[#7A7A85] truncate">
+                           {email.subject || email.frontmatter?.subject || 'No subject'}
+                         </p>
+                         <div className="flex gap-1 mt-2">
+                           <button
+                             onClick={(e) => {
+                               e.stopPropagation()
+                               setSelectedEmail(email)
+                               setShowReply(true)
+                             }}
+                             className="text-[9px] px-2 py-0.5 rounded dark:bg-[#1A1A24] dark:text-[#00FF88] hover:dark:bg-[#2A2A3A] transition-colors"
+                           >
+                             Reply
+                           </button>
+                           <button
+                             onClick={(e) => {
+                               e.stopPropagation()
+                               // Forward to WhatsApp
+                               window.open(`https://wa.me/?text=${encodeURIComponent(`From: ${email.from}\nSubject: ${email.subject}\n\n${email.body?.slice(0, 200)}`)}`, '_blank')
+                             }}
+                             className="text-[9px] px-2 py-0.5 rounded dark:bg-[#1A1A24] dark:text-green-400 hover:dark:bg-[#2A2A3A] transition-colors"
+                           >
+                             WhatsApp
+                           </button>
+                           <button
+                             onClick={(e) => {
+                               e.stopPropagation()
+                               // Mark as read logic
+                             }}
+                             className="text-[9px] px-2 py-0.5 rounded dark:bg-[#1A1A24] dark:text-[#7A7A85] hover:dark:bg-[#2A2A3A] transition-colors"
+                           >
+                             Mark Read
+                           </button>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             )
+           })
+         ) : (
           <div className="p-12 text-center text-[#7A7A85] font-mono italic text-xs">
             NO EMAILS FOUND
           </div>
@@ -395,7 +533,7 @@ export default function Emails() {
                     </div>
                     {selectedEmail.priority || selectedEmail.frontmatter?.priority ? (
                       <span className={`text-xs font-bold px-2 py-0.5 rounded ${getPriorityColor(selectedEmail.priority || selectedEmail.frontmatter?.priority)}`}>
-                        {(selectedEmail.priority || selectedEmail.frontmatter?.priority).toUpperCase()}
+                        {(selectedEmail.priority || selectedEmail.frontmatter?.priority || '').toUpperCase()}
                       </span>
                     ) : null}
                   </div>

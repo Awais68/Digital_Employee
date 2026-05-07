@@ -178,7 +178,7 @@ async def send_whatsapp_message(phone: str, message: str):
                         sent = True
                         print(f"{GREEN}   ✅ Message sent via selector!{RESET}")
                         break
-                except:
+                except Exception:
                     continue
             
             if not sent:
@@ -229,12 +229,12 @@ async def send_whatsapp_message(phone: str, message: str):
             try:
                 await context.close()
                 print(f"{GREEN}💾 Session saved{RESET}")
-            except:
+            except Exception:
                 pass
         if pw:
             try:
                 await pw.stop()
-            except:
+            except Exception:
                 pass
 
 

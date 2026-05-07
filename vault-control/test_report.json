@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-05-06T14:57:57.749729",
+  "passed": 7,
+  "failed": 1,
+  "results": [
+    {
+      "test": "Frontend Load",
+      "status": "PASS",
+      "detail": "Title: Vault Control - AI Employee Dashboard"
+    },
+    {
+      "test": "Login",
+      "status": "PASS",
+      "detail": "Already logged in"
+    },
+    {
+      "test": "Dashboard Data",
+      "status": "PASS",
+      "detail": "Stats visible"
+    },
+    {
+      "test": "API Workers",
+      "status": "PASS",
+      "detail": "Found 1 workers"
+    },
+    {
+      "test": "Social Queue",
+      "status": "FAIL",
+      "detail": "Locator.is_visible: Error: strict mode violation: locator(\"text=SIGN IN\") resolved to 2 elements:\n    1) <p class=\"text-sm dark:text-[#7A7A85] text-gray-600 mt-2\">Sign in to continue</p> aka get_by_text(\"Sign in to continue\")\n    2) <button type=\"submit\" class=\"w-full py-3 rounded-lg font-bold dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white disabled:opacity-50 transition-all\">SIGN IN</button> aka get_by_role(\"button\", name=\"SIGN IN\")\n\nCall log:\n    - checking visibility of locator(\"text=SIGN IN\")\n"
+    },
+    {
+      "test": "Delete Post",
+      "status": "SKIP",
+      "detail": "No delete button found"
+    },
+    {
+      "test": "Publish Post",
+      "status": "SKIP",
+      "detail": "No publish button visible"
+    },
+    {
+      "test": "Emails Tab",
+      "status": "PASS",
+      "detail": "Email items: 0"
+    },
+    {
+      "test": "WebSocket",
+      "status": "PASS",
+      "detail": "Connected"
+    },
+    {
+      "test": "API Rate Limit",
+      "status": "PASS",
+      "detail": "5/5 requests succeeded"
+    }
+  ]
+}

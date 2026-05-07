@@ -22,10 +22,8 @@ Author: Digital Employee System
 Version: 1.0
 """
 
-import os
 import sys
 import subprocess
-import shutil
 from pathlib import Path
 from datetime import datetime
 

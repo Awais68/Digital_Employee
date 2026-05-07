@@ -3,17 +3,21 @@ import react from '@vitejs/plugin-react'
 
 const SERVER_PORTS = [3000, 3001, 3002, 3003]
 
-function findServerPort(ports, index = 0) {
+async function findServerPort(ports, index = 0) {
   if (index >= ports.length) return ports[0]
-  const net = require('net')
+  
+  // Use dynamic import for Node.js net module (Vite-compatible)
+  const { createConnection } = await import('net')
+  
   return new Promise((resolve) => {
-    const socket = net.createConnection({ port: ports[index], host: 'localhost' })
+    const socket = createConnection({ port: ports[index], host: 'localhost' })
     socket.on('connect', () => {
       socket.end()
       console.log(`[Vite Proxy] Backend found on port ${ports[index]}`)
       resolve(ports[index])
     })
     socket.on('error', () => {
+      socket.destroy()
       resolve(findServerPort(ports, index + 1))
     })
   })

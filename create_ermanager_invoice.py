@@ -70,7 +70,7 @@ def create_ermanager_invoice():
     currency_id = company[0]['currency_id'][0] if company else None
     
     # Step 4: Create invoice
-    print(f"\n📄 Creating invoice for ERMANAGER - Odoo Integration ($5000)...")
+    print("\n📄 Creating invoice for ERMANAGER - Odoo Integration ($5000)...")
     invoice_vals = {
         'move_type': 'out_invoice',
         'partner_id': customer_id,
@@ -94,13 +94,13 @@ def create_ermanager_invoice():
         print(f"✅ Invoice created! ID: {invoice_id}")
         
         # Post/Validate the invoice
-        print(f"📤 Posting invoice...")
+        print("📤 Posting invoice...")
         models.execute_kw(
             ODOO_DB, uid, ODOO_PASSWORD,
             'account.move', 'action_post',
             [[invoice_id]]
         )
-        print(f"✅ Invoice posted successfully!")
+        print("✅ Invoice posted successfully!")
         return True
     except Exception as e:
         print(f"❌ Error creating/posting invoice: {str(e)}")

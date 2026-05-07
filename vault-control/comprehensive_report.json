@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-05-06T15:09:16.243655",
+  "passed": 6,
+  "failed": 0,
+  "results": [
+    {
+      "test": "Frontend Load",
+      "status": "PASS",
+      "detail": "Title: Vault Control - AI Employee Dashboard"
+    },
+    {
+      "test": "Login",
+      "status": "PASS",
+      "detail": "Logged in successfully"
+    },
+    {
+      "test": "Dashboard Data",
+      "status": "PASS",
+      "detail": "Stats visible"
+    },
+    {
+      "test": "API Workers",
+      "status": "PASS",
+      "detail": "Found 1 workers"
+    },
+    {
+      "test": "Social Queue",
+      "status": "PASS",
+      "detail": "Found 15 posts in queue"
+    },
+    {
+      "test": "WebSocket",
+      "status": "PASS",
+      "detail": "Connected"
+    }
+  ]
+}

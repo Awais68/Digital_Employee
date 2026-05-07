@@ -6,7 +6,6 @@ Sends comprehensive report via email including all task status.
 """
 
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
 
@@ -217,7 +216,7 @@ try:
     if result.get("success"):
         print("✅ Email report sent successfully!")
         print(f"   To: {recipient_email}")
-        print(f"   Subject: Digital FTE Test Report")
+        print("   Subject: Digital FTE Test Report")
         print()
         print("=" * 70)
         print("  TASK COMPLETION SUMMARY")

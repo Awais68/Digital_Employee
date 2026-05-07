@@ -83,5 +83,5 @@ except ConnectionRefusedError:
 except Exception as e:
     print(f"\n   ❌ Error: {str(e)}")
     import traceback
-    print(f"\n   Full traceback:")
+    print("\n   Full traceback:")
     print(traceback.format_exc())

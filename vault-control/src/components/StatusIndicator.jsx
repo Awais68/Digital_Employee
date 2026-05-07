@@ -1,4 +1,4 @@
-import { Zap, RotateCw, Trash2 } from 'lucide-react'
+import { RotateCw, Trash2 } from 'lucide-react'
 
 export default function StatusIndicator({ service, status, uptime, lastActivity }) {
   const statusColor = {

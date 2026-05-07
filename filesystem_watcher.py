@@ -14,7 +14,6 @@ Usage:
     python filesystem_watcher.py --status     # Check if running
 """
 
-import os
 import shutil
 import logging
 import subprocess
@@ -22,7 +21,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileModifiedEvent
+from watchdog.events import FileSystemEventHandler
 
 # Configuration
 VAULT_ROOT = Path(__file__).parent.resolve()
@@ -311,14 +310,14 @@ def start_watcher_in_tmux():
     subprocess.run(cmd, check=True)
     print(f"✓ Watcher started in tmux session '{TMUX_SESSION_NAME}'")
     print(f"  Attach with: tmux attach -t {TMUX_SESSION_NAME}")
-    print(f"  Detach with: Ctrl+b, then d")
+    print("  Detach with: Ctrl+b, then d")
     print(f"  Stop with:   python3 {script_path} --stop")
 
 
 def stop_watcher_in_tmux():
     """Stop the watcher tmux session."""
     if not is_watcher_running():
-        print(f"✗ Watcher is not running")
+        print("✗ Watcher is not running")
         return
 
     try:
@@ -335,7 +334,7 @@ def stop_watcher_in_tmux():
             ["tmux", "kill-session", "-t", TMUX_SESSION_NAME],
             check=True
         )
-        print(f"✓ Watcher stopped")
+        print("✓ Watcher stopped")
     except subprocess.CalledProcessError as e:
         print(f"✗ Error stopping watcher: {e}")
         # Force kill if graceful stop fails
@@ -344,7 +343,7 @@ def stop_watcher_in_tmux():
                 ["tmux", "kill-session", "-t", TMUX_SESSION_NAME],
                 check=True
             )
-            print(f"✓ Watcher force-killed")
+            print("✓ Watcher force-killed")
         except subprocess.CalledProcessError:
             pass
 
@@ -356,7 +355,7 @@ def show_status():
         print(f"  Logs: {LOG_FILE}")
         print(f"  Attach: tmux attach -t {TMUX_SESSION_NAME}")
     else:
-        print(f"✗ Watcher is NOT running")
+        print("✗ Watcher is NOT running")
         print(f"  Start: python3 {Path(__file__).name} --start")
 
 

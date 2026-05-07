@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -29,7 +28,7 @@ INSTA_IMAGE = str(BASE_DIR / "instagram_post_20260420.jpg")
 
 print("=" * 80)
 print("🚀 COMPREHENSIVE SYSTEM TEST STARTING...")
-print(f"📍 Target: ERM Solutions - ERP System for Geneva")
+print("📍 Target: ERM Solutions - ERP System for Geneva")
 print("=" * 80)
 
 results = {

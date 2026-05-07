@@ -77,7 +77,7 @@ with sync_playwright() as p:
         try:
             count = elem.count()
             print(f"   {name}: {count}")
-        except:
+        except Exception:
             print(f"   {name}: error")
     
     # Try clicking and waiting for menu

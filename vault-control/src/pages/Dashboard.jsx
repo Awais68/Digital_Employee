@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { useWebSocket } from '../hooks/useWebSocket'
 import {
   TrendingUp, TrendingDown, MessageSquare, Mail,
   Linkedin, Twitter, Facebook, Instagram, RefreshCw, Loader2, AlertCircle,
@@ -20,9 +21,10 @@ const platforms = [
   { name: 'Twitter',   icon: Twitter,        color: '#1DA1F2', inboxKey: 'Twitter',   doneKey: null, page: 'social' },
 ]
 
-// ─── Pokémon-style stat bar ────────────────────────────────────────────────────
+// ─── Pokémon-style stat bar (memoized to avoid unnecessary re-renders) ─────
+// Rule: rerender-memo - Extract expensive work into memoized components
 
-function StatBar({ label, value, maxValue = 100, color }) {
+const StatBar = React.memo(function StatBar({ label, value, maxValue = 100, color }) {
   const percentage = Math.min((value / maxValue) * 100, 100)
   return (
     <div className="mb-3">
@@ -44,7 +46,7 @@ function StatBar({ label, value, maxValue = 100, color }) {
       </div>
     </div>
   )
-}
+})
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────────
 
@@ -54,13 +56,21 @@ export default function Dashboard({ setCurrentPage }) {
   const [pendingApprovals, setPendingApprovals] = useState([])
   const [recentActivity,   setRecentActivity]   = useState([])
   const [loading,          setLoading]          = useState(true)
-  const [wsConnected,      setWsConnected]      = useState(false)
   const [lastUpdate,       setLastUpdate]       = useState(new Date())
   const [error,            setError]            = useState(null)
   const [workers,          setWorkers]          = useState({})
   const [workerLoading,    setWorkerLoading]    = useState(false)
   const [autoPublishing,   setAutoPublishing]   = useState(false)
   const [publishResult,    setPublishResult]    = useState(null)
+  const { isConnected: wsConnected } = useWebSocket((message) => {
+    if (message.type === 'dashboard_update' || message.type === 'initial_state') {
+      if (message.vaultCounts)      setVaultCounts(message.vaultCounts)
+      if (message.services)         setServices(message.services)
+      if (message.pendingApprovals) setPendingApprovals(message.pendingApprovals)
+      if (message.recentActivity)   setRecentActivity(message.recentActivity)
+      setLastUpdate(new Date())
+    }
+  })
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -133,99 +143,40 @@ export default function Dashboard({ setCurrentPage }) {
     } finally {
       setAutoPublishing(false)
     }
-  }
+   }
 
-  // Fetch worker status on mount
+  // Fetch worker status on mount (async-parallel: parallelize independent fetches)
   useEffect(() => {
-    fetchWorkerStatus()
-    const interval = setInterval(fetchWorkerStatus, 30000)
-    return () => clearInterval(interval)
+    let cancelled = false
+    if (!cancelled) fetchWorkerStatus()
+    const interval = setInterval(() => {
+      if (!cancelled) fetchWorkerStatus()
+    }, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [fetchWorkerStatus])
 
-  // ── WebSocket ──────────────────────────────────────────────────────────────
-
+  // Fetch stats with polling every 10s
   useEffect(() => {
-    fetchDashboardData()
-
-    // Connect to WebSocket server - try multiple ports
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const hostname = window.location.hostname
-    const wsPorts = ['3000', '3001', '3002', '3003']
-    
-    let ws = null
-    let reconnectTimer = null
-    let retryCount = 0
-    let currentPortIndex = 0
-    const maxRetries = 10
-
-    const tryConnect = () => {
-      if (currentPortIndex >= wsPorts.length) {
-        console.error('[WebSocket] All ports failed, waiting to retry...')
-        currentPortIndex = 0
-        reconnectTimer = setTimeout(tryConnect, 10000)
-        return
-      }
-
-      const wsUrl = `${protocol}//${hostname}:${wsPorts[currentPortIndex]}`
-      console.log(`[WebSocket] Trying ${wsUrl}...`)
-      ws = new WebSocket(wsUrl)
-
-      ws.onopen = () => {
-        setWsConnected(true)
-        retryCount = 0
-        console.log(`[WebSocket] Connected on port ${wsPorts[currentPortIndex]}`)
-      }
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data)
-          if (message.type === 'dashboard_update' || message.type === 'initial_state') {
-            if (message.vaultCounts)      setVaultCounts(message.vaultCounts)
-            if (message.services)         setServices(message.services)
-            if (message.pendingApprovals) setPendingApprovals(message.pendingApprovals)
-            if (message.recentActivity)   setRecentActivity(message.recentActivity)
-            setLastUpdate(new Date())
-          }
-        } catch (err) {
-          console.error('Failed to parse WebSocket message:', err)
-        }
-      }
-
-      ws.onclose = () => {
-        setWsConnected(false)
-        currentPortIndex++
-        
-        if (retryCount < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 30000)
-          retryCount++
-          console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${retryCount}/${maxRetries})`)
-          reconnectTimer = setTimeout(tryConnect, delay)
-        }
-      }
-
-      ws.onerror = (error) => {
-        console.error('[WebSocket] Error:', error)
-      }
-    }
-
-    tryConnect()
-
+    let cancelled = false
+    if (!cancelled) fetchDashboardData()
+    const interval = setInterval(() => {
+      if (!cancelled) fetchDashboardData()
+    }, 10000)
     return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      ws.close()
+      cancelled = true
+      clearInterval(interval)
     }
   }, [fetchDashboardData])
 
-  // ── Platform Activity (real data only, no Math.random) ────────────────────
+  // ── Memoize expensive derived state (rerender-derived-state-no-effect) ───
 
-  const getPlatformActivity = () =>
+  const platformActivity = useMemo(() =>
     platforms.map(platform => {
-      // incoming = that platform's vault folder count (0 if folder doesn't exist)
       const incoming = vaultCounts[platform.inboxKey] || 0
-
-      // outgoing = real done/posted count if mapped, otherwise 0 (no fake data)
       const outgoing = platform.doneKey ? (vaultCounts[platform.doneKey] || 0) : 0
-
       return {
         name:     platform.name,
         icon:     platform.icon,
@@ -235,21 +186,23 @@ export default function Dashboard({ setCurrentPage }) {
         trend:    incoming > 5 ? 'up' : 'stable',
       }
     })
+  , [vaultCounts])
 
-  const platformActivity = getPlatformActivity()
+  const barData = useMemo(() =>
+    [...platformActivity]
+      .map(p => ({ name: p.name, value: p.incoming, fill: p.color }))
+      .sort((a, b) => b.value - a.value)
+  , [platformActivity])
 
-  const barData = [...platformActivity]
-    .map(p => ({ name: p.name, value: p.incoming, fill: p.color }))
-    .sort((a, b) => b.value - a.value)
-
-  // Line chart data: derive from recent activity timestamps
-  const getTrendData = () => {
+  // Memoize chart data (expensive computations)
+  const { trendData, pieData, funnelData } = useMemo(() => {
+    const now = Date.now() // Capture once at top (react-hooks/purity)
     const hours = ['12h ago', '10h', '8h', '6h', '4h', '2h', 'Now']
     const distribution = Array(hours.length).fill(0).map(() => ({ approvals: 0, emails: 0, social: 0 }))
     
     recentActivity.forEach(activity => {
-      const activityTime = new Date(activity.timestamp || Date.now())
-      const hoursAgo = Math.floor((Date.now() - activityTime.getTime()) / (1000 * 60 * 60))
+      const activityTime = new Date(activity.timestamp || now)
+      const hoursAgo = Math.floor((now - activityTime.getTime()) / (1000 * 60 * 60))
       const index = Math.min(Math.floor(hoursAgo / 2), hours.length - 1)
       
       if (index >= 0 && index < hours.length) {
@@ -261,22 +214,18 @@ export default function Dashboard({ setCurrentPage }) {
         } else if (type.includes('social') || type.includes('post') || type.includes('linkedin') || type.includes('twitter')) {
           distribution[index].social++
         } else {
-          // Default: add to approvals as general activity
           distribution[index].approvals++
         }
       }
     })
 
-    return hours.map((hour, i) => ({
+    const trendData = hours.map((hour, i) => ({
       time: hour,
       Approvals: distribution[i].approvals,
       Emails: distribution[i].emails,
       Social: distribution[i].social,
     }))
-  }
 
-  // Pie chart data: action type distribution
-  const getPieData = () => {
     const typeCounts = {}
     recentActivity.forEach(activity => {
       const type = activity.action || activity.type || 'other'
@@ -284,21 +233,21 @@ export default function Dashboard({ setCurrentPage }) {
     })
 
     const colors = ['#00FF88', '#1DA1F2', '#FFB800', '#EA4335', '#8B5CF6', '#10B981']
-    return Object.entries(typeCounts)
+    const pieData = Object.entries(typeCounts)
       .map(([name, value], i) => ({ name: name.replace(/_/g, ' '), value, fill: colors[i % colors.length] }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6)
-  }
 
-  const funnelData = [
-    { stage: 'Inbox',     value: vaultCounts['Inbox']            || 0, fill: '#00FF88' },
-    { stage: 'Pending',   value: vaultCounts['Pending_Approval'] || 0, fill: '#00D966' },
-    { stage: 'Approved',  value: vaultCounts['Approved']         || 0, fill: '#00B050' },
-    { stage: 'Completed', value: vaultCounts['Done']             || 0, fill: '#008800' },
-  ]
+    const funnelData = [
+      { stage: 'Inbox',     value: vaultCounts['Inbox']            || 0, fill: '#00FF88' },
+      { stage: 'Pending',   value: vaultCounts['Pending_Approval'] || 0, fill: '#00D966' },
+      { stage: 'Approved',  value: vaultCounts['Approved']         || 0, fill: '#00B050' },
+      { stage: 'Completed', value: vaultCounts['Done']             || 0, fill: '#008800' },
+    ]
 
-  const trendData = getTrendData()
-  const pieData = getPieData()
+    return { trendData, pieData, funnelData }
+  }, [recentActivity, vaultCounts])
+
   const totalActivities = recentActivity.length
 
   const handleRefresh = async () => {
@@ -480,7 +429,7 @@ export default function Dashboard({ setCurrentPage }) {
           return (
             <div
               key={stat.label}
-              onClick={() => stat.action && setCurrentPage?.(stat.action)}
+              onClick={() => stat.action ? setCurrentPage?.(stat.action) : undefined}
               className={`card p-4 border ${stat.border} ${stat.action ? 'cursor-pointer hover:scale-[1.02] transition-all' : ''}`}
             >
               <div className="flex items-center justify-between">
@@ -667,7 +616,7 @@ export default function Dashboard({ setCurrentPage }) {
           RECENT ACTIVITY
         </h2>
         {recentActivity.length > 0 ? (
-          <div className="space-y-3 max-h-80 overflow-auto pr-2">
+          <div className="space-y-3 max-h-80 overflow-auto pr-2 content-visibility-auto" style={{ containIntrinsicSize: '0 1500px' }}>
             {recentActivity.slice(0, 15).map((activity, i) => {
               const action = activity.action || activity.type || 'unknown'
               const isSuccess = activity.status === 'success' || action.includes('approve')

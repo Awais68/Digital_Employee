@@ -8,7 +8,6 @@ Opens WhatsApp Web, lets you scan QR code, then saves session cookies.
 import sys
 import json
 from pathlib import Path
-from datetime import datetime
 
 try:
     from playwright.sync_api import sync_playwright
@@ -103,7 +102,7 @@ def save_whatsapp_session():
         if browser:
             try:
                 browser.close()
-            except:
+            except Exception:
                 pass
         print(f"\n{RED}❌ Error: {e}{RESET}")
         import traceback

@@ -11,7 +11,6 @@ Usage:
     python3 test_social_posts.py
 """
 
-import os
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -60,9 +59,9 @@ def create_test_linkedin_post():
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(TEST_LINKEDIN_POST)
     
-    print(f"✅ Created test LinkedIn request:")
+    print("✅ Created test LinkedIn request:")
     print(f"   File: {filepath.name}")
-    print(f"   Location: Needs_Action/")
+    print("   Location: Needs_Action/")
     
     return filepath
 
@@ -87,9 +86,9 @@ def run_orchestrator():
         if pending_dir.exists():
             linkedin_drafts = list(pending_dir.glob("LINKEDIN_POST_*.md"))
             if linkedin_drafts:
-                print(f"✅ LinkedIn draft created:")
+                print("✅ LinkedIn draft created:")
                 print(f"   File: {linkedin_drafts[0].name}")
-                print(f"   Location: Pending_Approval/")
+                print("   Location: Pending_Approval/")
                 return linkedin_drafts[0]
         
         print("⚠️  No LinkedIn draft found in Pending_Approval/")
@@ -123,7 +122,7 @@ Key Features:
         result = create_post(content=test_content, dry_run=True)
         
         if result.get("success"):
-            print(f"✅ Post created successfully (dry-run)")
+            print("✅ Post created successfully (dry-run)")
             print(f"   Message: {result['message']}")
             print(f"   Post ID: {result.get('post_id', 'N/A')}")
             return True
@@ -143,7 +142,7 @@ def test_complete_workflow():
     print("=" * 70)
     
     # Test 1: Create post request
-    test_file = create_test_linkedin_post()
+    create_test_linkedin_post()
     
     # Test 2: Run orchestrator
     draft_file = run_orchestrator()
@@ -155,7 +154,7 @@ def test_complete_workflow():
     print("\n" + "=" * 70)
     print("  TEST SUMMARY")
     print("=" * 70)
-    print(f"  LinkedIn Post Request: ✅ Created")
+    print("  LinkedIn Post Request: ✅ Created")
     print(f"  Orchestrator Processing: {'✅ Success' if draft_file else '⚠️  Partial'}")
     print(f"  LinkedIn MCP (Dry-Run): {'✅ Success' if mcp_success else '❌ Failed'}")
     print("=" * 70)

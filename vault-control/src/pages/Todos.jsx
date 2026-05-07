@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Plus, Trash2, CheckCircle2, Circle, Edit2, Search, Filter,
   Calendar, GripVertical, Loader2, AlertCircle, Save, X, ChevronUp, ChevronDown,
@@ -7,6 +7,7 @@ import {
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
 
+// Priority helpers (can be memoized if needed, but they're simple expressions)
 const getPriorityColor = (priority) => {
   switch (priority) {
     case 'high': return 'dark:bg-red-500/20 dark:text-red-400 bg-red-50 text-red-600'
@@ -272,8 +273,8 @@ export default function Todos() {
     }
   }
 
-  // Apply filters and sorting
-  const getFilteredTodos = useCallback(() => {
+  // Apply filters and sorting (memoized with useMemo - rerender-derived-state-no-effect)
+  const { filteredTodos, completedCount, pendingCount } = useMemo(() => {
     let filtered = todos
       .filter(todo => {
         if (filter === 'completed') return todo.completed
@@ -310,12 +311,11 @@ export default function Todos() {
       }
     })
 
-    return filtered
-  }, [todos, filter, priorityFilter, searchQuery, sortBy])
+    const completedCount = todos.filter(t => t.completed).length
+    const pendingCount = todos.length - completedCount
 
-  const filteredTodos = getFilteredTodos()
-  const completedCount = todos.filter(t => t.completed).length
-  const pendingCount = todos.length - completedCount
+    return { filteredTodos: filtered, completedCount, pendingCount }
+  }, [todos, filter, priorityFilter, searchQuery, sortBy])
 
   const isOverdue = (dueDate) => {
     if (!dueDate) return false
@@ -502,7 +502,7 @@ export default function Todos() {
         </div>
       )}
 
-      {/* Todo List */}
+      {/* Todo List - content-visibility for rendering performance (rendering-content-visibility) */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Loader2 className="animate-spin text-[#00FF88]" size={24} />
@@ -532,7 +532,7 @@ export default function Todos() {
             </button>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 content-visibility-auto" style={{ containIntrinsicSize: '0 3000px' }}>
           {filteredTodos.map((todo, index) => (
             <div
               key={todo.id}
@@ -605,12 +605,12 @@ export default function Todos() {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold capitalize ${getPriorityColor(editingId === todo.id ? editPriority : todo.priority)}`}>
                     {editingId === todo.id ? editPriority : todo.priority}
                   </span>
-                  {todo.dueDate && (
+                  {todo.dueDate ? (
                     <span className={`text-[10px] flex items-center gap-1 ${isOverdue(todo.dueDate) && !todo.completed ? 'text-red-500 font-bold' : 'dark:text-[#7A7A85] text-gray-500'}`}>
                       <Calendar size={10} />
                       {isOverdue(todo.dueDate) && !todo.completed ? 'OVERDUE: ' : ''}{todo.dueDate}
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
 

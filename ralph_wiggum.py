@@ -376,7 +376,6 @@ def _fallback_to_llm_router(
         }
 
     start_time = time.time()
-    python = sys.executable or "python3"
 
     # Build system message
     system_msg = system_prompt or (
@@ -568,7 +567,7 @@ IMPORTANT: When you are certain the task is fully complete, output TASK_COMPLETE
             - results: list of per-iteration results
         """
         logger.separator()
-        logger.info(f"🧸 RALPH WIGGUM LOOP — Starting")
+        logger.info("🧸 RALPH WIGGUM LOOP — Starting")
         logger.separator()
         logger.info(f"📋 Task ID:     {self.task_id}")
         logger.info(f"📋 Max iters:   {self.max_iterations}")
@@ -642,7 +641,7 @@ IMPORTANT: When you are certain the task is fully complete, output TASK_COMPLETE
                 logger.info("💤 Pausing 2s before next iteration...")
                 time.sleep(2)
 
-        total_duration = time.time() - start_time
+        time.time() - start_time
 
         if not self.completed:
             logger.separator("⚠️")

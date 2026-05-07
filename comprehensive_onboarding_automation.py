@@ -5,10 +5,7 @@ comprehensive_onboarding_automation.py - Complete automation for Digital Employe
 
 import os
 import sys
-import json
-import time
 from pathlib import Path
-from datetime import datetime
 
 # Add root to sys.path
 BASE_DIR = Path(__file__).parent.resolve()

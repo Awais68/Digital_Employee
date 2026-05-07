@@ -95,3 +95,9 @@ html:not(.dark) {
   background: linear-gradient(to right, rgba(255,255,255,.1) 0%, rgba(255,255,255,.2) 20%, rgba(255,255,255,.1) 40%, rgba(255,255,255,.1) 100%);
   background-size: 1000px 100%;
 }
+
+/* Content visibility for long lists - improves rendering performance (rendering-content-visibility) */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 50px; /* Estimated size for each list item */
+}

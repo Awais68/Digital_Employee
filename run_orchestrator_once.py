@@ -55,10 +55,10 @@ def main():
         return 0  # Success exit code
         
     except ImportError as e:
-        print(f"\n❌ ERROR: Failed to import orchestrator")
+        print("\n❌ ERROR: Failed to import orchestrator")
         print(f"   Details: {e}")
         print(f"   Make sure orchestrator.py exists in: {BASE_DIR}")
-        print(f"\n   Stack trace:")
+        print("\n   Stack trace:")
         traceback.print_exc()
         return 1  # Error exit code
         
@@ -96,7 +96,7 @@ def main():
             with open(cron_log, "a", encoding="utf-8") as f:
                 f.write(f"\n## ❌ Error - {error_timestamp}\n\n")
                 f.write(f"**Error:** {e}\n\n")
-                f.write(f"**Stack Trace:**\n```\n")
+                f.write("**Stack Trace:**\n```\n")
                 f.write(traceback.format_exc())
                 f.write("```\n\n---\n")
         except Exception:

@@ -7,7 +7,6 @@ Loads WhatsApp Web with saved session and sends message directly.
 
 import sys
 import os
-import json
 from pathlib import Path
 from datetime import datetime
 
@@ -120,7 +119,7 @@ def send_whatsapp_via_web(phone: str, message: str) -> dict:
                             continue_clicked = True
                             print(f"{GREEN}   ✅ Continue button clicked{RESET}")
                             break
-                    except:
+                    except Exception:
                         continue
                 
                 if not continue_clicked:
@@ -168,7 +167,7 @@ def send_whatsapp_via_web(phone: str, message: str) -> dict:
                             sent = True
                             print(f"{GREEN}   ✅ Message sent via selector: {selector}{RESET}")
                             break
-                    except:
+                    except Exception:
                         continue
                 
                 if not sent:
@@ -215,7 +214,7 @@ def send_whatsapp_via_web(phone: str, message: str) -> dict:
         if browser:
             try:
                 browser.close()
-            except:
+            except Exception:
                 pass
         return {
             "success": False,

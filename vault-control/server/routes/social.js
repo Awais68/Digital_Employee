@@ -210,20 +210,53 @@ router.post('/draft', (req, res) => {
 router.delete('/draft/:id', (req, res) => {
   try {
     const { id } = req.params
-    const filePath = getVaultPath('Pending_Approval', `${id}.md`)
+    const folders = ['Pending_Approval', 'Approved', 'Done']
+    let deleted = false
+    let deletedFolder = null
     
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath)
-      if (global.broadcast) {
-        global.broadcast({ type: 'approval_changed', action: 'deleted', id })
+    for (const folder of folders) {
+      const filePath = path.join(getVaultPath(folder), `${id}.md`)
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+        deleted = true
+        deletedFolder = folder
+        break
       }
-      res.json({ success: true, message: 'Draft deleted' })
-    } else {
-      res.status(404).json({ error: 'Draft not found' })
     }
+    
+    if (!deleted) {
+      // Also try with timestamp-based filename format
+      const allFolders = ['Pending_Approval', 'Approved', 'Done']
+      for (const folder of allFolders) {
+        const dirPath = getVaultPath(folder)
+        if (fs.existsSync(dirPath)) {
+          const files = fs.readdirSync(dirPath)
+          const match = files.find(f => f.includes(id) || f === `${id}.md`)
+          if (match) {
+            fs.unlinkSync(path.join(dirPath, match))
+            deleted = true
+            deletedFolder = folder
+            break
+          }
+        }
+      }
+    }
+    
+    if (!deleted) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `File not found for id: ${id}` 
+      })
+    }
+    
+    if (global.broadcast) {
+      global.broadcast({ type: 'draft_deleted', id, folder: deletedFolder })
+    }
+    
+    res.json({ success: true, message: 'Draft deleted' })
   } catch (err) {
-    console.error('Error deleting draft:', err)
-    res.status(500).json({ error: 'Failed to delete draft', message: err.message })
+    console.error('[Delete] Error:', err)
+    res.status(500).json({ success: false, message: err.message })
   }
 })
 
@@ -231,17 +264,43 @@ router.delete('/draft/:id', (req, res) => {
 router.post('/draft/:id/publish', (req, res) => {
   try {
     const { id } = req.params
-    const pendingFilePath = path.join(getVaultPath('Pending_Approval'), `${id}.md`)
-    const approvedFilePath = path.join(getVaultPath('Approved'), `${id}.md`)
-
+    const folders = ['Approved', 'Pending_Approval']
     let sourcePath = null
-    if (fs.existsSync(approvedFilePath)) {
-      sourcePath = approvedFilePath
-    } else if (fs.existsSync(pendingFilePath)) {
-      sourcePath = pendingFilePath
-    } else {
-      return res.status(404).json({ success: false, message: 'Draft not found in Approved or Pending_Approval' })
+    let sourceFolder = null
+  
+    for (const folder of folders) {
+      const candidate = path.join(getVaultPath(folder), `${id}.md`)
+      if (fs.existsSync(candidate)) {
+        sourcePath = candidate
+        sourceFolder = folder
+        break
+      }
     }
+  
+    // Also try finding by partial id match
+    if (!sourcePath) {
+      for (const folder of folders) {
+        const dirPath = getVaultPath(folder)
+        if (!fs.existsSync(dirPath)) continue
+        const files = fs.readdirSync(dirPath)
+        const match = files.find(f => f.includes(id))
+        if (match) {
+          sourcePath = path.join(dirPath, match)
+          sourceFolder = folder
+          break
+        }
+      }
+    }
+  
+    if (!sourcePath) {
+      console.error('[Publish] File not found for id:', id)
+      return res.status(404).json({ 
+        success: false, 
+        message: `Post not found. ID: ${id}` 
+      })
+    }
+  
+    console.log('[Publish] Found file at:', sourcePath)
 
     const donePath = getVaultPath('Done')
     
@@ -250,14 +309,18 @@ router.post('/draft/:id/publish', (req, res) => {
     let platforms = []
     let content = fileContent.replace(/^---\n[\s\S]*?\n---/, '').trim()
     
-    const fmMatch = fileContent.match(/^---\n([\s\S]*?)\n---/)
-    if (fmMatch) {
-      const fm = fmMatch[1]
-      const platformsMatch = fm.match(/platforms?:\s*(.+)/)
-      if (platformsMatch) {
-        platforms = platformsMatch[1].split(',').map(p => p.trim().toLowerCase())
-      }
-    }
+     const fmMatch = fileContent.match(/^---\n([\s\S]*?)\n---/)
+     if (fmMatch) {
+       const fm = fmMatch[1]
+       const platformsMatch = fm.match(/platforms?:\s*(.+)/)
+       if (platformsMatch) {
+         platforms = platformsMatch[1]
+           .replace(/["'\[\]]/g, '') // strip quotes and brackets
+           .split(',')
+           .map(p => p.trim().toLowerCase())
+           .filter(Boolean)
+       }
+     }
     
     if (platforms.length === 0) {
       platforms = ['linkedin']

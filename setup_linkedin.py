@@ -14,7 +14,6 @@ Usage:
 
 import os
 import sys
-import json
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -209,9 +208,9 @@ This is a test post from my Digital Employee System.
     print_header("SETUP COMPLETE!")
     
     print("✅ Configuration Summary:")
-    print(f"   • Access Token: Configured")
+    print("   • Access Token: Configured")
     print(f"   • Person URN: {person_urn}")
-    print(f"   • Connection: Working")
+    print("   • Connection: Working")
     print()
     
     print("📝 Next Steps:")
