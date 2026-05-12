@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invoice - Solar Panel + iPhone 16 Pro Max</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; padding: 40px; }
+  .invoice { max-width: 800px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); overflow: hidden; }
+  .header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 40px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 32px; font-weight: 700; letter-spacing: 1px; }
+  .header .badge { background: #e94560; padding: 6px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+  .header .sub { color: #a0aec0; font-size: 14px; margin-top: 4px; }
+  .body { padding: 40px; }
+  .row { display: flex; justify-content: space-between; margin-bottom: 32px; }
+  .info h3 { color: #1a1a2e; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .info p { color: #4a5568; font-size: 15px; line-height: 1.6; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
+  th { text-align: left; padding: 12px 16px; background: #f7fafc; color: #1a1a2e; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0; }
+  td { padding: 16px; border-bottom: 1px solid #e2e8f0; color: #4a5568; font-size: 15px; }
+  td:last-child, th:last-child { text-align: right; }
+  td:nth-child(3), th:nth-child(3) { text-align: center; }
+  td:nth-child(4), th:nth-child(4) { text-align: right; }
+  .product-name { font-weight: 600; color: #1a1a2e; }
+  .product-desc { font-size: 13px; color: #718096; margin-top: 4px; }
+  .totals { margin-left: auto; width: 300px; }
+  .totals table { margin-bottom: 0; }
+  .totals td { border: none; padding: 8px 16px; }
+  .totals .label { color: #718096; font-size: 14px; }
+  .totals .value { text-align: right; color: #4a5568; font-size: 15px; }
+  .totals .grand-total td { font-size: 20px; font-weight: 700; color: #1a1a2e; border-top: 2px solid #1a1a2e; padding-top: 16px; }
+  .footer { background: #f7fafc; padding: 24px 40px; text-align: center; color: #a0aec0; font-size: 13px; border-top: 1px solid #e2e8f0; }
+  .footer strong { color: #4a5568; }
+  .status-paid { display: inline-block; background: #c6f6d5; color: #22543d; padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="invoice">
+  <div class="header">
+    <div>
+      <h1>INVOICE</h1>
+      <div class="sub">Digital Employee Solutions</div>
+    </div>
+    <div style="text-align:right">
+      <div class="badge">INV-2026-001</div>
+      <div class="sub" style="margin-top:6px">Date: May 13, 2026</div>
+    </div>
+  </div>
+  <div class="body">
+    <div class="row">
+      <div class="info">
+        <h3>Bill To</h3>
+        <p>
+          <strong>Ahmed Hassan</strong><br>
+          42 Green Energy Avenue<br>
+          Lahore, Punjab 54000<br>
+          Pakistan<br>
+          ahmed.hassan@email.com
+        </p>
+      </div>
+      <div class="info" style="text-align:right">
+        <h3>Invoice Details</h3>
+        <p>
+          <strong>Invoice #:</strong> INV-2026-001<br>
+          <strong>Date:</strong> May 13, 2026<br>
+          <strong>Due Date:</strong> June 12, 2026<br>
+          <strong>Status:</strong> <span class="status-paid">Paid</span>
+        </p>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:45%">Item</th>
+          <th style="width:10%">Qty</th>
+          <th style="width:20%">Unit Price</th>
+          <th style="width:25%">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="product-name">iPhone 16 Pro Max - 256GB</div>
+            <div class="product-desc">Desert Titanium • A18 Pro chip • 48MP camera system • 5G capable</div>
+          </td>
+          <td style="text-align:center">1</td>
+          <td style="text-align:right">$1,799.00</td>
+          <td style="text-align:right">$1,799.00</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="product-name">High-Efficiency Solar Panel 400W</div>
+            <div class="product-desc">Monocrystalline • 21.5% efficiency • 25-year warranty • Black frame</div>
+          </td>
+          <td style="text-align:center">1</td>
+          <td style="text-align:right">$1,200.00</td>
+          <td style="text-align:right">$1,200.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <table>
+        <tr>
+          <td class="label">Subtotal</td>
+          <td class="value">$2,999.00</td>
+        </tr>
+        <tr>
+          <td class="label">Discount (2%)</td>
+          <td class="value" style="color:#e53e3e">-$59.98</td>
+        </tr>
+        <tr>
+          <td class="label">Tax (0%)</td>
+          <td class="value">$0.00</td>
+        </tr>
+        <tr>
+          <td class="label">Shipping</td>
+          <td class="value">$60.00</td>
+        </tr>
+        <tr class="grand-total">
+          <td class="label">Total Due</td>
+          <td class="value">$2,999.02</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="footer">
+    <strong>Digital Employee Solutions</strong> &mdash; info@digitalemployee.ai &mdash; +92-300-1234567<br>
+    Payment Terms: Net 30 &bull; Thank you for your business!
+  </div>
+</div>
+</body>
+</html>

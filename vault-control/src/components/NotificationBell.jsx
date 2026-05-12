@@ -26,26 +26,33 @@ export default function NotificationBell() {
   const dropdownRef = useRef(null)
 
   useEffect(() => {
-    if (global.ws) {
-      global.ws.onmessage = (msg) => {
-        try {
-          const data = JSON.parse(msg.data)
-          if (data.type === 'notification') {
-            const notif = { ...data, id: Date.now(), timestamp: Date.now() }
-            setNotifs(prev => [notif, ...prev].slice(0, 50))
-            setUnread(prev => prev + 1)
-            if (Notification.permission === 'granted') {
-              new Notification(data.event, { body: typeof data.data === 'string' ? data.data : data.data?.message || '' })
-            }
+    const wsUrl = window.location.hostname === 'localhost'
+      ? 'ws://localhost:3000'
+      : `wss://${window.location.host}`
+    const ws = new WebSocket(wsUrl)
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === 'notification') {
+          const notif = { ...data, id: Date.now(), timestamp: Date.now() }
+          setNotifs(prev => [notif, ...prev].slice(0, 50))
+          setUnread(prev => prev + 1)
+          if (Notification.permission === 'granted') {
+            new Notification(data.event, { body: typeof data.data === 'string' ? data.data : data.data?.message || '' })
           }
-        } catch (e) {}
-      }
+        }
+      } catch (e) {}
     }
 
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission()
     }
 
+    return () => ws.close()
+  }, [])
+
+  useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setOpen(false)

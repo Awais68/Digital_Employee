@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-gmail_watcher.py v2.0 - Production Gmail Monitor for Digital Employee
+    if DRY_RUN:
+        logger.info(f"[DRY RUN] Would save draft for: {email.subject}")
+        return "DRY_RUN_MODE"
+    gmail_watcher.py v2.0 - Production Gmail Monitor for Digital Employee
 
 Monitors Gmail for unread + important emails every 2 minutes and converts
 them to structured task files in /Needs_Action directory.
@@ -39,6 +42,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
+
+# DRY_RUN mode — set via env, defaults to true for safety
+DRY_RUN = os.getenv('DRY_RUN', 'true').lower() == 'true'
+
+# Retry decorator for API resilience
+import functools
+
+def with_retry(max_attempts=3, base_delay=2, max_delay=30):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_attempts - 1:
+                        logging.error(f"All {max_attempts} attempts failed for {func.__name__}: {e}")
+                        raise
+                    delay = min(base_delay * (2 ** attempt), max_delay)
+                    logging.warning(f"Attempt {attempt+1}/{max_attempts} failed: {e}. Retry in {delay}s")
+                    time.sleep(delay)
+        return wrapper
+    return decorator
 
 # Environment loading
 try:
@@ -274,6 +300,7 @@ class GmailWatcher(BaseWatcher):
         super().__init__(dest_dir, check_interval)
         self.service = None
 
+    @with_retry(max_attempts=2, base_delay=1, max_delay=5)
     def authenticate(self) -> bool:
         """
         Authenticate with Gmail API using OAuth2.
@@ -350,6 +377,7 @@ class GmailWatcher(BaseWatcher):
             logger.error(f"Authentication failed: {e}")
             return False
 
+    @with_retry(max_attempts=3, base_delay=2, max_delay=30)
     def fetch_emails(self, query: str, max_results: int = MAX_RESULTS) -> List[Dict]:
         """
         Fetch emails from Gmail using a specific query.

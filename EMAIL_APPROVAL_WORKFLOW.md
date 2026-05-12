@@ -84,6 +84,7 @@ To: awaisniaz720@gmail.com
 **Command:** `python3 orchestrator.py`
 
 **What Happens:**
+
 1. Orchestrator scans `/Needs_Action/` folder
 2. Detects email task type
 3. Extracts email data (from, subject, body)
@@ -92,6 +93,7 @@ To: awaisniaz720@gmail.com
 6. **Creates approval file in `/Pending_Approval/`**
 
 **Output:**
+
 ```
 ✅ Created plan: PLAN_20260402_213815_email_re_ai_powered_saas_required.md
 ✅ Created approval request: REPLY_20260402_213815_email_re_ai_powered_saas_required.md
@@ -106,12 +108,12 @@ To: awaisniaz720@gmail.com
 
 **Human Actions Available:**
 
-| Action | File Movement | Result |
-|--------|---------------|--------|
-| ✅ **Approve** | Move to `/Approved/` | Email will be sent |
+| Action            | File Movement            | Result              |
+| ----------------- | ------------------------ | ------------------- |
+| ✅ **Approve**    | Move to `/Approved/`     | Email will be sent  |
 | 🔄 **Regenerate** | Move to `/Needs_Action/` | New draft requested |
-| ❌ **Reject** | Move to `/Rejected/` | Draft discarded |
-| ⏳ **Pending** | Keep in place | Review later |
+| ❌ **Reject**     | Move to `/Rejected/`     | Draft discarded     |
+| ⏳ **Pending**    | Keep in place            | Review later        |
 
 **Example: Reviewing the Draft**
 
@@ -136,12 +138,14 @@ mv "Pending_Approval/APPROVAL_TEST_REPLY.md" "Approved/"
 **Command:** `python3 orchestrator.py`
 
 **What Happens:**
+
 1. Orchestrator finds file in `/Approved/`
 2. Extracts email data (to, subject, body)
 3. Calls `email_mcp.send_email()`
 4. Logs result
 
 **Email MCP Actions:**
+
 ```python
 # Inside orchestrator.py
 from email_mcp import send_email
@@ -154,6 +158,7 @@ result = send_email(
 ```
 
 **If DRY_RUN=true:**
+
 ```
 🔍 DRY RUN - Email would be sent:
    To: noreply@notifications.example.com
@@ -162,6 +167,7 @@ result = send_email(
 ```
 
 **If DRY_RUN=false:**
+
 ```
 ✅ Email sent successfully
    Message-ID: <20260402234500@smtp.gmail.com>
@@ -174,19 +180,24 @@ result = send_email(
 **After Successful Send:**
 
 1. **File moved to `/Done/`**
+
    ```
    Approved/APPROVAL_TEST_REPLY.md → Done/APPROVAL_TEST_REPLY.md
    ```
 
 2. **Success note added:**
+
    ```markdown
    ---
+
    ## ✅ Email Sent
+
    - **Sent At:** 2026-04-02T23:45:00
    - **Status:** Delivered successfully
    ```
 
 3. **Log entry created:**
+
    ```
    /Logs/email_log_20260402.md
    ```
@@ -204,18 +215,18 @@ After each orchestrator run, Dashboard.md shows:
 
 ### Today's Email Activity
 
-| Metric | Count | Status |
-|--------|-------|--------|
-| **Emails Sent Today** | **1** | 🟢 Active |
-| **Pending Approval** | **3** | 🟡 Awaiting review |
-| **Rejected Today** | **0** | 🟢 None |
-| **Dry Run Mode** | **1** | 🔍 Testing |
+| Metric                | Count | Status             |
+| --------------------- | ----- | ------------------ |
+| **Emails Sent Today** | **1** | 🟢 Active          |
+| **Pending Approval**  | **3** | 🟡 Awaiting review |
+| **Rejected Today**    | **0** | 🟢 None            |
+| **Dry Run Mode**      | **1** | 🔍 Testing         |
 
 ### Pending Approvals Section
 
-| # | File Name | Time | Action Required |
-|---|-----------|------|-----------------|
-| 1 | 📧 `APPROVAL_TEST_REPLY.md` | 23:45 | ✅ Approve / 🔄 Regenerate / ❌ Reject |
+| #   | File Name                   | Time  | Action Required                        |
+| --- | --------------------------- | ----- | -------------------------------------- |
+| 1   | 📧 `APPROVAL_TEST_REPLY.md` | 23:45 | ✅ Approve / 🔄 Regenerate / ❌ Reject |
 
 ---
 
@@ -243,27 +254,31 @@ Also mention my rate card.
 **Human Action:** Move to `/Rejected/`
 
 **Orchestrator:**
+
 1. Creates archive in `/Done/REJECTED_<filename>`
 2. Removes original from workflow
 3. Logs rejection
 
 **Result:**
+
 ```
 /Done/REJECTED_APPROVAL_TEST_REPLY.md
 ```
 
 ---
 
-### Flow C: Pending Review
+### Flow C: Pending Review+
 
 **Human Action:** Leave file in `/Pending_Approval/`
 
 **Orchestrator:**
+
 1. Logs pending status
 2. Updates dashboard with pending count
 3. No action taken
 
 **Dashboard Note:**
+
 ```
 ⏳ `APPROVAL_TEST_REPLY.md` - Pending review since 2026-04-02 23:45
 ```
@@ -292,6 +307,7 @@ cat Logs/email_log_$(date +%Y%m%d).md
 ```
 
 **Expected Output:**
+
 ```
 ✅ Found 1 approved file(s) to process
 🎉 Processing Approved: APPROVAL_TEST_REPLY.md
@@ -328,16 +344,16 @@ python3 orchestrator.py
 
 ## 📁 File Locations Reference
 
-| Folder | Purpose | Example Files |
-|--------|---------|---------------|
-| `/Needs_Action/` | New items to process | Incoming email tasks |
-| `/Plans/` | Generated plans | `PLAN_*.md` |
-| `/Pending_Approval/` | Awaiting human review | `REPLY_*.md`, `LINKEDIN_POST_*.md` |
-| `/Approved/` | Ready for execution | Files moved here by human |
-| `/Rejected/` | Temp holding for rejections | Files before archival |
-| `/Done/` | Completed/archived | All processed files |
-| `/Logs/` | Action logs | `email_log_*.md`, `orchestrator.log` |
-| `/Metrics/` | System metrics | `orchestrator_metrics.json` |
+| Folder               | Purpose                     | Example Files                        |
+| -------------------- | --------------------------- | ------------------------------------ |
+| `/Needs_Action/`     | New items to process        | Incoming email tasks                 |
+| `/Plans/`            | Generated plans             | `PLAN_*.md`                          |
+| `/Pending_Approval/` | Awaiting human review       | `REPLY_*.md`, `LINKEDIN_POST_*.md`   |
+| `/Approved/`         | Ready for execution         | Files moved here by human            |
+| `/Rejected/`         | Temp holding for rejections | Files before archival                |
+| `/Done/`             | Completed/archived          | All processed files                  |
+| `/Logs/`             | Action logs                 | `email_log_*.md`, `orchestrator.log` |
+| `/Metrics/`          | System metrics              | `orchestrator_metrics.json`          |
 
 ---
 
@@ -346,6 +362,7 @@ python3 orchestrator.py
 ### Issue: Email not sending
 
 **Check:**
+
 1. `DRY_RUN` is set to `false`
 2. `SENDER_EMAIL` and `EMAIL_PASSWORD` are correct
 3. Gmail App Password (not regular password)
@@ -356,6 +373,7 @@ python3 orchestrator.py
 ### Issue: Approval file not detected
 
 **Check:**
+
 1. File is in correct folder (`/Approved/`)
 2. File has `.md` extension
 3. Orchestrator was run after moving file
@@ -365,6 +383,7 @@ python3 orchestrator.py
 ### Issue: Dashboard not updating
 
 **Check:**
+
 1. Orchestrator completed successfully
 2. No errors in `/Logs/orchestrator.log`
 3. Dashboard file is writable
@@ -378,18 +397,19 @@ python3 orchestrator.py
 ```markdown
 ## ✅ Sent - Re: AI Powered SaaS Required
 
-| Field | Value |
-|-------|-------|
-| **Time** | 2026-04-02T23:45:00 |
-| **To** | noreply@notifications.example.com |
-| **Subject** | Re: AI Powered SaaS Required |
-| **Message ID** | <20260402234500@smtp.gmail.com> |
-| **Status** | ✅ Sent |
+| Field          | Value                             |
+| -------------- | --------------------------------- |
+| **Time**       | 2026-04-02T23:45:00               |
+| **To**         | noreply@notifications.example.com |
+| **Subject**    | Re: AI Powered SaaS Required      |
+| **Message ID** | <20260402234500@smtp.gmail.com>   |
+| **Status**     | ✅ Sent                           |
 ```
 
 ### Orchestrator Metrics
 
 Saved to `/Metrics/orchestrator_metrics.json`:
+
 - Files processed
 - Approvals created
 - Emails sent
@@ -433,5 +453,5 @@ cat Logs/email_log_$(date +%Y%m%d).md
 
 ---
 
-*Last Updated: 2026-04-02*
-*Digital Employee System - Silver Tier v4.0*
+_Last Updated: 2026-04-02_
+_Digital Employee System - Silver Tier v4.0_
