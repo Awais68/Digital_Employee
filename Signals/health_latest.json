@@ -1,18 +1,18 @@
 {
-  "timestamp": "2026-05-13T00:55:01.459767",
+  "timestamp": "2026-05-14T00:35:01.375080",
   "status": {
     "odoo_local": true,
     "dashboard": true,
     "gmail_watcher": false,
     "whatsapp_watcher": false,
     "disk_usage_pct": 92,
-    "needs_action_backlog": 659
+    "needs_action_backlog": 1067
   },
   "alerts": [
     "ALERT: gmail_watcher not running!",
     "ALERT: whatsapp_watcher not running!",
     "ALERT: Disk usage at 92%",
-    "WARN: 659 items in Needs_Action \u2014 backlog growing"
+    "WARN: 1067 items in Needs_Action \u2014 backlog growing"
   ],
   "overall": "DEGRADED"
 }
