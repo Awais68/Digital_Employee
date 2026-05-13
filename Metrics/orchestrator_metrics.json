@@ -1,17 +1,6 @@
 {
   "history": [
     {
-      "started_at": "2026-05-13T15:36:01.184197",
-      "files_processed": 0,
-      "approvals_created": 0,
-      "approvals_triggered": 0,
-      "errors": 915,
-      "task_types": {},
-      "processing_times": [],
-      "ended_at": "2026-05-13T15:39:02.469904",
-      "avg_processing_time": 0
-    },
-    {
       "started_at": "2026-05-13T15:39:01.416866",
       "files_processed": 0,
       "approvals_created": 0,
@@ -1103,11 +1092,22 @@
       "processing_times": [],
       "ended_at": "2026-05-14T00:36:05.520823",
       "avg_processing_time": 0
+    },
+    {
+      "started_at": "2026-05-14T00:36:01.500473",
+      "files_processed": 0,
+      "approvals_created": 0,
+      "approvals_triggered": 0,
+      "errors": 1067,
+      "task_types": {},
+      "processing_times": [],
+      "ended_at": "2026-05-14T00:38:40.453772",
+      "avg_processing_time": 0
     }
   ],
   "totals": {
     "processed": 327,
     "approved": 12,
-    "errors": 337124
+    "errors": 338191
   }
 }
