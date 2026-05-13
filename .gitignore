@@ -132,3 +132,4 @@ out/
 tmp/
 temp/
 *.tmp
+Logs/
