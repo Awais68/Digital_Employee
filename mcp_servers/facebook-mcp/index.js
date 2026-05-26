@@ -44,13 +44,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: 'post_to_facebook',
-        description: 'Post a message to Facebook Page',
+        description: 'Post a message (and optional image) to Facebook Page',
         inputSchema: {
           type: 'object',
           properties: {
             message: {
               type: 'string',
               description: 'The message to post'
+            },
+            image_url: {
+              type: 'string',
+              description: 'Public URL of an image to attach'
             },
             link: {
               type: 'string',
@@ -118,6 +122,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'post_to_facebook': {
+        if (args.image_url) {
+          // Step 1 — Upload photo (unpublished)
+          const photoResp = await axios.post(
+            `${FB_BASE_URL}/${PAGE_ID}/photos`,
+            {
+              url: args.image_url,
+              published: false,
+              access_token: PAGE_ACCESS_TOKEN
+            }
+          );
+          const photoId = photoResp.data.id;
+
+          // Step 2 — Create post with attached media
+          const postResp = await axios.post(
+            `${FB_BASE_URL}/${PAGE_ID}/feed`,
+            {
+              message: args.message,
+              attached_media: [{ media_fbid: photoId }],
+              access_token: PAGE_ACCESS_TOKEN
+            }
+          );
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify({
+              success: true,
+              post_id: postResp.data.id,
+              photo_id: photoId,
+              message: 'Posted successfully to Facebook with image'
+            }, null, 2) }]
+          };
+        }
+
         const postData = {
           message: args.message,
           access_token: PAGE_ACCESS_TOKEN

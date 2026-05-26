@@ -14,9 +14,10 @@ export function useWebSocket(onMessage) {
   }, [onMessage])
 
   const connect = useCallback(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = window.location.hostname === 'localhost'
-      ? 'ws://localhost:3000'
-      : `wss://${window.location.host}`
+      ? `${protocol}//${window.location.host}/ws`
+      : `${protocol}//${window.location.host}`
     
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws

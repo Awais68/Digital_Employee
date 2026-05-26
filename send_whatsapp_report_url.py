@@ -186,7 +186,7 @@ def main():
     if len(sys.argv) > 1:
         phone = sys.argv[1]
     else:
-        phone = input(f"{GREEN}Enter phone number (with country code, e.g., 923001234567): {RESET}").strip()
+        phone = input(f"{GREEN}Enter phone number (with country code, e.g., 923273363154): {RESET}").strip()
     
     if not phone:
         print(f"{RED}❌ No phone number provided{RESET}")

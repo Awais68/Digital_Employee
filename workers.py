@@ -105,8 +105,12 @@ def start_workers():
         log(f"  ▶ {name}: starting ({config['description']})")
         
         try:
+            # Pass --continuous for background watchers so they stay running
+            args = [sys.executable, str(script_path)]
+            if config.get("script") in ("whatsapp_watcher.py", "gmail_watcher.py", "orchestrator.py"):
+                args.append("--continuous")
             process = subprocess.Popen(
-                [sys.executable, str(script_path)],
+                args,
                 cwd=str(BASE_DIR),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

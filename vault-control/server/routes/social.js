@@ -5,6 +5,7 @@ import path from 'path'
 import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
+import { createNotification } from '../services/notificationService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -104,7 +105,7 @@ router.get('/history', (req, res) => {
 // CREATE new post (creates approval files)
 router.post('/post', (req, res) => {
   try {
-    const { content, platforms, scheduleTime, draftId } = req.body
+    const { content, platforms, scheduleTime, draftId, imageUrl, pageName } = req.body
     
     if (!content || !content.trim()) {
       return res.status(400).json({ success: false, message: 'Content is required' })
@@ -124,6 +125,8 @@ router.post('/post', (req, res) => {
           platforms: targetPlatforms.join(','),
           scheduled: !!scheduleTime,
           scheduleTime: scheduleTime || null,
+          imageUrl: imageUrl || null,
+          pageName: pageName || null,
           createdAt: new Date().toISOString(),
           status: 'pending_approval',
           updatedAt: new Date().toISOString(),
@@ -150,6 +153,8 @@ router.post('/post', (req, res) => {
         platforms: targetPlatforms.join(','),
         scheduled: !!scheduleTime,
         scheduleTime: scheduleTime || null,
+        imageUrl: imageUrl || null,
+        pageName: pageName || null,
         createdAt: new Date().toISOString(),
         status: 'pending_approval'
       }
@@ -175,7 +180,7 @@ router.post('/post', (req, res) => {
 // SAVE draft
 router.post('/draft', (req, res) => {
   try {
-    const { content, platforms, scheduleTime } = req.body
+    const { content, platforms, scheduleTime, pageName } = req.body
     
     if (!content || !content.trim()) {
       return res.status(400).json({ success: false, message: 'Content is required' })
@@ -188,6 +193,7 @@ router.post('/draft', (req, res) => {
     const frontmatter = {
       type: 'post',
       platforms: platforms?.join(',') || 'draft',
+      pageName: pageName || null,
       scheduled: !!scheduleTime,
       scheduleTime: scheduleTime || null,
       createdAt: new Date().toISOString(),
@@ -416,6 +422,7 @@ router.post('/draft/:id/publish', (req, res) => {
 
     if (allSucceeded) {
       fs.renameSync(sourcePath, destPath)
+      createNotification('success', 'Post Published', `Post published on ${Object.keys(results).join(', ')}`, { source: 'social', id, results })
       if (global.broadcast) {
         global.broadcast({ type: 'approval_changed', action: 'published', id, results })
       }
@@ -431,6 +438,7 @@ router.post('/draft/:id/publish', (req, res) => {
       } catch (writeErr) {
         console.error('[Publish] Failed to update status:', writeErr.message)
       }
+      createNotification('error', 'Post Failed', `Failed to post on ${Object.keys(results).filter(p => !results[p].success).join(', ')}`, { source: 'social', id, results })
       if (global.broadcast) {
         global.broadcast({ type: 'approval_changed', action: 'publish_failed', id, results })
       }

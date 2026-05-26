@@ -3443,11 +3443,11 @@ def process_complex_task_with_ralph(
             "fallback": True,
         }
 
-    logger.separator("🧸")
+    logger.info("🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸")
     logger.info("🧸 RALPH WIGGUM LOOP — Autonomous Task Activation")
     logger.info(f"📋 Task: {task_description[:120]}...")
     logger.info(f"📋 Max iterations: {max_iterations}")
-    logger.separator("🧸")
+    logger.info("🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸")
 
     result = {
         "task": task_description,
@@ -3601,6 +3601,22 @@ def main(run_mode: str = "once") -> None:
         metrics.save_metrics()
         return
     
+    # Handle continuous mode (from workers.py)
+    if run_mode in ("--continuous", "continuous"):
+        logger.info("♻️ Continuous mode — watching for new tasks every 60s")
+        while True:
+            # Run one full cycle
+            logger.info("📥 Scanning Needs_Action folder...")
+            processed_count = process_needs_action_files(metrics)
+            if processed_count == 0:
+                logger.info("📭 Nothing to process.")
+            logger.info("✅ Processing approval workflow...")
+            approval_results = process_approval_folder(metrics)
+            logger.info(f"   ✅ Sent: {approval_results['sent']} | ❌ Rejected: {approval_results['rejected']} | ⏳ Pending: {approval_results['pending']}")
+            metrics.save_metrics()
+            logger.info(f"💤 Sleeping 60s...")
+            time.sleep(60)
+
     # Handle scheduled mode
     if run_mode == "scheduled":
         int(os.getenv("ORCHESTRATOR_INTERVAL", "30"))

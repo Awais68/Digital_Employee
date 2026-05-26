@@ -40,21 +40,59 @@ def parse_frontmatter(content):
     body = content[match.end():].strip()
     return frontmatter, body
 
-def post_to_linkedin(content):
+def resolve_image(image_url, debug=True):
+    """Resolve image URL to a local file path. Downloads if needed."""
+    if not image_url:
+        if debug: print(f"[IMAGE] No image_url provided")
+        return None
+    if debug: print(f"[IMAGE] Resolving: {image_url}")
+    if os.path.exists(image_url):
+        if debug: print(f"[IMAGE] Direct path exists: {image_url}")
+        return image_url
+    if image_url.startswith(('http://', 'https://', '/uploads/')):
+        # Try multiple possible paths
+        candidates = [
+            BASE_DIR / "public" / image_url.lstrip('/'),
+            BASE_DIR / "vault-control" / "public" / image_url.lstrip('/'),
+            Path("vault-control/public") / image_url.lstrip('/'),
+            Path("public") / image_url.lstrip('/'),
+        ]
+        for candidate in candidates:
+            if debug: print(f"[IMAGE] Trying: {candidate}")
+            if candidate.exists():
+                result = str(candidate.resolve())
+                if debug: print(f"[IMAGE] Found at: {result}")
+                return result
+        # Try downloading from URL
+        if image_url.startswith(('http://', 'https://')):
+            try:
+                import urllib.request
+                dl = BASE_DIR / ".temp_image"
+                dl.parent.mkdir(parents=True, exist_ok=True)
+                urllib.request.urlretrieve(image_url, str(dl))
+                if debug: print(f"[IMAGE] Downloaded to: {dl}")
+                return str(dl)
+            except Exception as e:
+                if debug: print(f"[IMAGE] Download failed: {e}")
+        if debug: print(f"[IMAGE] NOT FOUND at any candidate path")
+        return None
+    return None
+
+def post_to_linkedin(content, image_path=None):
     """Post content to LinkedIn."""
     try:
         sys.path.insert(0, str(BASE_DIR))
         from Agent_Skills.SKILL_LInkedin_Playwright_MCP import post_to_linkedin as _post
-        return _post(content)
+        return _post(content, image_path=image_path)
     except Exception as e:
         return {"success": False, "message": f"LinkedIn error: {str(e)}", "post_url": None}
 
-def post_to_facebook(content):
+def post_to_facebook(content, image_path=None, page_name=None):
     """Post content to Facebook."""
     try:
         sys.path.insert(0, str(BASE_DIR))
         from Agent_Skills.SKILL_Facebook_Instagram_Post import post_to_facebook as _post
-        return _post(content)
+        return _post(content, image_path=image_path, page_name=page_name)
     except Exception as e:
         return {"success": False, "message": f"Facebook error: {str(e)}"}
 
@@ -63,7 +101,7 @@ def post_to_instagram(content, image_path=None):
     try:
         sys.path.insert(0, str(BASE_DIR))
         from Agent_Skills.SKILL_Facebook_Instagram_Post import post_to_instagram as _post
-        return _post(content, image_path)
+        return _post(content, image_path if image_path else "")
     except Exception as e:
         return {"success": False, "message": f"Instagram error: {str(e)}"}
 
@@ -98,11 +136,24 @@ def main():
         print(json.dumps({"success": False, "message": "Post content is empty"}))
         sys.exit(1)
     
+    # Extract image URL from frontmatter
+    image_url = frontmatter.get('imageUrl', frontmatter.get('image_url', None))
+    if isinstance(image_url, list):
+        image_url = image_url[0] if image_url else None
+    resolved_image = resolve_image(image_url)
+    
+    # Extract page name for Facebook Page posting
+    page_name = frontmatter.get('pageName', frontmatter.get('page_name', None))
+    if isinstance(page_name, list):
+        page_name = page_name[0] if page_name else None
+    
     print(f"Publishing to: {', '.join(platforms)}")
     print(f"Content length: {len(content)} chars")
+    print(f"Image: {resolved_image or '(none)'}")
+    if page_name:
+        print(f"Facebook Page: {page_name}")
     
     results = {}
-    default_image = BASE_DIR / "instagram_post_20260420.jpg"
     
     for platform in platforms:
         try:
@@ -111,12 +162,11 @@ def main():
             print(f"\n[{platform_clean.upper()}] Posting...")
             
             if platform_clean == 'linkedin':
-                result = post_to_linkedin(content)
+                result = post_to_linkedin(content, resolved_image)
             elif platform_clean == 'facebook':
-                result = post_to_facebook(content)
+                result = post_to_facebook(content, resolved_image, page_name=page_name)
             elif platform_clean == 'instagram':
-                img = str(default_image) if default_image.exists() else None
-                result = post_to_instagram(content, img)
+                result = post_to_instagram(content, resolved_image)
             elif platform_clean == 'twitter':
                 result = post_to_twitter(content)
             else:

@@ -18,6 +18,7 @@ const Accounting = lazy(() => import("./pages/Accounting"));
 const CloudStatus = lazy(() => import("./pages/CloudStatus"));
 const Logs = lazy(() => import("./pages/Logs"));
 const VaultEditor = lazy(() => import("./pages/VaultEditor"));
+const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -67,7 +68,7 @@ function LoginPage() {
               <Lock size={32} className="dark:text-[#00FF88] text-blue-500" />
             </div>
             <h1 className="text-2xl font-bold dark:text-[#E0E0E6] text-gray-900">
-              Vault Control
+              Digital FTE 24/7
             </h1>
             <p className="text-sm dark:text-[#7A7A85] text-gray-600 mt-2">
               {isRegister ? "Create your account" : "Sign in to continue"}
@@ -250,6 +251,8 @@ function AppContent() {
         return <ErrorBoundary fallbackTitle="Logs Error"><Logs /></ErrorBoundary>;
       case "vault":
         return <ErrorBoundary fallbackTitle="Vault Editor Error"><VaultEditor /></ErrorBoundary>;
+      case "admin":
+        return <ErrorBoundary fallbackTitle="Admin Panel Error"><AdminPanel /></ErrorBoundary>;
       default:
         return <ErrorBoundary fallbackTitle="Dashboard Error"><Dashboard /></ErrorBoundary>;
     }

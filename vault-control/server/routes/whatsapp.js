@@ -1,9 +1,106 @@
 import express from 'express'
 import { readVaultFiles, getVaultPath, writeFile, moveFile } from '../vault-reader.js'
+import { query } from '../database/connection.js'
 import fs from 'fs'
 import path from 'path'
 
 const router = express.Router()
+
+// GET /status — WhatsApp connection status
+router.get('/status', (req, res) => {
+  import('../services/whatsappService.js').then(ws => {
+    res.json({ status: ws.getStatus(), qr: ws.getQR() })
+  }).catch(e => res.json({ status: 'disconnected', qr: null }))
+})
+
+// POST /send — send WhatsApp message via web.js
+router.post('/send', async (req, res) => {
+  const { to, message } = req.body
+  try {
+    const { sendMessage } = await import('../services/whatsappService.js')
+    const result = await sendMessage(to, message)
+    // Save outgoing message to DB
+    const chatId = to.includes('@') ? to : `${to}@c.us`
+    await query(`
+      INSERT INTO whatsapp_messages(msg_id, from_number, to_number, body, timestamp, is_group, direction, type, is_read)
+      VALUES($1,$2,$3,$4,NOW(),false,'outgoing','outgoing',true)
+    `, [`out_${Date.now()}`, 'Me', chatId, message]).catch(() => {})
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// GET /messages — DB-backed message list
+router.get('/messages', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM whatsapp_messages ORDER BY timestamp DESC LIMIT 50')
+    res.json(result.rows)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// GET /db-conversations — real WhatsApp conversations from DB
+router.get('/db-conversations', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        COALESCE(NULLIF(contact_name,''), from_number) AS name,
+        from_number AS id,
+        from_number AS phone,
+        COUNT(*) AS message_count,
+        MAX(timestamp) AS last_time,
+        SUM(CASE WHEN is_read=false OR is_read IS NULL THEN 1 ELSE 0 END) AS unread,
+        (SELECT body FROM whatsapp_messages w2
+         WHERE w2.from_number = w1.from_number
+         ORDER BY timestamp DESC LIMIT 1) AS preview
+      FROM whatsapp_messages w1
+      WHERE is_group=false
+      GROUP BY contact_name, from_number
+      ORDER BY last_time DESC
+    `)
+    const conversations = result.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      messageCount: parseInt(row.message_count),
+      unread: parseInt(row.unread),
+      time: row.last_time,
+      preview: (row.preview || '').substring(0, 100),
+    }))
+    res.json(conversations)
+  } catch (e) {
+    console.error('[WhatsApp DB conversations]', e.message)
+    res.json([])
+  }
+})
+
+// GET /db-conversation/:phone — messages for a specific phone number from DB
+router.get('/db-conversation/:phone', async (req, res) => {
+  try {
+    const { phone } = req.params
+    const result = await query(
+      `SELECT * FROM whatsapp_messages WHERE from_number=$1 OR to_number=$1 ORDER BY timestamp ASC`,
+      [phone]
+    )
+    const messages = result.rows.map(row => ({
+      id: row.msg_id || `msg_${row.id}`,
+      text: row.body,
+      time: row.timestamp,
+      sender: row.direction === 'outgoing' ? 'Me' : row.from_number,
+      type: row.direction || 'incoming',
+    }))
+    res.json({
+      id: phone,
+      name: phone,
+      phone,
+      messages,
+    })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
 
 // GET WhatsApp conversations from Inbox
 router.get('/', (req, res) => {
@@ -156,5 +253,172 @@ router.post('/:id/read', (req, res) => {
     res.status(500).json({ error: 'Failed to mark as read', message: err.message })
   }
 })
+
+// POST /restart — restart WhatsApp service (generates new QR)
+router.post('/restart', async (req, res) => {
+  try {
+    const ws = await import('../services/whatsappService.js')
+    await ws.initWhatsApp()
+    res.json({ success: true, message: 'WhatsApp service restarted', status: ws.getStatus() })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ── ADD before: export default router ─────────────────────────
+
+// GET /live-chats — fetch from live WA session OR DB fallback
+router.get('/live-chats', async (req, res) => {
+  try {
+    const { cacheGet, cacheSet } = await import('../services/cache.js')
+
+    const cached = cacheGet('wa_live_chats')
+    if (cached) return res.json(cached)
+
+    const { getLiveChats, getStatus } = await import('../services/whatsappService.js')
+    const status = getStatus()
+
+    if (status !== 'connected') {
+      // DB fallback when WA not connected — single query with preview
+      const result = await query(`
+        SELECT
+          COALESCE(NULLIF(contact_name,''), from_number) AS name,
+          from_number AS id,
+          from_number AS phone,
+          COUNT(*)    AS message_count,
+          MAX(timestamp) AS last_time,
+          SUM(CASE WHEN is_read = false OR is_read IS NULL THEN 1 ELSE 0 END) AS unread,
+          (SELECT body FROM whatsapp_messages w2
+           WHERE w2.from_number = w1.from_number
+           ORDER BY timestamp DESC LIMIT 1) AS preview
+        FROM whatsapp_messages w1
+        GROUP BY contact_name, from_number
+        ORDER BY last_time DESC LIMIT 30
+      `).catch(() => ({ rows: [] }))
+
+      const chats = result.rows.map(row => ({
+        id: row.id, name: row.name, phone: row.phone,
+        messageCount: parseInt(row.message_count),
+        unread: parseInt(row.unread), time: row.last_time,
+        preview: (row.preview || '').substring(0, 80),
+        isGroup: false,
+      }))
+      const response = { source: 'database', status, chats }
+      cacheSet('wa_live_chats', response, 10)
+      return res.json(response)
+    }
+
+    let chats = await getLiveChats()
+
+    // Fallback to DB when live returns empty
+    if (!chats || chats.length === 0) {
+      const result = await query(`
+        SELECT
+          COALESCE(NULLIF(contact_name,''), from_number) AS name,
+          from_number AS id,
+          from_number AS phone,
+          COUNT(*)    AS message_count,
+          MAX(timestamp) AS last_time,
+          SUM(CASE WHEN is_read = false OR is_read IS NULL THEN 1 ELSE 0 END) AS unread,
+          (SELECT body FROM whatsapp_messages w2
+           WHERE w2.from_number = w1.from_number
+           ORDER BY timestamp DESC LIMIT 1) AS preview
+        FROM whatsapp_messages w1
+        GROUP BY contact_name, from_number
+        ORDER BY last_time DESC LIMIT 30
+      `).catch(() => ({ rows: [] }))
+
+      chats = result.rows.map(row => ({
+        id: row.id, name: row.name, phone: row.phone,
+        messageCount: parseInt(row.message_count),
+        unread: parseInt(row.unread), time: row.last_time,
+        preview: (row.preview || '').substring(0, 80),
+        isGroup: false,
+      }))
+    } else {
+      // Sort: pinned first, then by unread, then by time
+      chats.sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1
+        if (!a.pinned && b.pinned) return 1
+        if (b.unread !== a.unread) return b.unread - a.unread
+        return new Date(b.time) - new Date(a.time)
+      })
+    }
+
+    const response = { source: chats.length ? 'live' : 'database', status, chats }
+    cacheSet('wa_live_chats', response, 10)
+    res.json(response)
+  } catch (e) {
+    console.error('[WA] /live-chats error:', e.message)
+    res.json({ source: 'error', status: 'error', chats: [], error: e.message })
+  }
+})
+
+// GET /live-messages/:chatId — messages for a specific chat
+router.get('/live-messages/:chatId', async (req, res) => {
+  const chatId = decodeURIComponent(req.params.chatId)
+  try {
+    const { getLiveChatMessages, getStatus } = await import('../services/whatsappService.js')
+
+    if (getStatus() !== 'connected') {
+      // DB fallback
+      const phone = chatId.replace(/@c\.us|@g\.us/g, '')
+      const result = await query(
+        `SELECT * FROM whatsapp_messages
+         WHERE from_number=$1 OR to_number=$1
+         ORDER BY timestamp ASC LIMIT 50`,
+        [phone]
+      ).catch(() => ({ rows: [] }))
+      return res.json({
+        messages: result.rows.map(r => ({
+          id:     r.msg_id || `db_${r.id}`,
+          text:   r.body,
+          time:   r.timestamp,
+          sender: r.direction === 'outgoing' ? 'Me' : r.from_number,
+          type:   r.direction || 'incoming',
+          fromMe: r.direction === 'outgoing',
+        }))
+      })
+    }
+
+    let messages = await getLiveChatMessages(chatId)
+
+    // Fallback to DB when live returns empty
+    if (!messages || messages.length === 0) {
+      const phone = chatId.replace(/@c\.us|@g\.us|@lid/g, '')
+      const result = await query(
+        `SELECT * FROM whatsapp_messages
+         WHERE from_number LIKE $1 OR to_number LIKE $1
+         ORDER BY timestamp ASC LIMIT 50`,
+        [`%${phone}%`]
+      ).catch(() => ({ rows: [] }))
+      messages = result.rows.map(r => ({
+        id:     r.msg_id || `db_${r.id}`,
+        text:   r.body,
+        time:   r.timestamp,
+        sender: r.direction === 'outgoing' ? 'Me' : r.from_number,
+        type:   r.direction || 'incoming',
+        fromMe: r.direction === 'outgoing',
+      }))
+    }
+
+    // Save to DB in background (don't await)
+    messages.forEach(msg => {
+      const phone = msg.fromMe ? chatId : msg.sender
+      query(`
+        INSERT INTO whatsapp_messages
+          (msg_id, from_number, body, timestamp, is_group, direction, type, is_read)
+        VALUES ($1,$2,$3,$4,false,$5,$5,true)
+        ON CONFLICT (msg_id) DO NOTHING
+      `, [msg.id, msg.fromMe ? 'Me' : phone, msg.text, msg.time,
+          msg.fromMe ? 'outgoing' : 'incoming']).catch(() => {})
+    })
+
+    res.json({ messages })
+  } catch (e) {
+    console.error('[WA] /live-messages error:', e.message)
+    res.status(500).json({ error: e.message, messages: [] })
+  }
+}) 
 
 export default router

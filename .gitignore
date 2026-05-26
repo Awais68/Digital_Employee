@@ -133,3 +133,4 @@ tmp/
 temp/
 *.tmp
 Logs/
+.secrets.enc

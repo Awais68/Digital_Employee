@@ -7,6 +7,17 @@ import {
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
 
+const CATEGORIES = ['All', 'Support', 'Sales Inquiry', 'Meeting Request', 'Invoice', 'Newsletter', 'Spam', 'Internal']
+const CATEGORY_COLORS = {
+  'Support': { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  'Sales Inquiry': { bg: 'bg-green-500/20', text: 'text-green-400' },
+  'Meeting Request': { bg: 'bg-purple-500/20', text: 'text-purple-400' },
+  'Invoice': { bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
+  'Newsletter': { bg: 'bg-pink-500/20', text: 'text-pink-400' },
+  'Spam': { bg: 'bg-red-500/20', text: 'text-red-400' },
+  'Internal': { bg: 'bg-cyan-500/20', text: 'text-cyan-400' },
+}
+
 const folders = ['Inbox', 'Needs_Action', 'Approved', 'Done', 'Rejected']
 
 const replyTemplates = [
@@ -246,16 +257,26 @@ export default function Emails() {
     return getPriorityConfig(priority).className
   }
 
-  const [filter, setFilter] = useState('All')
+  const [priorityFilter, setPriorityFilter] = useState('All')
+  const [categoryFilter, setCategoryFilter] = useState('All')
   const [priorityCounts, setPriorityCounts] = useState({ IMMEDIATE: 0, URGENT: 0, NORMAL: 0, INFO: 0 })
+  const [categoryCounts, setCategoryCounts] = useState({})
 
   useEffect(() => {
-    const counts = { IMMEDIATE: 0, URGENT: 0, NORMAL: 0, INFO: 0 }
-    emails.forEach(e => { counts[e.detectedPriority]++ })
-    setPriorityCounts(counts)
+    const pCounts = { IMMEDIATE: 0, URGENT: 0, NORMAL: 0, INFO: 0 }
+    const cCounts = {}
+    emails.forEach(e => {
+      pCounts[e.detectedPriority]++
+      const cat = e.category || 'Uncategorized'
+      cCounts[cat] = (cCounts[cat] || 0) + 1
+    })
+    setPriorityCounts(pCounts)
+    setCategoryCounts(cCounts)
   }, [emails])
 
-  const filteredEmails = filter === 'All' ? emails : emails.filter(e => e.detectedPriority === filter)
+  const filteredEmails = emails
+    .filter(e => priorityFilter === 'All' || e.detectedPriority === priorityFilter)
+    .filter(e => categoryFilter === 'All' || (e.category || 'Uncategorized') === categoryFilter)
 
   return (
     <div className="grid grid-cols-4 gap-4 h-[calc(100vh-140px)]">
@@ -284,12 +305,20 @@ export default function Emails() {
             <Sparkles size={14} />
             QUICK TEMPLATES
           </h3>
-          {replyTemplates.slice(0, -1).map(template => (
+          {replyTemplates.map(template => (
             <button
               key={template.name}
-              onClick={() => selectedEmail && applyTemplate(template)}
-              disabled={!selectedEmail}
-              className="w-full text-left px-4 py-1.5 text-xs dark:text-[#B0C4FF] text-gray-600 hover:dark:bg-[#1A1A24] hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              onClick={() => {
+                if (selectedEmail) {
+                  applyTemplate(template)
+                } else {
+                  setReplySubject(template.subject.replace('{subject}', 'Your Inquiry').replace('{sender}', 'Valued Customer'))
+                  setReplyBody(template.body.replace(/\{subject\}/g, 'Your Inquiry').replace(/\{sender\}/g, 'Valued Customer'))
+                  setSelectedTemplate(template.name)
+                  setShowReply(true)
+                }
+              }}
+              className="w-full text-left px-4 py-1.5 text-xs dark:text-[#B0C4FF] text-gray-600 hover:dark:bg-[#1A1A24] hover:bg-gray-50 transition-colors"
             >
               {template.name}
             </button>
@@ -300,49 +329,41 @@ export default function Emails() {
        {/* Middle: Email List */}
        <div className="col-span-1 border-r dark:border-[#1A1A24] flex flex-col">
          {/* Priority Filter Bar */}
-         <div className="p-3 border-b dark:border-[#1A1A24] space-y-2">
-           <div className="flex items-center justify-between">
-             <h3 className="text-xs font-black dark:text-[#7A7A85] uppercase tracking-widest font-mono">📧 Inbox</h3>
-             <div className="flex gap-1 text-[9px] font-mono">
-               {['IMMEDIATE', 'URGENT', 'NORMAL', 'INFO'].map(p => (
-                 <button
-                   key={p}
-                   onClick={() => setFilter(filter === p ? 'All' : p)}
-                   className={`px-1.5 py-0.5 rounded font-bold transition-colors ${
-                     filter === p
-                       ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
-                       : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] hover:dark:bg-[#2A2A3A]'
-                   }`}
-                 >
-                   {getPriorityConfig(p).label.split(' ')[0]} {priorityCounts[p] > 0 && priorityCounts[p]}
-                 </button>
-               ))}
-             </div>
-           </div>
-           <div className="flex gap-2 text-[10px] font-mono">
-             {['All', 'Unread'].map(f => (
-               <button
-                 key={f}
-                 onClick={() => setFilter(f)}
-                 className={`px-2 py-0.5 rounded ${filter === f ? 'dark:bg-[#00FF88]/20 dark:text-[#00FF88] text-blue-600' : 'dark:text-[#7A7A85] hover:dark:text-[#E0E0E6]'}`}
-               >
-                 {f}
-               </button>
-             ))}
-             <span className="dark:text-[#7A7A85]">|</span>
-             <select
-               value={filter}
-               onChange={(e) => setFilter(e.target.value)}
-               className="text-[10px] dark:bg-[#1A1A24] dark:text-[#E0E0E6] rounded px-1 py-0.5"
-             >
-               <option value="All">Priority ↓</option>
-               <option value="IMMEDIATE">🔴 IMMEDIATE</option>
-               <option value="URGENT">🟠 URGENT</option>
-               <option value="NORMAL">🟡 NORMAL</option>
-               <option value="INFO">🟢 INFO</option>
-             </select>
-           </div>
-         </div>
+          <div className="p-3 border-b dark:border-[#1A1A24] space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black dark:text-[#7A7A85] uppercase tracking-widest font-mono">📧 {selectedFolder.replace('_', ' ')}</h3>
+              <div className="flex gap-1 text-[9px] font-mono">
+                {['IMMEDIATE', 'URGENT', 'NORMAL', 'INFO'].map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPriorityFilter(priorityFilter === p ? 'All' : p)}
+                    className={`px-1.5 py-0.5 rounded font-bold transition-colors ${
+                      priorityFilter === p
+                        ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
+                        : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] hover:dark:bg-[#2A2A3A]'
+                    }`}
+                  >
+                    {getPriorityConfig(p).label.split(' ')[0]} {priorityCounts[p] || ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-mono">
+              <span className="dark:text-[#7A7A85] text-[9px] uppercase tracking-wider">Cat:</span>
+              <div className="flex gap-1 flex-wrap">
+                {CATEGORIES.map(c => (
+                  <button key={c} onClick={() => setCategoryFilter(categoryFilter === c ? 'All' : c)}
+                    className={`px-1.5 py-0.5 rounded transition-colors ${
+                      categoryFilter === c
+                        ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] text-white bg-blue-500'
+                        : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] hover:dark:bg-[#2A2A3A]'
+                    }`}>
+                    {c}{c !== 'All' && categoryCounts[c] ? ` (${categoryCounts[c]})` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
 
          {/* Bulk Actions Bar */}
         {selectedForBulk.size > 0 && (
@@ -438,21 +459,31 @@ export default function Emails() {
                            <Square size={14} className="dark:text-[#7A7A85] opacity-0 group-hover:opacity-100 transition-opacity" />
                          )}
                        </button>
-                       <div className="flex-1 min-w-0">
-                         <div className="flex items-center justify-between mb-1">
-                           <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${getPriorityColor(email.detectedPriority)}`}>
-                             {email.detectedPriority}
-                           </span>
-                           <span className="text-[9px] dark:text-[#7A7A85] font-mono">
-                             {new Date(email.time || email.createdAt).toLocaleDateString()}
-                           </span>
-                         </div>
-                         <p className="font-bold dark:text-[#E0E0E6] text-sm truncate mb-0.5">
-                           {email.from || email.frontmatter?.from || 'Unknown'}
-                         </p>
-                         <p className="text-xs dark:text-[#7A7A85] truncate">
-                           {email.subject || email.frontmatter?.subject || 'No subject'}
-                         </p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-1">
+                              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${getPriorityColor(email.detectedPriority)}`}>
+                                {email.detectedPriority}
+                              </span>
+                              {email.category && CATEGORY_COLORS[email.category] && (
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded ${CATEGORY_COLORS[email.category].bg} ${CATEGORY_COLORS[email.category].text}`}>
+                                  {email.category}
+                                </span>
+                              )}
+                              {email.processed && (
+                                <span className="text-[10px] text-green-500 font-bold" title="Processed">✓</span>
+                              )}
+                            </div>
+                            <span className="text-[9px] dark:text-[#7A7A85] font-mono">
+                              {new Date(email.time || email.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <p className="font-bold dark:text-[#E0E0E6] text-sm truncate mb-0.5">
+                            {email.from || email.frontmatter?.from || 'Unknown'}
+                          </p>
+                          <p className="text-xs dark:text-[#7A7A85] truncate">
+                            {email.subject || email.frontmatter?.subject || 'No subject'}
+                          </p>
                          <div className="flex gap-1 mt-2">
                            <button
                              onClick={(e) => {
@@ -659,6 +690,24 @@ export default function Emails() {
                     {actionLoading ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
                     Approve
                   </button>
+                  {!selectedEmail.processed && (
+                    <button
+                      onClick={async () => {
+                        setActionLoading(true)
+                        try {
+                          await axios.post(`/api/emails/${selectedEmail.id}/mark-processed`)
+                          success('Email marked as processed')
+                          fetchEmails()
+                        } catch { toastError('Failed to mark processed') }
+                        setActionLoading(false)
+                      }}
+                      disabled={actionLoading}
+                      className="flex items-center justify-center gap-2 px-4 py-3 rounded font-medium text-xs dark:bg-[#00FF88]/10 dark:text-[#00FF88] bg-green-50 text-green-700 disabled:opacity-50"
+                    >
+                      <CheckCircle2 size={16} />
+                      Mark Processed
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setSelectedEmail(null)
@@ -668,7 +717,7 @@ export default function Emails() {
                     className="flex items-center justify-center gap-2 px-4 py-3 rounded font-medium text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-700 disabled:opacity-50"
                   >
                     <CornerDownLeft size={16} />
-                    Move to Needs Action
+                    Needs Action
                   </button>
                   <button 
                     onClick={() => handleAction('reject', 'Rejected')}
@@ -682,6 +731,7 @@ export default function Emails() {
               ) : (
                 <p className="text-[10px] font-mono dark:text-[#7A7A85] w-full text-center py-2 italic">
                   Status: {(selectedEmail.folder || selectedFolder).toUpperCase()}
+                  {selectedEmail.processed && <span className="ml-2 text-green-500 font-bold">✓ Processed</span>}
                 </p>
               )}
             </div>

@@ -3,442 +3,166 @@ import { useWebSocket } from '../hooks/useWebSocket'
 import {
   TrendingUp, TrendingDown, MessageSquare, Mail,
   Linkedin, Twitter, Facebook, Instagram, RefreshCw, Loader2, AlertCircle,
-  Clock, CheckCircle, XCircle, FileText, Zap, Play, Square, Cpu, Rocket,
+  Clock, CheckCircle, XCircle, FileText, Zap, Inbox, Users, Cpu, Rocket,
 } from 'lucide-react'
 import {
-  BarChart, Bar, Cell, XAxis, YAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, AreaChart, Area, PieChart, Pie,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  RadialBarChart, RadialBar, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import axios from 'axios'
 
-const platforms = [
-  { name: 'WhatsApp',  icon: MessageSquare, color: '#25D366', inboxKey: 'WhatsApp',  doneKey: null, page: 'whatsapp' },
-  { name: 'LinkedIn',  icon: Linkedin,       color: '#0A66C2', inboxKey: 'LinkedIn',  doneKey: 'linkedInPosts', page: 'social' },
-  { name: 'Facebook',  icon: Facebook,       color: '#1877F2', inboxKey: 'Facebook',  doneKey: null, page: 'social' },
-  { name: 'Instagram', icon: Instagram,      color: '#E4405F', inboxKey: 'Instagram', doneKey: null, page: 'social' },
-  { name: 'Gmail',     icon: Mail,           color: '#EA4335', inboxKey: 'Inbox',     doneKey: 'Done', page: 'emails' },
-  { name: 'Twitter',   icon: Twitter,        color: '#1DA1F2', inboxKey: 'Twitter',   doneKey: null, page: 'social' },
+const KPI_CARDS = [
+  { label: 'Total Activity', key: 'total', icon: Zap, color: '#00FF88', bg: 'dark:bg-[#00FF88]/10 bg-green-50', border: 'dark:border-[#00FF88]/30 border-green-200' },
+  { label: 'Pending Review', key: 'pendingApprovals', icon: Clock, color: '#FFB800', bg: 'dark:bg-[#FFB800]/10 bg-yellow-50', border: 'dark:border-[#FFB800]/30 border-yellow-200', page: 'approvals' },
+  { label: 'Approved', key: 'approved', icon: CheckCircle, color: '#10B981', bg: 'dark:bg-[#10B981]/10 bg-green-50', border: 'dark:border-[#10B981]/30 border-green-200' },
+  { label: 'Rejected', key: 'rejected', icon: XCircle, color: '#EF4444', bg: 'dark:bg-[#EF4444]/10 bg-red-50', border: 'dark:border-[#EF4444]/30 border-red-200', page: 'approvals' },
 ]
 
-// ─── Pokémon-style stat bar (memoized to avoid unnecessary re-renders) ─────
-// Rule: rerender-memo - Extract expensive work into memoized components
+const PLATFORM_CONFIG = [
+  { name: 'WhatsApp',  icon: MessageSquare, color: '#25D366', inboxKey: 'WhatsApp' },
+  { name: 'LinkedIn',  icon: Linkedin,       color: '#0A66C2', inboxKey: 'LinkedIn' },
+  { name: 'Facebook',  icon: Facebook,       color: '#1877F2', inboxKey: 'Facebook' },
+  { name: 'Instagram', icon: Instagram,      color: '#E4405F', inboxKey: 'Instagram' },
+  { name: 'Email',     icon: Mail,           color: '#EA4335', inboxKey: 'Inbox' },
+  { name: 'Twitter',   icon: Twitter,        color: '#1DA1F2', inboxKey: 'Twitter' },
+]
 
 const StatBar = React.memo(function StatBar({ label, value, maxValue = 100, color }) {
-  const percentage = Math.min((value / maxValue) * 100, 100)
+  const pct = Math.min((value / maxValue) * 100, 100)
   return (
-    <div className="mb-3">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-xs font-semibold dark:text-[#B0C4FF] text-gray-700 uppercase tracking-wide">
-          {label}
-        </span>
-        <span className="text-xs font-bold dark:text-[#00FF88] text-green-600">{value}</span>
+    <div className="mb-2">
+      <div className="flex justify-between items-center mb-0.5">
+        <span className="text-[10px] dark:text-[#B0C4FF] text-gray-700 uppercase tracking-wide">{label}</span>
+        <span className="text-[10px] font-bold dark:text-[#00FF88] text-green-600">{value}</span>
       </div>
-      <div className="w-full bg-gray-300 dark:bg-[#2A3E5F] rounded-full h-3 overflow-hidden border dark:border-[#3A5E7F] border-gray-400">
-        <div
-          className="h-full rounded-full transition-all duration-500 shadow-lg"
-          style={{
-            width: `${percentage}%`,
-            background: `linear-gradient(90deg, ${color} 0%, ${color}dd 100%)`,
-            boxShadow: `0 0 8px ${color}80`,
-          }}
-        />
+      <div className="w-full bg-gray-300 dark:bg-[#2A3E5F] rounded-full h-2 overflow-hidden border dark:border-[#3A5E7F] border-gray-400">
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color} 0%, ${color}dd 100%)`, boxShadow: `0 0 6px ${color}80` }} />
       </div>
     </div>
   )
 })
 
-// ─── Dashboard ─────────────────────────────────────────────────────────────────
-
 export default function Dashboard({ setCurrentPage }) {
   const [vaultCounts,      setVaultCounts]      = useState({})
-  const [services,         setServices]         = useState([])
-  const [pendingApprovals, setPendingApprovals] = useState([])
-  const [recentActivity,   setRecentActivity]   = useState([])
-  const [loading,          setLoading]          = useState(true)
-  const [lastUpdate,       setLastUpdate]       = useState(new Date())
-  const [error,            setError]            = useState(null)
-  const [workers,          setWorkers]          = useState({})
-  const [workerLoading,    setWorkerLoading]    = useState(false)
-  const [autoPublishing,   setAutoPublishing]   = useState(false)
-  const [publishResult,    setPublishResult]    = useState(null)
+  const [pendingApprovals, setPendingApprovals]  = useState([])
+  const [recentActivity,   setRecentActivity]    = useState([])
+  const [loading,          setLoading]           = useState(true)
+  const [lastUpdate,       setLastUpdate]        = useState(new Date())
+  const [error,            setError]             = useState(null)
+  const [services,         setServices]          = useState([])
+  const [workers,          setWorkers]           = useState({})
+  const [autoPublishing,   setAutoPublishing]    = useState(false)
+  const [publishResult,    setPublishResult]     = useState(null)
   const { isConnected: wsConnected } = useWebSocket((message) => {
     if (message.type === 'dashboard_update' || message.type === 'initial_state') {
       if (message.vaultCounts)      setVaultCounts(message.vaultCounts)
-      if (message.services)         setServices(message.services)
       if (message.pendingApprovals) setPendingApprovals(message.pendingApprovals)
       if (message.recentActivity)   setRecentActivity(message.recentActivity)
+      if (message.services)         setServices(message.services)
+      if (message.workers)          setWorkers(message.workers)
       setLastUpdate(new Date())
     }
   })
-
-  // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchDashboardData = useCallback(async () => {
     try {
       setError(null)
       const res = await axios.get('/api/system/stats')
       setVaultCounts(res.data.vaultCounts)
-      setServices(res.data.services)
       setPendingApprovals(res.data.pendingApprovals)
       setRecentActivity(res.data.recentActivity)
+      setServices(res.data.services)
+      if (res.data.workers) setWorkers(res.data.workers)
       setLastUpdate(new Date())
     } catch (err) {
-      console.error('Failed to fetch dashboard data:', err)
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        setError('Authentication failed. Please sign in again.')
-      } else if (err.response?.status === 500) {
-        setError('Server error. Please try again later.')
-      } else {
-        setError('Failed to connect to backend. Please ensure the server is running.')
-      }
+      if (err.response?.status === 401 || err.response?.status === 403) setError('Authentication failed.')
+      else if (err.response?.status === 500) setError('Server error.')
+      else setError('Failed to connect to backend.')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  const fetchWorkerStatus = useCallback(async () => {
-    try {
-      const res = await axios.get('/api/system/workers')
-      setWorkers(res.data.workers)
-    } catch (err) {
-      console.error('Failed to fetch worker status:', err)
-    }
-  }, [])
-
-  const startWorkers = async () => {
-    setWorkerLoading(true)
-    try {
-      await axios.post('/api/system/workers/start')
-      await fetchWorkerStatus()
-    } catch (err) {
-      console.error('Failed to start workers:', err)
-    } finally {
-      setWorkerLoading(false)
-    }
-  }
-
-  const stopWorkers = async () => {
-    setWorkerLoading(true)
-    try {
-      await axios.post('/api/system/workers/stop')
-      await fetchWorkerStatus()
-    } catch (err) {
-      console.error('Failed to stop workers:', err)
-    } finally {
-      setWorkerLoading(false)
-    }
-  }
-
-  const handleAutoPublish = async () => {
-    setAutoPublishing(true)
-    setPublishResult(null)
-    try {
-      const res = await axios.post('/api/social/auto-publish')
-      setPublishResult(res.data)
-      await fetchDashboardData()
-    } catch (err) {
-      console.error('Failed to auto-publish:', err)
-      setPublishResult({ success: false, error: err.message })
-    } finally {
-      setAutoPublishing(false)
-    }
-   }
-
-  // Fetch worker status on mount (async-parallel: parallelize independent fetches)
-  useEffect(() => {
-    let cancelled = false
-    if (!cancelled) fetchWorkerStatus()
-    const interval = setInterval(() => {
-      if (!cancelled) fetchWorkerStatus()
-    }, 30000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [fetchWorkerStatus])
-
-  // Fetch stats with polling every 10s
   useEffect(() => {
     let cancelled = false
     if (!cancelled) fetchDashboardData()
-    const interval = setInterval(() => {
-      if (!cancelled) fetchDashboardData()
-    }, 10000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
+    const interval = setInterval(() => { if (!cancelled) fetchDashboardData() }, 10000)
+    return () => { cancelled = true; clearInterval(interval) }
   }, [fetchDashboardData])
 
-  // ── Memoize expensive derived state (rerender-derived-state-no-effect) ───
+  const kpiValues = useMemo(() => ({
+    total: recentActivity.length,
+    pendingApprovals: pendingApprovals.length,
+    approved: vaultCounts['Approved'] || 0,
+    rejected: vaultCounts['Rejected'] || 0,
+  }), [recentActivity, pendingApprovals, vaultCounts])
 
-  const platformActivity = useMemo(() =>
-    platforms.map(platform => {
-      const incoming = vaultCounts[platform.inboxKey] || 0
-      const outgoing = platform.doneKey ? (vaultCounts[platform.doneKey] || 0) : 0
-      return {
-        name:     platform.name,
-        icon:     platform.icon,
-        color:    platform.color,
-        incoming,
-        outgoing,
-        trend:    incoming > 5 ? 'up' : 'stable',
-      }
-    })
-  , [vaultCounts])
-
-  const barData = useMemo(() =>
-    [...platformActivity]
-      .map(p => ({ name: p.name, value: p.incoming, fill: p.color }))
-      .sort((a, b) => b.value - a.value)
-  , [platformActivity])
-
-  // Memoize chart data (expensive computations)
-  const { trendData, pieData, funnelData } = useMemo(() => {
-    const now = Date.now() // Capture once at top (react-hooks/purity)
-    const hours = ['12h ago', '10h', '8h', '6h', '4h', '2h', 'Now']
-    const distribution = Array(hours.length).fill(0).map(() => ({ approvals: 0, emails: 0, social: 0 }))
-    
-    recentActivity.forEach(activity => {
-      const activityTime = new Date(activity.timestamp || now)
-      const hoursAgo = Math.floor((now - activityTime.getTime()) / (1000 * 60 * 60))
-      const index = Math.min(Math.floor(hoursAgo / 2), hours.length - 1)
-      
-      if (index >= 0 && index < hours.length) {
-        const type = activity.type?.toLowerCase() || ''
-        if (type.includes('approval') || type.includes('approve') || type.includes('reject')) {
-          distribution[index].approvals++
-        } else if (type.includes('email')) {
-          distribution[index].emails++
-        } else if (type.includes('social') || type.includes('post') || type.includes('linkedin') || type.includes('twitter')) {
-          distribution[index].social++
-        } else {
-          distribution[index].approvals++
-        }
-      }
-    })
-
-    const trendData = hours.map((hour, i) => ({
-      time: hour,
-      Approvals: distribution[i].approvals,
-      Emails: distribution[i].emails,
-      Social: distribution[i].social,
+  const platformRadar = useMemo(() => {
+    const maxVal = Math.max(...PLATFORM_CONFIG.map(p => vaultCounts[p.inboxKey] || 0), 1)
+    return PLATFORM_CONFIG.map(p => ({
+      platform: p.name,
+      volume: vaultCounts[p.inboxKey] || 0,
+      fullMark: Math.ceil(maxVal * 1.2 || 10),
+      color: p.color,
+      icon: p.icon,
+      page: p.name === 'WhatsApp' ? 'whatsapp' : p.name === 'Email' ? 'emails' : 'social',
     }))
+  }, [vaultCounts])
 
-    const typeCounts = {}
-    recentActivity.forEach(activity => {
-      const type = activity.action || activity.type || 'other'
-      typeCounts[type] = (typeCounts[type] || 0) + 1
-    })
-
-    const colors = ['#00FF88', '#1DA1F2', '#FFB800', '#EA4335', '#8B5CF6', '#10B981']
-    const pieData = Object.entries(typeCounts)
-      .map(([name, value], i) => ({ name: name.replace(/_/g, ' '), value, fill: colors[i % colors.length] }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6)
-
-    const funnelData = [
-      { stage: 'Inbox',     value: vaultCounts['Inbox']            || 0, fill: '#00FF88' },
-      { stage: 'Pending',   value: vaultCounts['Pending_Approval'] || 0, fill: '#00D966' },
-      { stage: 'Approved',  value: vaultCounts['Approved']         || 0, fill: '#00B050' },
-      { stage: 'Completed', value: vaultCounts['Done']             || 0, fill: '#008800' },
-    ]
-
-    return { trendData, pieData, funnelData }
-  }, [recentActivity, vaultCounts])
-
-  const totalActivities = recentActivity.length
-
-  const handleRefresh = async () => {
-    setLoading(true)
-    await fetchDashboardData()
-    setLoading(false)
-  }
-
-  // ── Loading Screen ─────────────────────────────────────────────────────────
+  const radialData = useMemo(() => {
+    return PLATFORM_CONFIG.map(p => ({
+      name: p.name,
+      value: vaultCounts[p.inboxKey] || 0,
+      fill: p.color,
+    })).sort((a, b) => b.value - a.value)
+  }, [vaultCounts])
 
   if (loading && Object.keys(vaultCounts).length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] space-y-4">
         <Loader2 className="w-12 h-12 animate-spin text-[#00FF88]" />
-        <p className="text-[#7A7A85] font-mono tracking-widest animate-pulse">
-          SYNCHRONIZING DIGITAL EMPLOYEE...
-        </p>
+        <p className="text-[#7A7A85] font-mono tracking-widest animate-pulse">SYNCHRONIZING DIGITAL EMPLOYEE...</p>
       </div>
     )
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div className="space-y-6">
-
-      {/* ── Connection Status Bar ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className={`w-3 h-3 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-          <span className="text-sm dark:text-[#B0C4FF] text-gray-600">
-            {wsConnected ? 'Real-time updates active' : 'Disconnected'}
-          </span>
+          <span className="text-sm dark:text-[#B0C4FF] text-gray-600">{wsConnected ? 'Real-time updates active' : 'Disconnected'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs dark:text-[#B0C4FF] text-gray-500">
-            Last update: {lastUpdate.toLocaleTimeString()}
-          </span>
-          <button
-            onClick={handleRefresh}
-            className="p-2 rounded-lg dark:bg-[#1B2A48] bg-gray-100 hover:dark:bg-[#2A3E5F] hover:bg-gray-200 transition-all"
-          >
-            <RefreshCw
-              size={16}
-              className={`dark:text-[#00FF88] text-green-600 ${loading ? 'animate-spin' : ''}`}
-            />
+          <span className="text-xs dark:text-[#B0C4FF] text-gray-500">Last update: {lastUpdate.toLocaleTimeString()}</span>
+          <button onClick={() => { setLoading(true); fetchDashboardData().finally(() => setLoading(false)) }} className="p-2 rounded-lg dark:bg-[#1B2A48] bg-gray-100 hover:dark:bg-[#2A3E5F] hover:bg-gray-200 transition-all">
+            <RefreshCw size={16} className={`dark:text-[#00FF88] text-green-600 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* ── Error Banner ── */}
       {error && (
         <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg flex items-center gap-3 text-red-400 font-mono text-sm">
           <AlertCircle size={20} />
           {error}
-          <button onClick={handleRefresh} className="ml-auto underline hover:opacity-80">Retry</button>
+          <button onClick={fetchDashboardData} className="ml-auto underline hover:opacity-80">Retry</button>
         </div>
       )}
 
-      {/* ── Worker Status & Auto-Publish ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Worker Status */}
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 font-mono flex items-center gap-2">
-              <Cpu size={18} className="dark:text-[#00FF88] text-green-600" />
-              BACKGROUND WORKERS
-            </h2>
-            <div className="flex gap-2">
-              <button onClick={startWorkers} disabled={workerLoading} className="p-2 rounded-lg dark:bg-[#00FF88]/20 bg-green-50 hover:dark:bg-[#00FF88]/30 transition-colors disabled:opacity-50">
-                <Play size={14} className="dark:text-[#00FF88] text-green-600" />
-              </button>
-              <button onClick={stopWorkers} disabled={workerLoading} className="p-2 rounded-lg dark:bg-red-500/20 bg-red-50 hover:dark:bg-red-500/30 transition-colors disabled:opacity-50">
-                <Square size={14} className="dark:text-red-400 text-red-600" />
-              </button>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {Object.entries(workers).map(([name, worker]) => (
-              <div key={name} className={`flex items-center justify-between p-3 rounded-lg ${worker.running ? 'dark:bg-[#00FF88]/5 bg-green-50 border dark:border-[#00FF88]/20 border-green-200' : 'dark:bg-red-500/5 bg-red-50 border dark:border-red-500/20 border-red-200'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${worker.running ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                  <div>
-                    <p className="text-sm font-semibold dark:text-[#E0E0E6] text-gray-900 capitalize">{name.replace('_', ' ')}</p>
-                    <p className="text-xs dark:text-[#7A7A85] text-gray-500">{worker.running ? `Running (PID ${worker.pid})` : 'Stopped'}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {Object.keys(workers).length === 0 && (
-              <p className="text-center text-sm dark:text-[#7A7A85] text-gray-500 py-4">Loading worker status...</p>
-            )}
-          </div>
-        </div>
-
-        {/* Auto-Publish */}
-        <div className="card p-6">
-          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono flex items-center gap-2">
-            <Rocket size={18} className="dark:text-[#1DA1F2] text-blue-600" />
-            AUTO-PUBLISH POSTS
-          </h2>
-          <div className="space-y-4">
-            <div className="p-4 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-3xl font-bold dark:text-[#FFB800] text-yellow-600">{pendingApprovals.length}</p>
-                  <p className="text-xs dark:text-[#B0C4FF] text-gray-600 mt-1">Pending approval</p>
-                </div>
-                <button
-                  onClick={handleAutoPublish}
-                  disabled={autoPublishing || pendingApprovals.length === 0}
-                  className="px-6 py-3 rounded-lg font-bold dark:bg-[#00FF88] dark:text-[#0F1A2E] bg-blue-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105"
-                >
-                  {autoPublishing ? (
-                    <Loader2 className="animate-spin" size={20} />
-                  ) : (
-                    <Rocket size={20} />
-                  )}
-                  <span className="ml-2">{autoPublishing ? 'Publishing...' : 'Publish All'}</span>
-                </button>
-              </div>
-            </div>
-
-            {publishResult && (
-              <div className={`p-3 rounded-lg text-sm ${publishResult.success ? 'dark:bg-[#00FF88]/10 bg-green-50 text-green-600' : 'dark:bg-red-500/10 bg-red-50 text-red-600'}`}>
-                {publishResult.success ? (
-                  <p>Published {publishResult.published}/{publishResult.total} posts successfully</p>
-                ) : (
-                  <p>Publishing failed: {publishResult.message || publishResult.error}</p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Platform Activity ── */}
-      <div className="card p-6">
-        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-6 font-mono">
-          🌐 PLATFORM ACTIVITY
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {platformActivity.map(platform => {
-            const Icon = platform.icon
-            return (
-              <div
-                key={platform.name}
-                onClick={() => platform.page && setCurrentPage?.(platform.page)}
-                className="p-4 rounded-lg dark:bg-[#0F1A2E] bg-gray-50 hover:dark:bg-[#1B2A48] hover:bg-gray-100 transition-all border dark:border-[#2A3E5F] border-gray-200 cursor-pointer"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <Icon size={22} style={{ color: platform.color }} />
-                  <div>
-                    <h3 className="font-semibold dark:text-[#E0E0E6] text-gray-900 text-sm">
-                      {platform.name}
-                    </h3>
-                    <span className="text-xs font-semibold dark:text-[#00FF88] text-green-600">
-                      {platform.trend === 'up' ? '↑ Up' : platform.trend === 'down' ? '↓ Down' : '→ Stable'}
-                    </span>
-                  </div>
-                </div>
-                <StatBar label="Incoming" value={platform.incoming} maxValue={100} color={platform.color} />
-                <StatBar label="Outgoing" value={platform.outgoing} maxValue={100} color={platform.color} />
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ── Quick Stats Row ── */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Activity', value: totalActivities, icon: Zap, color: 'text-[#00FF88]', bg: 'dark:bg-[#00FF88]/10 bg-green-50', border: 'dark:border-[#00FF88]/30 border-green-200', action: null },
-          { label: 'Pending Review', value: pendingApprovals.length, icon: Clock, color: 'text-[#FFB800]', bg: 'dark:bg-[#FFB800]/10 bg-yellow-50', border: 'dark:border-[#FFB800]/30 border-yellow-200', action: 'approvals' },
-          { label: 'Approved', value: vaultCounts['Approved'] || 0, icon: CheckCircle, color: 'text-[#10B981]', bg: 'dark:bg-[#10B981]/10 bg-green-50', border: 'dark:border-[#10B981]/30 border-green-200', action: null },
-          { label: 'Rejected', value: vaultCounts['Rejected'] || 0, icon: XCircle, color: 'text-[#EF4444]', bg: 'dark:bg-[#EF4444]/10 bg-red-50', border: 'dark:border-[#EF4444]/30 border-red-200', action: 'approvals' },
-        ].map(stat => {
+        {KPI_CARDS.map(stat => {
           const Icon = stat.icon
           return (
-            <div
-              key={stat.label}
-              onClick={() => stat.action ? setCurrentPage?.(stat.action) : undefined}
-              className={`card p-4 border ${stat.border} ${stat.action ? 'cursor-pointer hover:scale-[1.02] transition-all' : ''}`}
-            >
+            <div key={stat.label} onClick={() => stat.page ? setCurrentPage?.(stat.page) : undefined}
+              className={`card p-4 border ${stat.border} ${stat.page ? 'cursor-pointer hover:scale-[1.02] transition-all' : ''}`}>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs dark:text-[#7A7A85] text-gray-500 uppercase tracking-wide">{stat.label}</p>
-                  <p className={`text-2xl font-bold ${stat.color} mt-1`}>{stat.value}</p>
+                  <p className="text-2xl font-bold mt-1" style={{ color: stat.color }}>{kpiValues[stat.key]}</p>
                 </div>
                 <div className={`p-3 rounded-lg ${stat.bg}`}>
-                  <Icon size={20} className={stat.color} />
+                  <Icon size={20} style={{ color: stat.color }} />
                 </div>
               </div>
             </div>
@@ -446,241 +170,108 @@ export default function Dashboard({ setCurrentPage }) {
         })}
       </div>
 
-      {/* ── Charts ── */}
+      {/* Worker Status + Auto-Publish */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* Activity Trend (Line + Area) */}
         <div className="card p-6">
-          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
-            📈 ACTIVITY TREND
+          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono flex items-center gap-2">
+            <Cpu size={18} className="dark:text-[#00FF88] text-green-600" />
+            BACKGROUND WORKERS
           </h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <defs>
-                <linearGradient id="colorApprovals" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00FF88" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#00FF88" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorEmails" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1DA1F2" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#1DA1F2" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorSocial" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="time" stroke="#7A7A85" style={{ fontSize: '11px' }} />
-              <YAxis stroke="#7A7A85" style={{ fontSize: '11px' }} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  background: '#1B2A48',
-                  border: '1px solid #2A3E5F',
-                  borderRadius: '8px',
-                  color: '#E0E0E6',
-                  fontSize: '12px',
-                }}
-              />
-              <Area type="monotone" dataKey="Approvals" stroke="#00FF88" fillOpacity={1} fill="url(#colorApprovals)" strokeWidth={2} />
-              <Area type="monotone" dataKey="Emails" stroke="#1DA1F2" fillOpacity={1} fill="url(#colorEmails)" strokeWidth={2} />
-              <Area type="monotone" dataKey="Social" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorSocial)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Action Type Distribution (Pie) */}
-        <div className="card p-6">
-          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
-            🎯 ACTION DISTRIBUTION
-          </h2>
-          {pieData.length > 0 ? (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="55%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={4}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: '#1B2A48',
-                      border: '1px solid #2A3E5F',
-                      borderRadius: '8px',
-                      color: '#E0E0E6',
-                      fontSize: '12px',
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-2">
-                {pieData.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ background: item.fill }} />
-                      <span className="dark:text-[#B0C4FF] text-gray-700 capitalize">{item.name}</span>
-                    </div>
-                    <span className="font-bold dark:text-[#E0E0E6] text-gray-900">{item.value}</span>
-                  </div>
-                ))}
+          <div className="space-y-3">
+            {Object.keys(workers).length > 0 ? Object.entries(workers).map(([name, worker]) => (
+              <div key={name} className={`flex items-center justify-between p-3 rounded-lg ${worker.running ? 'dark:bg-[#00FF88]/5 bg-green-50 border dark:border-[#00FF88]/20 border-green-200' : 'dark:bg-red-500/5 bg-red-50 border dark:border-red-500/20 border-red-200'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-2.5 h-2.5 rounded-full ${worker.running ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <p className="text-sm font-semibold dark:text-[#E0E0E6] text-gray-900 capitalize">{name.replace('_', ' ')}</p>
+                </div>
+                <span className="text-xs dark:text-[#7A7A85]">{worker.running ? `Running (PID ${worker.pid})` : 'Stopped'}</span>
               </div>
+            )) : <p className="text-sm dark:text-[#7A7A85] text-center py-4">No worker data</p>}
+          </div>
+        </div>
+        <div className="card p-6">
+          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono flex items-center gap-2">
+            <Rocket size={18} className="dark:text-[#1DA1F2] text-blue-600" />
+            AUTO-PUBLISH POSTS
+          </h2>
+          <div className="flex items-center justify-between p-4 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200">
+            <div>
+              <p className="text-3xl font-bold dark:text-[#FFB800] text-yellow-600">{pendingApprovals.length}</p>
+              <p className="text-xs dark:text-[#B0C4FF] text-gray-600 mt-1">Pending approval</p>
             </div>
-          ) : (
-            <div className="flex items-center justify-center h-[280px]">
-              <p className="dark:text-[#7A7A85] text-gray-500 text-sm">No activity data yet</p>
+            <button disabled className="px-4 py-2 rounded-lg font-bold dark:bg-[#00FF88] dark:text-[#0F1A2E] bg-blue-500 text-white opacity-50 cursor-not-allowed">
+              <Rocket size={18} />
+            </button>
+          </div>
+          {publishResult && (
+            <div className={`mt-3 p-3 rounded-lg text-sm ${publishResult.success ? 'dark:bg-[#00FF88]/10 bg-green-50 text-green-600' : 'dark:bg-red-500/10 bg-red-50 text-red-600'}`}>
+              {publishResult.success ? `Published ${publishResult.published}/${publishResult.total}` : `Failed: ${publishResult.message || publishResult.error}`}
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Second Row Charts ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Platform Activity Cards */}
+      <div className="card p-6">
+        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-6 font-mono flex items-center gap-2">
+          <Users size={18} className="dark:text-[#00FF88] text-green-600" />
+          PLATFORM ACTIVITY
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {PLATFORM_CONFIG.map(p => {
+            const Icon = p.icon
+            const volume = vaultCounts[p.inboxKey] || 0
+            return (
+              <div key={p.name} onClick={() => setCurrentPage?.(p.name === 'WhatsApp' ? 'whatsapp' : p.name === 'Email' ? 'emails' : 'social')}
+                className="p-4 rounded-lg dark:bg-[#0F1A2E] bg-gray-50 hover:dark:bg-[#1B2A48] hover:bg-gray-100 transition-all border dark:border-[#2A3E5F] border-gray-200 cursor-pointer">
+                <div className="flex items-center gap-2 mb-4">
+                  <Icon size={22} style={{ color: p.color }} />
+                  <h3 className="font-semibold dark:text-[#E0E0E6] text-gray-900 text-sm">{p.name}</h3>
+                </div>
+                <StatBar label="Volume" value={volume} maxValue={Math.max(volume, 10)} color={p.color} />
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
-        {/* Actions Funnel */}
+      {/* RadarChart + 1 RadialBarChart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card p-6">
-          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
-            ✅ ACTIONS FUNNEL
+          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">PLATFORM OVERVIEW</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <RadarChart data={platformRadar}>
+              <PolarGrid stroke="rgba(255,255,255,0.08)" />
+              <PolarAngleAxis dataKey="platform" stroke="#7A7A85" style={{ fontSize: '11px' }} />
+              <PolarRadiusAxis angle={90} domain={[0, 'auto']} stroke="#7A7A85" style={{ fontSize: '10px' }} />
+              <Radar name="Volume" dataKey="volume" stroke="#00FF88" fill="#00FF88" fillOpacity={0.25} strokeWidth={2} />
+              <Tooltip contentStyle={{ background: '#1B2A48', border: '1px solid #2A3E5F', borderRadius: '8px', color: '#E0E0E6', fontSize: '12px' }} />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="card p-6">
+          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono flex items-center gap-2">
+            <Inbox size={18} className="dark:text-[#00FF88] text-green-600" />
+            INBOX VOLUME
           </h2>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={funnelData}
-              layout="vertical"
-              margin={{ top: 20, right: 30, left: 100, bottom: 20 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-              <XAxis type="number" stroke="#B0C4FF" />
-              <YAxis dataKey="stage" type="category" stroke="#B0C4FF" width={100} />
-              <Tooltip
-                contentStyle={{
-                  background: '#0F1A2E',
-                  border: '1px solid #2A3E5F',
-                  borderRadius: '8px',
-                  color: '#E0E0E6',
-                }}
-                cursor={{ fill: 'rgba(0,255,136,0.1)' }}
-              />
-              <Bar dataKey="value" fill="#00FF88" radius={[0, 8, 8, 0]}>
-                {funnelData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Top Platforms Bar Chart */}
-        <div className="card p-6">
-          <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
-            📊 TOP PLATFORMS (INCOMING)
-          </h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart
-              data={barData}
-              layout="vertical"
-              margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-              <XAxis type="number" stroke="#7A7A85" style={{ fontSize: '12px' }} />
-              <YAxis dataKey="name" type="category" stroke="#7A7A85" style={{ fontSize: '12px' }} width={70} />
-              <Tooltip
-                contentStyle={{
-                  background: '#1B2A48',
-                  border: '1px solid #2A3E5F',
-                  borderRadius: '8px',
-                }}
-              />
-              <Bar dataKey="value" radius={[0, 8, 8, 0]}>
-                {barData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
+            <RadialBarChart innerRadius="20%" outerRadius="90%" data={radialData} startAngle={180} endAngle={-180}>
+              <RadialBar dataKey="value" cornerRadius={8} background={{ fill: 'rgba(255,255,255,0.04)' }} />
+              <Legend iconSize={10} wrapperStyle={{ fontSize: '11px', color: '#B0C4FF' }} />
+              <Tooltip contentStyle={{ background: '#1B2A48', border: '1px solid #2A3E5F', borderRadius: '8px', color: '#E0E0E6', fontSize: '12px' }} />
+            </RadialBarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* ── Recent Activity Feed ── */}
+      {/* Vault Status */}
       <div className="card p-6">
-        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono flex items-center gap-2">
-          <Clock size={18} className="dark:text-[#00FF88] text-green-600" />
-          RECENT ACTIVITY
-        </h2>
-        {recentActivity.length > 0 ? (
-          <div className="space-y-3 max-h-80 overflow-auto pr-2 content-visibility-auto" style={{ containIntrinsicSize: '0 1500px' }}>
-            {recentActivity.slice(0, 15).map((activity, i) => {
-              const action = activity.action || activity.type || 'unknown'
-              const isSuccess = activity.status === 'success' || action.includes('approve')
-              const isWarning = activity.status === 'warning' || action.includes('pending')
-              
-              return (
-                <div
-                  key={i}
-                  onClick={() => setCurrentPage?.('logs')}
-                  className="flex items-center gap-3 p-3 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200 hover:dark:bg-[#2A3E5F] hover:bg-gray-100 transition-colors cursor-pointer"
-                >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    isSuccess 
-                      ? 'dark:bg-[#00FF88]/20 bg-green-100' 
-                      : isWarning 
-                      ? 'dark:bg-[#FFB800]/20 bg-yellow-100' 
-                      : 'dark:bg-[#FF4444]/20 bg-red-100'
-                  }`}>
-                    {isSuccess ? (
-                      <CheckCircle size={16} className="dark:text-[#00FF88] text-green-600" />
-                    ) : isWarning ? (
-                      <Clock size={16} className="dark:text-[#FFB800] text-yellow-600" />
-                    ) : (
-                      <XCircle size={16} className="dark:text-[#FF4444] text-red-600" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium dark:text-[#E0E0E6] text-gray-900 truncate">
-                      {activity.message || activity.description || action.replace(/_/g, ' ')}
-                    </p>
-                    <p className="text-xs dark:text-[#7A7A85] text-gray-500">
-                      {activity.service || activity.target || 'system'}
-                    </p>
-                  </div>
-                  <span className="text-xs dark:text-[#7A7A85] text-gray-400 whitespace-nowrap">
-                    {activity.timestamp ? new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <FileText size={32} className="mx-auto dark:text-[#7A7A85] text-gray-400 mb-3" />
-            <p className="dark:text-[#7A7A85] text-gray-500 text-sm">No recent activity</p>
-          </div>
-        )}
-      </div>
-
-      {/* ── Vault Status ── */}
-      <div className="card p-6">
-        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
-          📁 VAULT STATUS
-        </h2>
+        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">VAULT STATUS</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
           {Object.entries(vaultCounts).map(([folder, count]) => (
-            <div
-              key={folder}
-              onClick={() => setCurrentPage?.('vault')}
-              className="p-4 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200 cursor-pointer hover:dark:bg-[#2A3E5F] hover:bg-gray-100 transition-all"
-            >
-              <p className="text-xs dark:text-[#B0C4FF] text-gray-600 uppercase tracking-wide mb-2">
-                {folder.replace(/_/g, ' ')}
-              </p>
+            <div key={folder} onClick={() => setCurrentPage?.('vault')}
+              className="p-4 rounded-lg dark:bg-[#1B2A48] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200 cursor-pointer hover:dark:bg-[#2A3E5F] hover:bg-gray-100 transition-all">
+              <p className="text-xs dark:text-[#B0C4FF] text-gray-600 uppercase tracking-wide mb-2">{folder.replace(/_/g, ' ')}</p>
               <p className="text-3xl font-bold dark:text-[#00FF88] text-green-600">{count}</p>
             </div>
           ))}
@@ -689,9 +280,7 @@ export default function Dashboard({ setCurrentPage }) {
 
       {/* ── System Status ── */}
       <div className="card p-6">
-        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
-          🔧 SYSTEM STATUS
-        </h2>
+        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">SYSTEM STATUS</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {services.map(service => {
             const isRunning = service.status === 'running'
@@ -699,8 +288,7 @@ export default function Dashboard({ setCurrentPage }) {
             return (
               <div
                 key={service.name}
-                onClick={() => setCurrentPage?.('logs')}
-                className={`p-4 rounded-lg border transition-all cursor-pointer hover:scale-[1.02] ${
+                className={`p-4 rounded-lg border transition-all ${
                   isRunning
                     ? 'dark:bg-gradient-to-br dark:from-[#1B2A48] dark:to-[#0F1A2E] dark:border-[#00FF88]/30 bg-green-50 border-green-200'
                     : isWarning
@@ -717,9 +305,7 @@ export default function Dashboard({ setCurrentPage }) {
                       : 'bg-red-500'
                   }`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold dark:text-[#E0E0E6] text-gray-900 truncate">
-                      {service.name}
-                    </p>
+                    <p className="text-sm font-semibold dark:text-[#E0E0E6] text-gray-900 truncate">{service.name}</p>
                     <p className={`text-xs font-bold mt-1 ${
                       isRunning
                         ? 'dark:text-[#00FF88] text-green-600'
@@ -749,27 +335,16 @@ export default function Dashboard({ setCurrentPage }) {
         </div>
       </div>
 
-      {/* ── Pending Actions ── */}
+      {/* Pending Actions */}
       <div className="card p-6 bg-gradient-to-r dark:from-[#00FF88]/5 dark:to-[#1DA1F2]/5 from-green-50 to-blue-50 border dark:border-[#00FF88]/20 border-blue-200">
-        <div
-          onClick={() => setCurrentPage?.('approvals')}
-          className="flex items-center justify-between cursor-pointer"
-        >
+        <div onClick={() => setCurrentPage?.('approvals')} className="flex items-center justify-between cursor-pointer">
           <div>
-            <p className="text-sm dark:text-[#B0C4FF] text-gray-600 font-mono">⚡ PENDING ACTIONS</p>
-            <p className="text-4xl font-bold dark:text-[#00FF88] text-green-600 mt-2">
-              {pendingApprovals.length}
-            </p>
+            <p className="text-sm dark:text-[#B0C4FF] text-gray-600 font-mono">PENDING ACTIONS</p>
+            <p className="text-4xl font-bold dark:text-[#00FF88] text-green-600 mt-2">{pendingApprovals.length}</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs dark:text-[#B0C4FF] text-gray-500">Requires review</p>
-            <button onClick={() => setCurrentPage?.('approvals')} className="mt-3 px-4 py-2 rounded-lg font-medium dark:bg-[#00FF88] dark:text-[#0F1A2E] bg-blue-500 text-white hover:opacity-90 transition-all">
-              Review Now
-            </button>
-          </div>
+          <button onClick={() => setCurrentPage?.('approvals')} className="px-4 py-2 rounded-lg font-medium dark:bg-[#00FF88] dark:text-[#0F1A2E] bg-blue-500 text-white hover:opacity-90 transition-all">Review Now</button>
         </div>
       </div>
-
     </div>
   )
 }

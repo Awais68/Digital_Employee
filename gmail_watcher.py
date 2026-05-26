@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
+import requests
 
 # DRY_RUN mode — set via env, defaults to true for safety
 DRY_RUN = os.getenv('DRY_RUN', 'true').lower() == 'true'
@@ -281,6 +282,179 @@ class BaseWatcher:
         self.running = False
         self._save_processed_ids()
         logger.info("Watcher stopped, processed IDs saved")
+
+
+# =============================================================================
+# GMAIL LABEL MANAGER
+# =============================================================================
+
+class GmailLabelManager:
+    """Manages Gmail labels for AI-based email classification."""
+
+    CATEGORY_LABELS = {
+        'Support': 'AI/Support',
+        'Sales Inquiry': 'AI/Sales_Inquiry',
+        'Meeting Request': 'AI/Meeting_Request',
+        'Invoice': 'AI/Invoice',
+        'Newsletter': 'AI/Newsletter',
+        'Spam': 'AI/Spam',
+        'Internal': 'AI/Internal',
+    }
+
+    def __init__(self, service):
+        self.service = service
+        self._label_cache = None
+
+    @with_retry(max_attempts=2, base_delay=1, max_delay=5)
+    def get_or_create_label(self, label_name: str) -> Optional[str]:
+        """Get or create a Gmail label. Returns label ID."""
+        try:
+            if self._label_cache is None:
+                results = self.service.users().labels().list(userId='me').execute()
+                self._label_cache = {l['name']: l['id'] for l in results.get('labels', [])}
+
+            if label_name in self._label_cache:
+                return self._label_cache[label_name]
+
+            label = self.service.users().labels().create(
+                userId='me',
+                body={
+                    'name': label_name,
+                    'labelListVisibility': 'labelShow',
+                    'messageListVisibility': 'show'
+                }
+            ).execute()
+            self._label_cache[label_name] = label['id']
+            logger.info(f"Created Gmail label: {label_name}")
+            return label['id']
+        except HttpError as e:
+            logger.error(f"Failed to create label {label_name}: {e}")
+            return None
+
+    def apply_category_label(self, message_id: str, category: str) -> bool:
+        """Apply the AI category label to an email."""
+        label_name = self.CATEGORY_LABELS.get(category)
+        if not label_name:
+            logger.warning(f"No label defined for category: {category}")
+            return False
+
+        label_id = self.get_or_create_label(label_name)
+        if not label_id:
+            return False
+
+        try:
+            self.service.users().messages().modify(
+                userId='me',
+                id=message_id,
+                body={'addLabelIds': [label_id]}
+            ).execute()
+            logger.info(f"Applied label {label_name} to message {message_id}")
+            return True
+        except HttpError as e:
+            logger.error(f"Failed to apply label {label_name}: {e}")
+            return False
+
+
+# =============================================================================
+# EMAIL DEDUPLICATION DB
+# =============================================================================
+
+class EmailDeduplicationDB:
+    """SQLite-based persistent deduplication for emails."""
+
+    def __init__(self, db_path: Optional[Path] = None):
+        self.db_path = db_path or (METRICS_DIR / "email_dedup.db")
+        self._init_db()
+
+    def _init_db(self):
+        try:
+            import sqlite3
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(str(self.db_path), timeout=5)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS processed_emails (
+                    email_id TEXT PRIMARY KEY,
+                    thread_id TEXT,
+                    subject TEXT,
+                    sender TEXT,
+                    processed_at TEXT,
+                    category TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS dedup_stats (
+                    date TEXT PRIMARY KEY,
+                    total_processed INTEGER DEFAULT 0,
+                    duplicates_skipped INTEGER DEFAULT 0
+                )
+            """)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"[DedupDB] Init failed: {e}")
+
+    def _get_conn(self):
+        import sqlite3
+        return sqlite3.connect(str(self.db_path), timeout=5)
+
+    def is_processed(self, email_id: str) -> bool:
+        try:
+            conn = self._get_conn()
+            row = conn.execute(
+                "SELECT 1 FROM processed_emails WHERE email_id = ?",
+                (email_id,)
+            ).fetchone()
+            conn.close()
+            return row is not None
+        except Exception:
+            return False
+
+    def mark_processed(
+        self,
+        email_id: str,
+        thread_id: str = "",
+        subject: str = "",
+        sender: str = "",
+        category: str = ""
+    ):
+        try:
+            conn = self._get_conn()
+            conn.execute("""
+                INSERT OR IGNORE INTO processed_emails
+                    (email_id, thread_id, subject, sender, processed_at, category)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                email_id, thread_id, subject, sender,
+                datetime.now(timezone.utc).isoformat(), category
+            ))
+            conn.execute("""
+                INSERT INTO dedup_stats (date, total_processed, duplicates_skipped)
+                VALUES (date('now'), 1, 0)
+                ON CONFLICT(date) DO UPDATE SET total_processed = total_processed + 1
+            """)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"[DedupDB] Mark failed: {e}")
+
+    def get_stats(self) -> Dict:
+        try:
+            conn = self._get_conn()
+            total = conn.execute(
+                "SELECT COUNT(*) FROM processed_emails"
+            ).fetchone()[0]
+            today = conn.execute(
+                "SELECT total_processed, duplicates_skipped FROM dedup_stats "
+                "WHERE date = date('now')"
+            ).fetchone()
+            conn.close()
+            return {
+                'total_processed': total,
+                'today_processed': today[0] if today else 0,
+                'today_skipped': today[1] if today else 0,
+            }
+        except Exception:
+            return {'total_processed': 0, 'today_processed': 0, 'today_skipped': 0}
 
 
 # =============================================================================
@@ -632,6 +806,23 @@ thread_id: {email.thread_id}
                 f.write(content)
 
             logger.info(f"✅ Created task file: {filename}")
+
+            try:
+                notify_resp = requests.post(
+                    f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/notify",
+                    json={
+                        'type': 'urgent' if email.priority == 'high' else 'info',
+                        'title': f'📧 {"🔴 URGENT" if email.priority == "high" else "New"} Email',
+                        'message': f'From: {email.from_addr}\nSubject: {email.subject}',
+                        'data': {'source': 'email', 'file': filename, 'priority': email.priority}
+                    },
+                    timeout=5
+                )
+                if notify_resp.ok:
+                    logger.info(f"🔔 Dashboard notification sent for {filename}")
+            except Exception as e:
+                logger.warning(f"[Notify] Dashboard notification failed: {e}")
+
             return task_path
 
         except Exception as e:
@@ -695,6 +886,9 @@ thread_id: {email.thread_id}
                 f"'{email.subject}' -> {task_path.name}"
             )
 
+            # IMMEDIATELY trigger AI analysis and action plan creation
+            self.process_email_with_ai(email, task_path.name)
+
             return True
 
         except Exception as e:
@@ -746,6 +940,27 @@ thread_id: {email.thread_id}
                 return email_id in content
         except Exception:
             return False
+
+    def process_email_with_ai(self, email: EmailData, filename: str) -> None:
+        """Send email to backend AI for analysis, action plan, and auto-reply generation."""
+        try:
+            resp = requests.post(
+                f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/process-email",
+                json={
+                    'subject': email.subject,
+                    'sender': email.from_addr,
+                    'body': email.body[:2000],
+                    'priority': email.priority,
+                    'filename': filename
+                },
+                timeout=30
+            )
+            if resp.ok:
+                logger.info(f"🤖 AI analysis triggered for {filename}")
+            else:
+                logger.warning(f"[AI Process] Returned {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            logger.warning(f"[AI Process] Failed: {e}")
 
     def run(self) -> Dict:
         """
@@ -813,6 +1028,95 @@ thread_id: {email.thread_id}
             stats = self.get_stats()
             logger.info(f"Final stats - Processed: {stats['processed']}, "
                        f"Errors: {stats['errors']}, Skipped: {stats['skipped']}")
+
+
+# =============================================================================
+# STANDALONE PROCESSING FUNCTIONS
+# =============================================================================
+
+def classify_email(email: EmailData, ai_endpoint: str = None) -> str:
+    """Use AI to classify email into a category (Support, Invoice, etc.)."""
+    endpoint = ai_endpoint or (
+        f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/classify-email"
+    )
+    try:
+        resp = requests.post(
+            endpoint,
+            json={
+                'subject': email.subject,
+                'sender': email.from_addr,
+                'body': email.body[:1000],
+            },
+            timeout=15
+        )
+        if resp.ok:
+            data = resp.json()
+            category = data.get('category', 'Uncategorized')
+            logger.info(f"📊 Classified '{email.subject[:40]}' as: {category}")
+            return category
+        else:
+            logger.warning(f"[Classify] {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"[Classify] Failed: {e}")
+    return 'Uncategorized'
+
+
+def process_emails():
+    """Fetch, classify, dedup, and process unread emails in one pass."""
+    watcher = GmailWatcher()
+    if not watcher.authenticate():
+        logger.error("Cannot process emails: authentication failed")
+        return
+
+    dedup_db = EmailDeduplicationDB()
+    label_manager = GmailLabelManager(watcher.service)
+
+    emails = watcher.fetch_unread_emails()
+    if not emails:
+        logger.info("No new emails to process")
+        return
+
+    for msg in emails:
+        email_id = msg['id']
+
+        if dedup_db.is_processed(email_id):
+            logger.debug(f"[Dedup] Skipping already processed: {email_id}")
+            continue
+
+        email_data = watcher.parse_email(msg)
+        category = classify_email(email_data)
+
+        dedup_db.mark_processed(
+            email_id, email_data.thread_id,
+            email_data.subject, email_data.from_addr, category
+        )
+        label_manager.apply_category_label(email_id, category)
+        watcher.process_item(email_data)
+
+    dedup_stats = dedup_db.get_stats()
+    logger.info(f"[Dedup] Stats: {dedup_stats}")
+
+
+def notify_dashboard(event_type: str, title: str, message: str,
+                     data: dict = None) -> None:
+    """Send a notification event to the dashboard."""
+    try:
+        resp = requests.post(
+            f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/notify",
+            json={
+                'type': event_type,
+                'title': title,
+                'message': message,
+                'data': data or {},
+            },
+            timeout=5
+        )
+        if resp.ok:
+            logger.info(f"🔔 Dashboard notified: {title}")
+        else:
+            logger.warning(f"[Notify] {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"[Notify] Failed: {e}")
 
 
 # =============================================================================
@@ -973,6 +1277,11 @@ Examples:
         help="Run OAuth2 authentication"
     )
     parser.add_argument(
+        "--process",
+        action="store_true",
+        help="Fetch, classify, dedup, and process emails (standalone)"
+    )
+    parser.add_argument(
         "--continuous",
         action="store_true",
         help="Run continuously (used internally by tmux)"
@@ -995,6 +1304,9 @@ Examples:
         show_status()
     elif args.auth:
         run_authentication()
+    elif args.process:
+        logger.info("Gmail Watcher - Standalone process mode")
+        process_emails()
     elif args.continuous:
         logger.info(f"Starting Gmail Watcher v2.0 (interval: {args.interval}s)")
         watcher = GmailWatcher(check_interval=args.interval)

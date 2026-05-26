@@ -1,21 +1,64 @@
 import {
   Home, Mail, MessageCircle, CheckSquare, Share2,
   DollarSign, Cloud, FileText, Menu, X, ChevronLeft, CheckCircle2,
-  FolderOpen,
+  FolderOpen, Shield, Activity,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import axios from 'axios'
+
+function WorkerStatus() {
+  const [workers, setWorkers] = useState({})
+  const [expanded, setExpanded] = useState(true)
+  useEffect(() => {
+    axios.get('/api/system/workers').then(r => setWorkers(r.data.workers || {})).catch(() => {})
+    const iv = setInterval(() => {
+      axios.get('/api/system/workers').then(r => setWorkers(r.data.workers || {})).catch(() => {})
+    }, 30000)
+    return () => clearInterval(iv)
+  }, [])
+  const workerList = Object.values(workers)
+  const anyRunning = workerList.some(w => w.running)
+  return (
+    <div className="border-t dark:border-[#2A3E5F] border-gray-200">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 p-3 text-xs dark:text-[#B0C4FF] text-gray-500 hover:dark:bg-[#2A3E5F]/50 transition-colors"
+      >
+        <Activity size={14} />
+        <span className="flex-1 text-left">Workers</span>
+        <div className={`w-2 h-2 rounded-full ${anyRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 space-y-1">
+          {workerList.length > 0 ? workerList.map(w => (
+            <div key={w.name} className="flex items-center justify-between text-[10px]">
+              <span className="dark:text-[#7A7A85] text-gray-500 truncate">{w.name.replace(/_/g, ' ')}</span>
+              <div className={`w-1.5 h-1.5 rounded-full ${w.running ? 'bg-green-500' : 'bg-red-500'}`} />
+            </div>
+          )) : (
+            <span className="text-[10px] dark:text-[#7A7A85]">No workers</span>
+          )}
+          <span className="text-[10px] dark:text-[#7A7A85] font-mono block mt-1">
+            {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard',    icon: Home,          badge: null   },
-  { id: 'approvals', label: 'Approvals',    icon: CheckSquare,   badge: 'HITL' },
-  { id: 'emails',    label: 'Emails',       icon: Mail,          badge: '3'    },
-  { id: 'whatsapp',  label: 'WhatsApp',     icon: MessageCircle, badge: '5'    },
-  { id: 'todos',     label: 'Todos',        icon: CheckCircle2,  badge: '12'   },
-  { id: 'social',    label: 'Social Media', icon: Share2,        badge: null   },
-  { id: 'accounting',label: 'Accounting',   icon: DollarSign,    badge: null   },
-  { id: 'cloud',     label: 'Cloud Status', icon: Cloud,         badge: null   },
-  { id: 'logs',      label: 'Logs',         icon: FileText,      badge: null   },
-  { id: 'vault',     label: 'Vault Editor', icon: FolderOpen,    badge: null   },
+  { id: 'dashboard', label: 'Dashboard',     icon: Home,          badge: null   },
+  { id: 'approvals', label: 'Approvals',     icon: CheckSquare,   badge: 'HITL' },
+  { id: 'emails',    label: 'Emails',        icon: Mail,          badge: null   },
+  { id: 'whatsapp',  label: 'WhatsApp',      icon: MessageCircle, badge: null   },
+  { id: 'todos',     label: 'Todos',         icon: CheckCircle2,  badge: null   },
+  { id: 'social',    label: 'Social Media',  icon: Share2,        badge: null   },
+  { id: 'accounting',label: 'Accounting',    icon: DollarSign,    badge: null   },
+  { id: 'cloud',     label: 'Cloud Status',  icon: Cloud,         badge: null   },
+  { id: 'admin',     label: 'Admin',         icon: Shield,        badge: null   },
+  { id: 'logs',      label: 'Logs',          icon: FileText,      badge: null   },
+  { id: 'vault',     label: 'Vault Editor',  icon: FolderOpen,    badge: null   },
 ]
 
 export default function Sidebar({ currentPage, setCurrentPage }) {
@@ -46,9 +89,9 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
           {!isCollapsed && (
             <>
               <h1 className="text-2xl font-bold font-mono dark:text-[#00FF88] text-blue-600">
-                VAULT_CTRL
+                DIGITAL FTE
               </h1>
-              <p className="text-xs dark:text-[#B0C4FF] text-gray-500 mt-1">v1.0.0</p>
+              <p className="text-xs dark:text-[#B0C4FF] text-gray-500 mt-1">AI Employee System</p>
             </>
           )}
           <button
@@ -102,18 +145,8 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
           })}
         </nav>
 
-        {/* Bottom Status */}
-        <div className={`p-4 border-t dark:border-[#2A3E5F] border-gray-200 ${isCollapsed ? 'text-center' : ''}`}>
-          <div className="flex items-center gap-2 text-xs dark:text-[#B0C4FF] text-gray-500">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            {!isCollapsed && <span>System Active</span>}
-          </div>
-          {!isCollapsed && (
-            <p className="text-xs dark:text-[#B0C4FF] text-gray-500 mt-2 font-mono">
-              {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          )}
-        </div>
+        {/* Worker Status — always mounted (hooks can't be conditional) */}
+        {!isCollapsed && <WorkerStatus />}
       </div>
 
       {/* Mobile Overlay */}

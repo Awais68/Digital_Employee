@@ -1,5 +1,6 @@
 import express from 'express'
-import { execSync } from 'child_process'
+import { execSync, exec } from 'child_process'
+import { promisify } from 'util'
 import path from 'path'
 import {
   getServiceStatus,
@@ -12,6 +13,8 @@ import {
 } from '../system-status.js'
 import { readVaultFiles, searchVaultFiles } from '../vault-reader.js'
 import fs from 'fs'
+
+const execAsync = promisify(exec)
 
 const router = express.Router()
 
@@ -60,16 +63,35 @@ router.get('/pending-approvals', (req, res) => {
   res.json(approvals)
 })
 
-// GET dashboard stats - comprehensive endpoint
+// GET dashboard stats - comprehensive endpoint (cached 5s)
 router.get('/stats', async (req, res) => {
   try {
+    const mod = await import('../services/cache.js')
+    const cached = mod.cacheGet('system_stats')
+    if (cached) return res.json(cached)
+
+    const workerList = ['orchestrator', 'whatsapp_watcher', 'gmail_watcher']
+    const workerStatus = {}
+    for (const name of workerList) {
+      let running = false
+      let pid = null
+      try {
+        const { stdout } = await execAsync(`pgrep -f "${name}\\.py"`).catch(() => ({ stdout: '' }))
+        const pids = stdout.trim().split('\n').filter(Boolean).map(Number)
+        if (pids.length > 0) { running = true; pid = pids[0] }
+      } catch {}
+      workerStatus[name] = { name, running, pid }
+    }
+
     const stats = {
       vaultCounts: getVaultCounts(true),
       recentActivity: getRecentActivity(10),
       pendingApprovals: getPendingApprovals(),
       services: await getServiceStatus(),
+      workers: workerStatus,
       timestamp: new Date(),
     }
+    mod.cacheSet('system_stats', stats, 5)
     res.json(stats)
   } catch (err) {
     res.status(500).json({ error: 'Failed to get dashboard stats', message: err.message })
@@ -79,6 +101,8 @@ router.get('/stats', async (req, res) => {
 // POST refresh - trigger manual refresh and broadcast
 router.post('/refresh', async (req, res) => {
   try {
+    const mod = await import('../services/cache.js')
+    mod.cacheDel('system_stats')
     const data = await refreshAndBroadcast()
     res.json(data)
   } catch (err) {
@@ -101,30 +125,25 @@ router.get('/search', (req, res) => {
 })
 
 // GET worker status
-router.get('/workers', (req, res) => {
+router.get('/workers', async (req, res) => {
   try {
-    const VAULT_PARENT = path.resolve(process.cwd(), '..')
-    const pidFile = path.join(VAULT_PARENT, '.workers.pid')
-    
-    const pids = fs.existsSync(pidFile) ? JSON.parse(fs.readFileSync(pidFile, 'utf-8')) : {}
-    const workers = {}
-    
     const workerList = ['orchestrator', 'whatsapp_watcher', 'gmail_watcher']
-    
+    const workers = {}
+
     for (const name of workerList) {
-      const pid = pids[name]
       let running = false
+      let pid = null
       
-      if (pid) {
-        try {
-          process.kill(pid, 0)
+      try {
+        const { stdout } = await execAsync(`pgrep -f "${name}\\.py"`).catch(() => ({ stdout: '' }))
+        const pids = stdout.trim().split('\n').filter(Boolean).map(Number)
+        if (pids.length > 0) {
           running = true
-        } catch {
-          running = false
+          pid = pids[0]
         }
-      }
-      
-      workers[name] = { name, running, pid: running ? pid : null }
+      } catch {}
+
+      workers[name] = { name, running, pid }
     }
     
     res.json({ workers })

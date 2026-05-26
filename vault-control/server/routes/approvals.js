@@ -1,7 +1,8 @@
 import express from 'express'
-import { readVaultFiles, getVaultPath, moveFile, writeFile, readFile } from '../vault-reader.js'
+import { readVaultFiles, getVaultPath, writeFile } from '../vault-reader.js'
 import fs from 'fs'
 import path from 'path'
+import { createNotification } from '../services/notificationService.js'
 
 const router = express.Router()
 
@@ -119,6 +120,7 @@ router.post('/:id/approve', (req, res) => {
     // Move the file
     fs.renameSync(sourcePath, destPath)
     
+    createNotification('success', 'Approved', `Item ${id} was approved`, { source: 'approval', id })
     if (global.broadcast) {
       global.broadcast({ type: 'approval_changed', action: 'approved', id })
     }
@@ -155,6 +157,7 @@ router.post('/:id/reject', (req, res) => {
     // Move the file
     fs.renameSync(sourcePath, destPath)
     
+    createNotification('warning', 'Rejected', `Item ${id} was rejected`, { source: 'approval', id })
     if (global.broadcast) {
       global.broadcast({ type: 'approval_changed', action: 'rejected', id })
     }

@@ -1,315 +1,253 @@
-#!/usr/bin/env python3
 """
-Universal Orchestrator — Ralph Wiggum loop for any AI provider.
+universal_orchestrator.py
 
-When Claude Code is available:
-  → .claude/hooks/stop.py handles the loop automatically
-  → This file is NOT needed (but harmless to run)
+Ralph Wiggum loop WITHOUT Claude Code CLI.
+Used automatically when claude CLI is not available.
+When Claude Code IS available, .claude/hooks/stop.py handles looping instead.
 
-When Claude Code is NOT available:
-  → This file runs the same loop using OpenAI/Gemini/Anthropic API
-  → Same vault structure, same file operations, same HITL workflow
+DO NOT run this manually if Claude Code is working — it will run automatically
+via smart_run.py when needed.
 """
-
-import os, sys, time, json, re, logging
+import os, time, json, re, logging
 from pathlib import Path
 from datetime import datetime
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Add utils to path
-sys.path.insert(0, str(Path(__file__).parent))
-from utils.ai_provider import call_ai, detect_provider, get_provider_info
+from provider_config import call_ai, detect_provider
 
 # ── Config ────────────────────────────────────────────────────
-VAULT      = Path(os.getenv('VAULT_PATH', '.'))
-DRY_RUN    = os.getenv('DRY_RUN', 'true').lower() == 'true'
-MAX_ITER   = int(os.getenv('MAX_LOOP_ITERATIONS', '15'))
-SLEEP_SECS = int(os.getenv('LOOP_SLEEP_SECONDS', '3'))
-
-# ── Logging ───────────────────────────────────────────────────
-log_dir = VAULT / 'Logs'
-log_dir.mkdir(parents=True, exist_ok=True)
+VAULT     = Path(os.getenv('VAULT_PATH', '.'))
+DRY_RUN   = os.getenv('DRY_RUN', 'true').lower() == 'true'
+MAX_ITER  = int(os.getenv('MAX_ITERATIONS', '15'))
+LOG_DIR   = VAULT / 'Logs'
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [ORCHESTRATOR] %(message)s',
     handlers=[
-        logging.FileHandler(log_dir / 'universal_orchestrator.log'),
+        logging.FileHandler(LOG_DIR / 'universal_orchestrator.log'),
         logging.StreamHandler()
     ]
 )
-log = logging.getLogger(__name__)
 
-# ── Vault helpers ─────────────────────────────────────────────
-
-def get_pending_files() -> list:
+# ── Helpers ───────────────────────────────────────────────────
+def get_pending():
     na = VAULT / 'Needs_Action'
-    return sorted(na.glob('*.md')) if na.exists() else []
+    return list(na.glob('*.md')) if na.exists() else []
 
-def read_handbook() -> str:
+def get_handbook():
     hb = VAULT / 'Company_Handbook.md'
     return hb.read_text()[:2000] if hb.exists() else ''
 
-def read_goals() -> str:
-    g = VAULT / 'Business_Goals.md'
-    return g.read_text()[:1000] if g.exists() else ''
+def get_approved():
+    ap = VAULT / 'Approved'
+    return list(ap.glob('*.md')) if ap.exists() else []
 
-def write_vault_file(folder: str, filename: str, content: str) -> Path:
+def move_to_done(filepath):
+    done = VAULT / 'Done'
+    done.mkdir(parents=True, exist_ok=True)
+    dest = done / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{filepath.name}"
+    if not DRY_RUN:
+        filepath.rename(dest)
+        logging.info(f"Moved to Done: {filepath.name}")
+    else:
+        logging.info(f"[DRY RUN] Would move to Done: {filepath.name}")
+
+def write_file(folder, filename, content):
     target = VAULT / folder / filename
     target.parent.mkdir(parents=True, exist_ok=True)
     if not DRY_RUN:
         target.write_text(content)
-        log.info(f"[Created] {folder}/{filename}")
+        logging.info(f"Created: {folder}/{filename}")
     else:
-        log.info(f"[DRY RUN] Would create: {folder}/{filename}")
+        logging.info(f"[DRY RUN] Would create: {folder}/{filename}")
     return target
 
-def move_to_done(file_path: Path):
-    done_dir = VAULT / 'Done'
-    done_dir.mkdir(parents=True, exist_ok=True)
-    dest = done_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file_path.name}"
-    if not DRY_RUN:
-        file_path.rename(dest)
-        log.info(f"[Moved to Done] {file_path.name}")
-    else:
-        log.info(f"[DRY RUN] Would move to Done: {file_path.name}")
+def log_action(action, status, details=''):
+    log_file = LOG_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+    logs = []
+    if log_file.exists():
+        try: logs = json.loads(log_file.read_text())
+        except: pass
+    provider, _ = detect_provider()
+    logs.append({
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "action": action, "status": status,
+        "provider": provider, "dry_run": DRY_RUN,
+        "details": details
+    })
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file.write_text(json.dumps(logs, indent=2))
 
-def update_dashboard(pending: int, done_today: int, provider: str):
+def update_dashboard(iteration, pending_count):
+    dash = VAULT / 'Dashboard.md'
+    done = VAULT / 'Done'
+    done_count = len(list(done.glob('*.md'))) if done.exists() else 0
+    provider, _ = detect_provider()
     content = f"""# AI Employee Dashboard
-Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-AI Provider: {provider}
+Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+Provider: {provider} | DRY_RUN: {DRY_RUN}
+
+## Status
+| | Count |
+|---|---|
+| Needs Action | {pending_count} |
+| Done | {done_count} |
+| Loop iteration | {iteration} |
+
+## Active Mode
+{"🤖 Universal Orchestrator (non-Claude Code path)" }
+"""
+    if not DRY_RUN:
+        dash.write_text(content)
+
+# ── Main: process pending tasks ───────────────────────────────
+def process_pending(pending_files, iteration):
+    if not pending_files:
+        return True  # done
+
+    handbook = get_handbook()
+    system_prompt = f"""You are an autonomous AI employee assistant.
+Vault path: {VAULT}
 DRY_RUN: {DRY_RUN}
 
-## Current Status
-| Item | Count |
-|------|-------|
-| Needs Action | {pending} |
-| Done Today | {done_today} |
+Company rules:
+{handbook}
 
-## System
-- Orchestrator: Universal (Python loop)
-- Ralph Wiggum: {'Hook (Claude Code)' if Path('.claude/hooks/stop.py').exists() else 'Loop (Python)'}
-- MCP: {'Configured' if Path('.mcp.json').exists() else 'Not configured'}
-"""
-    if not DRY_RUN:
-        (VAULT / 'Dashboard.md').write_text(content)
+Instructions:
+- Analyze each task file provided
+- For each task: determine required action
+- Safe actions (analyze, summarize, log): describe what you would do
+- Sensitive actions (send email, post, payment): specify exactly what file 
+  to create in Pending_Approval/ with full details
+- Specify which files to move to Done/
+- If all tasks processed: end your response with exactly: TASK_COMPLETE
+- Format your response as JSON:
+{{
+  "actions": [
+    {{
+      "source_file": "filename.md",
+      "action_type": "create_plan|create_approval|move_to_done|execute",
+      "target_folder": "Plans|Pending_Approval|Done",
+      "target_filename": "OUTPUT_filename.md",
+      "content": "full markdown content to write",
+      "reasoning": "why this action"
+    }}
+  ],
+  "status": "in_progress|TASK_COMPLETE"
+}}"""
 
-def log_iteration(iteration: int, pending: int, response: str, provider: str):
-    log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}_loop.json"
-    entries  = json.loads(log_file.read_text()) if log_file.exists() else []
-    entries.append({
-        'timestamp': datetime.now(datetime.UTC).isoformat(),
-        'iteration': iteration,
-        'provider':  provider,
-        'pending_count': pending,
-        'dry_run':   DRY_RUN,
-        'response_preview': response[:300]
-    })
-    log_file.write_text(json.dumps(entries, indent=2))
+    # Build context from pending files
+    files_context = []
+    for f in pending_files[:5]:
+        try:
+            text = f.read_text()[:1200]
+            files_context.append(f"=== {f.name} ===\n{text}")
+        except Exception as e:
+            logging.warning(f"Could not read {f.name}: {e}")
 
-# ── AI response parser ────────────────────────────────────────
+    user_prompt = f"""Iteration {iteration}/{MAX_ITER}
+Process these {len(pending_files)} pending tasks:
 
-def parse_and_execute(response: str, processed_files: list):
-    """
-    AI response se instructions parse karo aur execute karo.
-    Plan files, Approval requests, Done moves.
-    """
-    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+{chr(10).join(files_context)}
+{"(Showing 5 of " + str(len(pending_files)) + ")" if len(pending_files) > 5 else ""}
 
-    # Plans banana
-    if 'PLAN_' in response or 'Plans/' in response or 'plan' in response.lower():
-        for f in processed_files:
-            plan_name = f"PLAN_{f.stem}_{ts}.md"
-            plan_content = f"""---
-created: {datetime.now().isoformat()}
-source: {f.name}
-status: pending
-ai_provider: {detect_provider()}
-dry_run: {DRY_RUN}
----
+Respond with the JSON action plan."""
 
-## Plan
+    try:
+        response, provider = call_ai(system_prompt, user_prompt)
+        logging.info(f"Got response from {provider} ({len(response)} chars)")
+    except Exception as e:
+        logging.error(f"AI call failed: {e}")
+        log_action("ai_call", "error", str(e))
+        time.sleep(10)
+        return False
 
-{response[:1500]}
+    # Parse and execute actions
+    json_match = re.search(r'\{.*\}', response, re.DOTALL)
+    if not json_match:
+        logging.warning("No JSON in response — treating as free text")
+        log_action("parse", "warning", "no JSON found")
+        return False
 
-## Steps
-- [ ] Review AI analysis above
-- [ ] Execute approved actions
-- [ ] Move to Done when complete
-"""
-            write_vault_file('Plans', plan_name, plan_content)
+    try:
+        plan = json.loads(json_match.group())
+    except json.JSONDecodeError as e:
+        logging.error(f"JSON parse error: {e}")
+        log_action("parse", "error", str(e))
+        return False
 
-    # Approval requests banana
-    needs_approval = any(word in response.lower() for word in [
-        'send email', 'post to', 'payment', 'invoice',
-        'approval', 'pending_approval', 'requires human'
-    ])
-    if needs_approval:
-        for f in processed_files:
-            approval_name = f"APPROVAL_{f.stem}_{ts}.md"
-            approval_content = f"""---
-created: {datetime.now().isoformat()}
-source: {f.name}
-action: review_required
-status: pending_approval
-ai_provider: {detect_provider()}
-requires_human: true
-expires: {datetime.now().isoformat()}
----
+    executed = 0
+    for action in plan.get('actions', []):
+        try:
+            src  = action.get('source_file', '')
+            typ  = action.get('action_type', '')
+            fold = action.get('target_folder', 'Plans')
+            fn   = action.get('target_filename', f'AUTO_{datetime.now().strftime("%H%M%S")}.md')
+            cont = action.get('content', '')
 
-## Action Requires Your Approval
+            if typ in ('create_plan', 'create_approval', 'execute') and cont:
+                write_file(fold, fn, cont)
+                log_action(typ, "success" if not DRY_RUN else "dry_run", fn)
+                executed += 1
 
-{response[:1000]}
+            if typ in ('move_to_done', 'create_plan', 'create_approval'):
+                src_path = VAULT / 'Needs_Action' / src
+                if src_path.exists():
+                    move_to_done(src_path)
 
-## How to Approve
-Move this file to the Approved/ folder.
+        except Exception as e:
+            logging.error(f"Action execution error: {e}")
+            log_action("execute", "error", str(e))
 
-## How to Reject
-Move this file to the Rejected/ folder.
-"""
-            write_vault_file('Pending_Approval', approval_name, approval_content)
-            log.info(f"[Approval Request Created] {approval_name}")
+    logging.info(f"Executed {executed} actions from AI plan")
+    return plan.get('status') == 'TASK_COMPLETE'
 
-    # Processed files Done mein move karo
-    if 'TASK_COMPLETE' in response or 'processed' in response.lower():
-        for f in processed_files:
-            if f.exists():
-                move_to_done(f)
-
-# ── Main Ralph Wiggum Loop ────────────────────────────────────
-
-def ralph_wiggum_loop():
-    """
-    Pure Python Ralph Wiggum loop.
-    Kaam karta hai jab Claude Code nahi hai.
-    Claude Code ke saath .claude/hooks/stop.py use hota hai.
-    """
-    provider = detect_provider()
-    info     = get_provider_info()
-
-    log.info("=" * 60)
-    log.info("Universal Orchestrator starting")
-    log.info(f"Provider:    {provider}")
-    log.info(f"Claude Code: {'Available' if info['claude_code_available'] else 'Not available'}")
-    log.info(f"MCP:         {'Configured' if info['mcp_configured'] else 'Not configured'}")
-    log.info(f"DRY_RUN:     {DRY_RUN}")
-    log.info("=" * 60)
-
-    if provider == 'claude_code':
-        log.info(
-            "Claude Code detected + hooks configured.\n"
-            "Ralph Wiggum hooks will handle the loop automatically.\n"
-            "Run: claude 'Process all Needs_Action files' inside project."
-        )
+# ── Process approved tasks (local executor role) ──────────────
+def process_approved():
+    approved = get_approved()
+    if not approved:
         return
+    logging.info(f"Found {len(approved)} approved tasks")
+    for f in approved:
+        logging.info(f"Processing approved: {f.name}")
+        log_action("approved_execution", "dry_run" if DRY_RUN else "pending", f.name)
+        # Actual execution (email send, post etc.) goes here
+        # For now: move to Done as acknowledged
+        move_to_done(f)
 
-    if provider == 'none':
-        log.error(
-            "No AI provider found!\n"
-            "Set one of these in .env:\n"
-            "  ANTHROPIC_API_KEY=sk-ant-...\n"
-            "  OPENAI_API_KEY=sk-...\n"
-            "  GEMINI_API_KEY=AIza..."
-        )
-        sys.exit(1)
-
-    handbook    = read_handbook()
-    goals       = read_goals()
-    done_today  = 0
-
-    system_prompt = f"""You are an autonomous AI employee assistant.
-Your vault path: {VAULT}
-AI Provider: {provider}
-DRY_RUN mode: {DRY_RUN}
-
-{f"Company rules:{chr(10)}{handbook}" if handbook else ""}
-{f"Business goals:{chr(10)}{goals}" if goals else ""}
-
-Your responsibilities:
-1. Read each task file from Needs_Action/
-2. Analyze and create a Plan file in Plans/
-3. For safe actions (read, analyze, summarize): execute directly
-4. For sensitive actions (send email, post on social, payment):
-   create an approval file in Pending_Approval/ — NEVER execute directly
-5. Move processed files to Done/
-6. Update Dashboard.md
-
-When Needs_Action/ is empty, respond with exactly: TASK_COMPLETE
-If DRY_RUN is true, describe what you would do but don't actually do it.
-"""
+# ── Ralph Wiggum loop ─────────────────────────────────────────
+def ralph_wiggum_loop():
+    provider, _ = detect_provider()
+    logging.info(f"Ralph Wiggum Loop starting (provider: {provider})")
+    logging.info(f"Vault: {VAULT} | DRY_RUN: {DRY_RUN} | MAX_ITER: {MAX_ITER}")
 
     for iteration in range(1, MAX_ITER + 1):
-        pending = get_pending_files()
+        pending = get_pending()
+        approved = get_approved()
 
-        if not pending:
-            log.info(f"[Iter {iteration}] Needs_Action/ is empty — loop complete!")
+        logging.info(f"--- Iteration {iteration}/{MAX_ITER} "
+                     f"| Pending: {len(pending)} | Approved: {len(approved)} ---")
+
+        update_dashboard(iteration, len(pending))
+
+        if not pending and not approved:
+            logging.info("All tasks complete — loop finished normally")
             break
 
-        log.info(f"[Iter {iteration}/{MAX_ITER}] {len(pending)} pending | provider: {provider}")
+        # Process approved first (higher priority)
+        if approved:
+            process_approved()
 
-        # Max 5 files per iteration (token limit)
-        batch = pending[:5]
-        context_parts = []
-        for f in batch:
-            try:
-                content = f.read_text()[:1500]
-                context_parts.append(f"=== FILE: {f.name} ===\n{content}")
-            except Exception as e:
-                log.warning(f"Could not read {f.name}: {e}")
+        # Then process pending
+        if pending:
+            done = process_pending(pending, iteration)
+            if done:
+                logging.info("AI signaled TASK_COMPLETE")
+                break
 
-        if not context_parts:
-            log.warning("No readable files in batch, skipping")
-            time.sleep(SLEEP_SECS)
-            continue
+        time.sleep(2)
 
-        files_info = (
-            f"Showing {len(batch)} of {len(pending)}"
-            if len(pending) > 5 else f"All {len(pending)}"
-        )
+    update_dashboard(MAX_ITER, 0)
+    logging.info("Ralph Wiggum loop finished")
 
-        user_prompt = f"""Process these tasks ({files_info}):
-
-{chr(10).join(context_parts)}
-
-For each file:
-1. Analyze the task
-2. Create a Plan in Plans/
-3. If action is safe: describe execution (DRY_RUN={DRY_RUN})
-4. If action is sensitive: create Pending_Approval/ file
-5. Confirm each file processed
-
-If all files are processed, end with: TASK_COMPLETE
-"""
-
-        try:
-            response = call_ai(system_prompt, user_prompt, provider=provider)
-            log.info(f"  AI response: {response[:150]}...")
-        except Exception as e:
-            log.error(f"  AI call failed: {e}")
-            time.sleep(10)
-            continue
-
-        parse_and_execute(response, batch)
-        log_iteration(iteration, len(pending), response, provider)
-        done_today += len(batch)
-
-        if 'TASK_COMPLETE' in response:
-            log.info(f"[Loop] TASK_COMPLETE at iteration {iteration}")
-            break
-
-        # Re-check actual files
-        still_pending = get_pending_files()
-        if not still_pending:
-            log.info(f"[Loop] All cleared at iteration {iteration}")
-            break
-
-        time.sleep(SLEEP_SECS)
-
-    update_dashboard(len(get_pending_files()), done_today, provider)
-    log.info("[Loop] Universal orchestrator finished.")
-
-# ── Entry point ───────────────────────────────────────────────
 if __name__ == '__main__':
     ralph_wiggum_loop()

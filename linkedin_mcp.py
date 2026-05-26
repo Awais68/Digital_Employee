@@ -637,20 +637,18 @@ class LinkedInMCP:
             "shareMediaCategory": "NONE"
         }
 
-        # Add media if provided
+        # Add media if provided — correct format for LinkedIn UGC Posts API
         if media_urls:
             share_content["shareMediaCategory"] = "IMAGE"
-            share_content["media"] = {
-                "contentEntities": {
-                    "entities": [
-                        {
-                            "entityLocation": media_url,
-                            "thumbnails": []
-                        }
-                        for media_url in media_urls
-                    ]
+            share_content["media"] = [
+                {
+                    "status": "READY",
+                    "description": {"text": ""},
+                    "media": media_url,
+                    "title": {"text": "Image"}
                 }
-            }
+                for media_url in media_urls
+            ]
 
         # Build full payload
         payload = {

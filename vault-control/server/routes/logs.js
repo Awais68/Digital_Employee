@@ -10,7 +10,14 @@ const LOGS_DIR = path.join(ROOT_DIR, 'Logs')
 
 const router = express.Router()
 
+let logsCache = null
+let logsCacheTime = 0
+
 function parseLogFiles() {
+  if (logsCache && Date.now() - logsCacheTime < 5000) {
+    return logsCache
+  }
+
   const logs = []
   
   if (!fs.existsSync(LOGS_DIR)) return logs
@@ -68,7 +75,9 @@ function parseLogFiles() {
     }
   }
   
-  return logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  logsCache = logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  logsCacheTime = Date.now()
+  return logsCache
 }
 
 function parseLogLine(line, filename, stat) {

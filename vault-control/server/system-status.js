@@ -272,6 +272,21 @@ export function getPendingApprovals() {
 
 // ─── Refresh & Broadcast ──────────────────────────────────────────────────────
 
+async function getWorkerStatus() {
+  const workerList = ['orchestrator', 'whatsapp_watcher', 'gmail_watcher']
+  const workers = {}
+  for (const name of workerList) {
+    let running = false, pid = null
+    try {
+      const { stdout } = await execAsync(`pgrep -f "${name}\\.py"`).catch(() => ({ stdout: '' }))
+      const pids = stdout.trim().split('\n').filter(Boolean).map(Number)
+      if (pids.length > 0) { running = true; pid = pids[0] }
+    } catch {}
+    workers[name] = { name, running, pid }
+  }
+  return workers
+}
+
 export async function refreshAndBroadcast() {
   const vaultCounts = getVaultCounts(true);
 
@@ -282,6 +297,7 @@ export async function refreshAndBroadcast() {
     recentActivity: getRecentActivity(10),
     pendingApprovals: getPendingApprovals(),
     services: await getServiceStatus(),
+    workers: await getWorkerStatus(),
     timestamp: new Date(),
   };
 

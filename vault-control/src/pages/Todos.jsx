@@ -31,6 +31,7 @@ export default function Todos() {
   const [newTodo, setNewTodo] = useState('')
   const [newPriority, setNewPriority] = useState('medium')
   const [newDueDate, setNewDueDate] = useState('')
+  const [newReminderAt, setNewReminderAt] = useState('')
   const [filter, setFilter] = useState('all')
   const [priorityFilter, setPriorityFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -38,6 +39,7 @@ export default function Todos() {
   const [editValue, setEditValue] = useState('')
   const [editPriority, setEditPriority] = useState('')
   const [editDueDate, setEditDueDate] = useState('')
+  const [editReminderAt, setEditReminderAt] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dragId, setDragId] = useState(null)
@@ -73,11 +75,13 @@ export default function Todos() {
         title: newTodo,
         priority: newPriority,
         dueDate: newDueDate || null,
+        reminderAt: newReminderAt || null,
       })
       setTodos([res.data, ...todos])
       setNewTodo('')
       setNewPriority('medium')
       setNewDueDate('')
+      setNewReminderAt('')
       success('Task added')
     } catch (err) {
       console.error('Failed to add todo:', err)
@@ -88,6 +92,7 @@ export default function Todos() {
         completed: false,
         priority: newPriority,
         dueDate: newDueDate || null,
+        reminderAt: newReminderAt || null,
         date: new Date().toISOString().split('T')[0],
         order: 0,
       }
@@ -95,6 +100,7 @@ export default function Todos() {
       setNewTodo('')
       setNewPriority('medium')
       setNewDueDate('')
+      setNewReminderAt('')
     } finally {
       setSaving(false)
     }
@@ -134,6 +140,7 @@ export default function Todos() {
     setEditValue(todo.title)
     setEditPriority(todo.priority)
     setEditDueDate(todo.dueDate || '')
+    setEditReminderAt(todo.reminderAt || '')
   }
 
   const saveEdit = async (id) => {
@@ -145,9 +152,10 @@ export default function Todos() {
         title: editValue,
         priority: editPriority,
         dueDate: editDueDate || null,
+        reminderAt: editReminderAt || null,
       })
       setTodos(prev => prev.map(t =>
-        t.id === id ? { ...t, title: editValue, priority: editPriority, dueDate: editDueDate } : t
+        t.id === id ? { ...t, title: editValue, priority: editPriority, dueDate: editDueDate, reminderAt: editReminderAt } : t
       ))
       setEditingId(null)
       success('Task updated')
@@ -367,6 +375,13 @@ export default function Todos() {
             value={newDueDate}
             onChange={(e) => setNewDueDate(e.target.value)}
             className="px-4 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50"
+          />
+          <input
+            type="datetime-local"
+            value={newReminderAt}
+            onChange={(e) => setNewReminderAt(e.target.value)}
+            className="px-4 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-xs"
+            title="Reminder at"
           />
           <button
             onClick={addTodo}
@@ -594,6 +609,13 @@ export default function Todos() {
                         onChange={(e) => setEditDueDate(e.target.value)}
                         className="px-2 py-1 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
                       />
+                      <input
+                        type="datetime-local"
+                        value={editReminderAt}
+                        onChange={(e) => setEditReminderAt(e.target.value)}
+                        className="px-2 py-1 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
+                        title="Reminder at"
+                      />
                     </div>
                   </div>
                 ) : (
@@ -611,6 +633,11 @@ export default function Todos() {
                       {isOverdue(todo.dueDate) && !todo.completed ? 'OVERDUE: ' : ''}{todo.dueDate}
                     </span>
                   ) : null}
+                  {todo.reminderAt && (
+                    <span className="text-[10px] dark:text-[#FFB800] text-orange-600 flex items-center gap-1">
+                      ⏰ {new Date(todo.reminderAt).toLocaleString()}
+                    </span>
+                  )}
                 </div>
               </div>
 

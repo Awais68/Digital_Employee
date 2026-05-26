@@ -24,6 +24,7 @@ router.get('/', (req, res) => {
       from: file.frontmatter.from || 'Unknown Sender',
       subject: file.frontmatter.subject || file.filename.replace('.md', '').replace(/_/g, ' '),
       priority: file.frontmatter.priority || 'medium',
+      category: file.frontmatter.category || 'Uncategorized',
       time: file.updatedAt.toISOString(),
       preview: file.content.substring(0, 150),
       folder: folder,
@@ -84,6 +85,37 @@ router.post('/move', (req, res) => {
   } catch (err) {
     console.error('Error moving email:', err)
     res.status(500).json({ error: 'Failed to move email', message: err.message })
+  }
+})
+
+// POST /:id/mark-processed — mark email as processed
+router.post('/:id/mark-processed', async (req, res) => {
+  try {
+    const { readVaultFiles, getVaultPath } = await import('../vault-reader.js')
+    const files = readVaultFiles('Inbox')
+    const emailFile = files.find(f => f.id === req.params.id)
+
+    if (emailFile) {
+      const filePath = getVaultPath('Inbox', emailFile.filename)
+      const fs = await import('fs')
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf-8')
+        const updated = content
+          .replace(/status:\s*\w+/, 'status: processed')
+          .replace(/processed_at:\s*.*/, `processed_at: ${new Date().toISOString()}`)
+        if (!updated.includes('processed_at')) {
+          const withTag = updated.replace(/^---\n/, `---\nprocessed_at: ${new Date().toISOString()}\n`)
+          fs.writeFileSync(filePath, withTag)
+        } else {
+          fs.writeFileSync(filePath, updated)
+        }
+      }
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Error marking email as processed:', err)
+    res.status(500).json({ error: 'Failed to mark as processed', message: err.message })
   }
 })
 

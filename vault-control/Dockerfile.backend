@@ -2,18 +2,36 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
+# Install Chromium for whatsapp-web.js (Puppeteer)
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    curl \
+    ttf-freefont \
+    && rm -rf /var/cache/apk/*
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --production
+# Install production dependencies (skip puppeteer download)
+RUN PUPPETEER_SKIP_DOWNLOAD=true npm ci --production --ignore-scripts
 
 # Copy server code
 COPY server/ ./server/
 
+# Copy DB schema
+COPY server/database/schema.sql ./server/database/schema.sql
+
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
 CMD ["node", "server/index.js"]

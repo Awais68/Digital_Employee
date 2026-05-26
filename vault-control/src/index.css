@@ -101,3 +101,31 @@ html:not(.dark) {
   content-visibility: auto;
   contain-intrinsic-size: 0 50px; /* Estimated size for each list item */
 }
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #2A3E5F;
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3A4E6F;
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}

@@ -1,48 +1,68 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bell, X, Check } from 'lucide-react'
+import { Bell, Check } from 'lucide-react'
+import axios from 'axios'
 
-function timeAgo(timestamp) {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000)
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`
-  return `${Math.floor(seconds / 86400)} day ago`
+const TYPE_COLORS = {
+  success: 'bg-green-500',
+  error: 'bg-red-500',
+  warning: 'bg-yellow-500',
+  info: 'bg-blue-500',
+  urgent: 'bg-orange-500',
 }
 
-function getPriorityDot(priority) {
-  const colors = {
-    IMMEDIATE: 'bg-red-500',
-    URGENT: 'bg-orange-500',
-    NORMAL: 'bg-yellow-500',
-    INFO: 'bg-green-500'
-  }
-  return colors[priority] || 'bg-gray-500'
+const NOISE_PATTERNS = [
+  'Post Published', 'Post Failed', 'Posts Pending Approval',
+  'Task Created', 'Task Updated', 'Task marked',
+]
+
+function isUsefulNotification(n) {
+  if (n.type === 'urgent' || n.type === 'warning' || n.type === 'error') return true
+  const src = n.data?.source
+  if (src === 'email' || src === 'whatsapp' || src === 'todo') return true
+  const title = n.title || ''
+  if (NOISE_PATTERNS.some(p => title.includes(p))) return false
+  if (title.includes('Reminder') || title.includes('📧') || title.includes('📱') || title.includes('📝')) return true
+  return false
 }
 
 export default function NotificationBell() {
-  const [notifs, setNotifs] = useState([])
+  const [notifications, setNotifications] = useState([])
   const [unread, setUnread] = useState(0)
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
 
-  useEffect(() => {
-    const wsUrl = window.location.hostname === 'localhost'
-      ? 'ws://localhost:3000'
-      : `wss://${window.location.host}`
-    const ws = new WebSocket(wsUrl)
+  const filteredNotifications = notifications.filter(isUsefulNotification)
 
+  const loadNotifications = async () => {
+    try {
+      const res = await axios.get('/api/notifications')
+      const data = Array.isArray(res.data) ? res.data : []
+      setNotifications(data)
+      setUnread(data.filter(n => !n.read && isUsefulNotification(n)).length)
+    } catch {}
+  }
+
+  useEffect(() => {
+    loadNotifications()
+
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${proto}//${window.location.host}/ws`)
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        if (data.type === 'notification') {
-          const notif = { ...data, id: Date.now(), timestamp: Date.now() }
-          setNotifs(prev => [notif, ...prev].slice(0, 50))
-          setUnread(prev => prev + 1)
-          if (Notification.permission === 'granted') {
-            new Notification(data.event, { body: typeof data.data === 'string' ? data.data : data.data?.message || '' })
+        if (data.type === 'notification' && data.notification) {
+          setNotifications(prev => [data.notification, ...prev].slice(0, 50))
+          if (isUsefulNotification(data.notification)) {
+            setUnread(prev => prev + 1)
+            if (Notification.permission === 'granted') {
+              new Notification(data.notification.title, {
+                body: data.notification.message,
+                icon: '/logo.png',
+              })
+            }
           }
         }
-      } catch (e) {}
+      } catch {}
     }
 
     if ('Notification' in window && Notification.permission === 'default') {
@@ -62,14 +82,19 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const markAllRead = () => {
-    setUnread(0)
+  const handleToggle = () => {
+    setOpen(prev => !prev)
+    if (!open && unread > 0) {
+      axios.post('/api/notifications/read-all').catch(() => {})
+      setUnread(0)
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    }
   }
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => { setOpen(!open); markAllRead() }}
+        onClick={handleToggle}
         className="relative p-2 rounded-lg dark:bg-[#1A1A24] bg-gray-100 hover:dark:bg-[#2A2A3A] transition-colors"
       >
         <Bell size={18} className="dark:text-[#E0E0E6]" />
@@ -85,28 +110,36 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between p-3 border-b dark:border-[#1A1A24]">
             <h4 className="text-xs font-bold dark:text-[#E0E0E6] uppercase tracking-widest">Notifications</h4>
             {unread > 0 && (
-              <button onClick={markAllRead} className="text-[9px] dark:text-[#00FF88] hover:underline">
+              <button onClick={handleToggle} className="text-[9px] dark:text-[#00FF88] hover:underline">
                 Mark all read
               </button>
             )}
           </div>
 
-          {notifs.length === 0 ? (
+          {filteredNotifications.length === 0 ? (
             <div className="p-6 text-center text-[10px] font-mono dark:text-[#7A7A85]">
-              No notifications yet
+              No important notifications
             </div>
           ) : (
-            notifs.map(n => (
-              <div key={n.id} className={`p-3 border-b dark:border-[#1A1A24] hover:dark:bg-[#1A1A24]/50 transition-colors`}>
+            filteredNotifications.map(n => (
+              <div
+                key={n.id}
+                className={`p-3 border-b dark:border-[#1A1A24] transition-colors ${
+                  n.read ? '' : 'dark:bg-[#1A1A24]/40 bg-blue-50/30'
+                }`}
+              >
                 <div className="flex items-start gap-2">
-                  <span className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${getPriorityDot(n.priority)}`} />
+                  <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${TYPE_COLORS[n.type] || 'bg-gray-500'}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold dark:text-[#E0E0E6] truncate">{n.event}</p>
-                    <p className="text-[10px] dark:text-[#7A7A85] mt-0.5 line-clamp-2">
-                      {typeof n.data === 'string' ? n.data : n.data?.message || JSON.stringify(n.data)}
-                    </p>
-                    <small className="text-[9px] dark:text-[#7A7A85] mt-1 block">{timeAgo(n.timestamp)}</small>
+                    <p className="text-xs font-bold dark:text-[#E0E0E6] truncate">{n.title}</p>
+                    <p className="text-[10px] dark:text-[#7A7A85] mt-0.5 line-clamp-2">{n.message}</p>
+                    <small className="text-[9px] dark:text-[#7A7A85] mt-1 block opacity-60">
+                      {n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
+                    </small>
                   </div>
+                  {!n.read && (
+                    <Check size={12} className="dark:text-[#00FF88] mt-1 flex-shrink-0" />
+                  )}
                 </div>
               </div>
             ))

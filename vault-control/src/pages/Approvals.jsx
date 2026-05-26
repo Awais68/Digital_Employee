@@ -4,7 +4,7 @@ import axios from 'axios'
 import { useToast } from '../context/ToastContext'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 
-const TABS = ['pending', 'approved', 'rejected']
+const TABS = ['queue', 'pending', 'approved', 'rejected']
 
 const typeIcons = {
   PAYMENT: DollarSign,
@@ -36,10 +36,17 @@ export default function Approvals() {
     fetchApprovals()
   }, [activeTab])
 
+  const [scheduledPosts, setScheduledPosts] = useState([])
+
   const fetchApprovals = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      if (activeTab === 'queue') {
+        const res = await axios.get('/api/posts/scheduled')
+        setScheduledPosts(res.data.posts || res.data || [])
+        return
+      }
       let url = '/api/approvals'
       if (activeTab === 'approved') {
         url += '/approved'
@@ -318,7 +325,50 @@ export default function Approvals() {
         </div>
       )}
 
+      {/* Queue Tab Content */}
+      {activeTab === 'queue' && (
+        <div className="space-y-4">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <Loader2 className="animate-spin text-[#00FF88]" size={32} />
+              <p className="text-[#7A7A85] font-mono text-sm">LOADING QUEUE...</p>
+            </div>
+          ) : scheduledPosts.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="dark:text-[#7A7A85] text-gray-500">No scheduled posts</p>
+            </div>
+          ) : scheduledPosts.map(post => (
+            <div key={post.id} className="card p-6 border-l-4 border-l-blue-500">
+              <div className="flex items-start gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Share2 size={16} className="dark:text-[#1DA1F2]" />
+                    <span className="text-xs font-bold dark:text-[#B0C4FF] uppercase">Scheduled Post</span>
+                    {post.platform && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400">{post.platform}</span>
+                    )}
+                  </div>
+                  <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 mb-1">{post.title || post.topic || 'Scheduled Post'}</h3>
+                  <p className="text-sm dark:text-[#7A7A85] mb-2">{post.content?.substring(0, 200) || post.preview || ''}</p>
+                  <div className="flex items-center gap-4 text-xs dark:text-[#7A7A85]">
+                    {post.scheduledAt && <span>📅 {new Date(post.scheduledAt).toLocaleString()}</span>}
+                    {post.status && (
+                      <span className={`px-2 py-0.5 rounded font-bold ${
+                        post.status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                        post.status === 'published' ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-yellow-500/20 text-yellow-400'
+                      }`}>{post.status.toUpperCase()}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Approvals Grid - content-visibility for rendering performance (rendering-content-visibility) */}
+      {activeTab !== 'queue' && (
       <div className="space-y-4 content-visibility-auto" style={{ containIntrinsicSize: '0 2000px' }}>
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
@@ -377,9 +427,16 @@ export default function Approvals() {
                       </div>
                     </div>
 
-                    {/* Title */}
+                    {/* Sender / Source Name */}
+                    <div className="flex items-center gap-2 text-xs dark:text-[#B0C4FF] text-gray-600 mb-1">
+                      {approval.from && <span>From: <span className="font-semibold">{approval.from}</span></span>}
+                      {approval.platform && <span>Platform: <span className="font-semibold">{approval.platform}</span></span>}
+                      {!approval.from && !approval.platform && approval.type === 'PAYMENT' && approval.amount && (
+                        <span>Amount: <span className="font-semibold text-red-400">${approval.amount}</span></span>
+                      )}
+                    </div>
                     <h3 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-2">
-                      {approval.title || approval.subject || approval.filename || 'Untitled'}
+                      {approval.title || approval.subject || (approval.from ? `Email from ${approval.from}` : approval.filename || approval.type === 'POST' ? 'Social Media Post' : approval.type === 'EMAIL' ? 'Email Draft' : approval.type === 'PAYMENT' ? 'Payment Request' : 'Pending Item')}
                     </h3>
 
                     {/* Description / Content */}
@@ -505,6 +562,7 @@ export default function Approvals() {
           })
         )}
       </div>
+      )}
     </div>
   )
 }
