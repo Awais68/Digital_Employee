@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { useToast } from "../context/ToastContext";
+import { useApp } from "../context/AppContext";
 
 export default function WhatsApp() {
   const [conversations, setConversations] = useState([]);
@@ -30,9 +31,7 @@ export default function WhatsApp() {
   const [systemStatus, setSystemStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [showStatusPanel, setShowStatusPanel] = useState(false);
-  const [waStatus, setWaStatus] = useState("disconnected");
-  const [qrData, setQrData] = useState(null);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const { waStatus, qrData } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef(null);
 
@@ -89,7 +88,6 @@ export default function WhatsApp() {
     try {
       const res = await axios.get("/api/whatsapp/live-chats");
       const list = res.data.chats || [];
-      if (res.data.status) setWaStatus(res.data.status);
       setConversations(list);
       if (list.length > 0 && !selectedConversation) {
         setSelectedConversation(list[0]);
@@ -118,104 +116,16 @@ export default function WhatsApp() {
     }
   };
 
-  // Immediate fetch + periodic polling
-  useEffect(() => {
-    fetchWaStatus();
-    const iv = setInterval(fetchWaStatus, 15000);
-    return () => clearInterval(iv);
-  }, []);
-
   // Safety: force loading off after 10s no matter what
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 10000);
     return () => clearTimeout(t);
   }, []);
 
-  const fetchWaStatus = async () => {
-    try {
-      const res = await axios.get("/api/whatsapp/status");
-      const newStatus = res.data.status;
-      setWaStatus(newStatus);
-      if (newStatus === "connected") {
-        setQrData(null);
-        fetchConversations();
-      } else {
-        if (res.data.qr) setQrData(res.data.qr);
-        if (!initialLoadDone) fetchConversations();
-      }
-    } catch {
-      if (!initialLoadDone) fetchConversations();
-    } finally {
-      setLoading(false);
-      setInitialLoadDone(true);
-    }
-  };
-
+  // Load conversations on mount and when WA connects
   useEffect(() => {
-    if (waStatus === "connected") {
-      fetchConversations();
-    }
+    fetchConversations();
   }, [waStatus]);
-
-  // WebSocket listener for real-time messages with auto-reconnect
-  useEffect(() => {
-    let ws = null;
-    let reconnectTimer = null;
-    let reconnectAttempts = 0;
-
-    const connect = () => {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-
-      ws.onopen = () => {
-        reconnectAttempts = 0;
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (
-            data.type === "whatsapp:message" &&
-            waStatus === "connected" &&
-            selectedConversation
-          ) {
-            const msg = {
-              id: data.id || Date.now().toString(),
-              text: data.body || data.message,
-              time: data.timestamp || new Date().toISOString(),
-              sender: data.from || "Unknown",
-              type: "incoming",
-            };
-            setMessages((prev) => [...prev, msg]);
-            fetchConversations();
-          }
-          if (data.type === "whatsapp:status") {
-            setWaStatus(data.status);
-          }
-          if (data.type === "whatsapp:qr") {
-            setQrData(data.qr);
-          }
-        } catch {}
-      };
-
-      ws.onclose = () => {
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-        reconnectAttempts++;
-        reconnectTimer = setTimeout(connect, delay);
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-    };
-
-    connect();
-
-    return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (ws) ws.close();
-    };
-  }, [waStatus, selectedConversation]);
 
   const handleSelectConversation = (conv) => {
     setSelectedConversation(conv);
@@ -479,7 +389,7 @@ export default function WhatsApp() {
           </span>
         </div>
         <button
-          onClick={fetchWaStatus}
+          onClick={fetchConversations}
           className="text-xs dark:text-[#7A7A85] underline"
         >
           Refresh

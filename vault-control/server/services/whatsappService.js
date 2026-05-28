@@ -1,179 +1,178 @@
 import { createRequire } from 'module'
+import path from 'path'
+import fs from 'fs'
+import { bus, EVENTS } from './eventBus.js'
+import { notify } from './notificationService.js'
+import { query } from '../database/connection.js'
 
 const require = createRequire(import.meta.url)
 
-let _createNotification = null
-async function getNotifier() {
-  if (!_createNotification) {
-    const mod = await import('./notificationService.js')
-    _createNotification = mod.createNotification
-  }
-  return _createNotification
-}
+const SESSION_DIR = path.resolve(
+  process.env.WHATSAPP_SESSION_PATH ||
+  path.join(process.cwd(), 'whatsapp_session')
+)
+fs.mkdirSync(SESSION_DIR, { recursive: true })
+console.log('[WhatsApp] Session directory:', SESSION_DIR)
 
-let waClient = null
-let qrCodeData = null
-let waStatus = 'disconnected'
+let waClient  = null
+let waStatus  = 'disconnected'
+let qrData    = null
+let initTried = false
 
-function waBroadcast(type, data) {
-  if (global.broadcast) {
-    global.broadcast({ type, ...data })
-  }
-}
+let chatsCache     = null
+let chatsCacheTime = 0
+const CACHE_TTL    = 20000
 
 export async function initWhatsApp() {
+  if (initTried && waClient) {
+    console.log('[WhatsApp] Already initialized, status:', waStatus)
+    return
+  }
+  initTried = true
+
   try {
     const { Client, LocalAuth } = require('whatsapp-web.js')
-    const QRCode = require('qrcode')
+    const QRCode                = require('qrcode')
 
     waClient = new Client({
       authStrategy: new LocalAuth({
-        dataPath: process.env.WHATSAPP_SESSION_PATH || './whatsapp_session',
+        dataPath:  SESSION_DIR,
+        clientId: 'ai-employee'
       }),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process'
+        ]
       },
+      restartOnAuthFail: false
     })
 
     waClient.on('qr', async (qr) => {
-      qrCodeData = await QRCode.toDataURL(qr)
+      qrData   = await QRCode.toDataURL(qr)
       waStatus = 'qr_pending'
-      console.log('[WhatsApp] QR code generated — scan with phone')
-      waBroadcast('whatsapp:qr', { qr: qrCodeData })
+      console.log('[WhatsApp] QR generated — scan ONCE to connect permanently')
+      broadcast('whatsapp:qr',     { qr: qrData })
+      broadcast('whatsapp:status', { status: 'qr_pending' })
     })
 
     waClient.on('authenticated', () => {
+      qrData   = null
       waStatus = 'authenticated'
-      qrCodeData = null
-      console.log('[WhatsApp] Authenticated')
-      waBroadcast('whatsapp:status', { status: 'authenticated' })
+      console.log('[WhatsApp] Authenticated — session saved permanently to:', SESSION_DIR)
+      broadcast('whatsapp:status', { status: 'authenticated' })
     })
 
-    waClient.on('ready', () => {
+    waClient.on('auth_failure', (msg) => {
+      console.error('[WhatsApp] Auth failed:', msg)
+      waStatus = 'auth_failed'
+      notify('error', 'WhatsApp Auth Failed', msg)
+    })
+
+    waClient.on('ready', async () => {
       waStatus = 'connected'
-      chatsCache = null
-      chatsCacheTime = 0
-      console.log('[WhatsApp] Connected')
-      waBroadcast('whatsapp:status', { status: 'connected' })
+      qrData   = null
+      console.log('[WhatsApp] CONNECTED and ready')
+      broadcast('whatsapp:status', { status: 'connected' })
+      notify('success', 'WhatsApp Connected', 'WhatsApp is connected and monitoring messages')
+      bus.emit(EVENTS.WA_CONNECTED, { time: new Date().toISOString() })
+
+      setTimeout(() => refreshChatsCache(), 2000)
     })
 
     waClient.on('message', async (msg) => {
-      chatsCache = null
+      if (msg.from === 'status@broadcast') return
+      if (!msg.body?.trim()) return
+
       let contactName = msg.from
       try {
-        const c = await msg.getContact()
-        contactName = c.pushname || c.name || msg.from
+        const contact = await msg.getContact()
+        contactName = contact.pushname || contact.name || msg.from
       } catch {}
-      const messageData = {
-        id: msg.id.id,
-        from: msg.from,
-        body: msg.body,
+
+      const msgData = {
+        id:        msg.id.id,
+        from:      msg.from,
+        body:      msg.body,
         timestamp: new Date(msg.timestamp * 1000).toISOString(),
-        isGroup: msg.from.endsWith('@g.us'),
-        contact: contactName,
+        isGroup:   msg.from.endsWith('@g.us'),
+        contact:   contactName,
       }
-      await saveWhatsAppMessage(messageData)
-      waBroadcast('whatsapp:message', messageData)
-      const notify = await getNotifier()
-      if (!msg.from.endsWith('@g.us')) {
-        notify('info', 'WhatsApp Message', `From: ${contactName} — ${msg.body.substring(0, 80)}`, { source: 'whatsapp', contact: contactName })
-      }
+
+      await saveMessageToDB(msgData)
+
+      chatsCache = null
+
+      broadcast('whatsapp:message', msgData)
+      bus.emit(EVENTS.WA_MESSAGE, msgData)
+
+      notify('info', `WhatsApp: ${contactName}`, msg.body.substring(0, 80))
     })
 
     waClient.on('disconnected', (reason) => {
       waStatus = 'disconnected'
-      console.log('[WhatsApp] Disconnected:', reason)
-      waBroadcast('whatsapp:status', { status: 'disconnected', reason })
-      setTimeout(() => waClient.initialize(), 5000)
+      console.warn('[WhatsApp] Disconnected:', reason)
+      broadcast('whatsapp:status', { status: 'disconnected', reason })
+      notify('warning', 'WhatsApp Disconnected', reason || 'Connection lost')
+
+      const sessionExists = fs.existsSync(
+        path.join(SESSION_DIR, '.wwebjs_auth')
+      )
+      if (sessionExists) {
+        console.log('[WhatsApp] Session found — reconnecting in 10s...')
+        setTimeout(() => {
+          if (waClient) waClient.initialize().catch(console.error)
+        }, 10000)
+      } else {
+        console.log('[WhatsApp] No session found — will show QR on next init')
+      }
     })
 
     await waClient.initialize()
-    console.log('[WhatsApp] Initialized — waiting for QR scan...')
+    console.log('[WhatsApp] Initialized — checking saved session...')
+
   } catch (err) {
-    const msg = err.message || ''
-    // Stale session — delete and retry once
-    if (msg.includes('browser is already running') || msg.includes('Session closed')) {
-      console.warn('[WhatsApp] Stale session detected, cleaning up...')
-      try {
-        const fs = require('fs')
-        const p = require('path')
-        const sessionDir = process.env.WHATSAPP_SESSION_PATH || './whatsapp_session'
-        if (fs.existsSync(sessionDir)) {
-          fs.rmSync(sessionDir, { recursive: true, force: true })
-          console.log('[WhatsApp] Stale session removed, retrying...')
-          setTimeout(() => initWhatsApp(), 2000)
-          waStatus = 'disconnected'
-          return
-        }
-      } catch (e) {
-        console.warn('[WhatsApp] Cleanup failed:', e.message)
-      }
-    }
-    console.warn('[WhatsApp] Failed to init:', msg)
+    console.error('[WhatsApp] Init failed:', err.message)
     waStatus = 'error'
+    notify('error', 'WhatsApp Init Error', err.message)
   }
 }
 
-export async function sendMessage(to, message) {
-  if (!waClient || waStatus !== 'connected') throw new Error('WhatsApp not connected')
+export async function sendMessage(to, text) {
+  if (waStatus !== 'connected' || !waClient) {
+    throw new Error(`WhatsApp not connected (status: ${waStatus})`)
+  }
   const chatId = to.includes('@') ? to : `${to}@c.us`
-  await waClient.sendMessage(chatId, message)
+  await waClient.sendMessage(chatId, text)
   return { success: true }
 }
 
-async function saveWhatsAppMessage(msg) {
-  try {
-    const { query } = await import('../database/connection.js')
-    await query(`
-      INSERT INTO whatsapp_messages(msg_id, from_number, body, timestamp, is_group, contact_name, direction, type, is_read)
-      VALUES($1,$2,$3,$4,$5,$6,'incoming','incoming',false) ON CONFLICT(msg_id) DO NOTHING
-    `, [msg.id, msg.from, msg.body, msg.timestamp, msg.isGroup, msg.contact])
-  } catch {}
-}
-
-async function createTodoFromWhatsApp(msg) {
-  try {
-    const { query } = await import('../database/connection.js')
-    await query(`
-      INSERT INTO todos(title, description, source, source_id, priority)
-      VALUES($1,$2,'whatsapp',$3,'medium')
-    `, [`WhatsApp: ${msg.body.substring(0, 60)}`, msg.body, msg.id])
-  } catch {}
-}
-
-export function getStatus() {
-  return waStatus
-}
-
-export function getQR() {
-  return qrCodeData
-}
-
-let chatsCache = null
-let chatsCacheTime = 0
-let chatsPromise = null
-
 export async function getLiveChats() {
-  if (chatsCache && Date.now() - chatsCacheTime < 15000) {
+  if (waStatus !== 'connected' || !waClient) return []
+
+  if (chatsCache && (Date.now() - chatsCacheTime) < CACHE_TTL) {
     return chatsCache
   }
 
-  if (chatsPromise) return chatsPromise
+  await refreshChatsCache()
+  return chatsCache || []
+}
 
-  if (!waClient || waStatus !== 'connected') return []
-
-  chatsPromise = (async () => {
-    try {
-      const chats = await waClient.getChats()
-      const sorted = chats
-        .filter(c => !c.isGroup || c.unreadCount > 0)
-        .slice(0, 60)
-
-      const result = await Promise.all(sorted.map(async (chat) => {
+async function refreshChatsCache() {
+  if (!waClient || waStatus !== 'connected') return
+  try {
+    const chats = await waClient.getChats()
+    chatsCache = await Promise.all(
+      chats.slice(0, 60).map(async (chat) => {
         try {
           const msgs = await chat.fetchMessages({ limit: 1 })
-          const last  = msgs[msgs.length - 1]
+          const last = msgs[msgs.length - 1]
           return {
             id:           chat.id._serialized,
             name:         chat.name || chat.id.user,
@@ -182,8 +181,8 @@ export async function getLiveChats() {
             unread:       chat.unreadCount || 0,
             preview:      last?.body?.substring(0, 80) || '',
             time:         last
-                            ? new Date(last.timestamp * 1000).toISOString()
-                            : new Date().toISOString(),
+              ? new Date(last.timestamp * 1000).toISOString()
+              : new Date().toISOString(),
             messageCount: chat.lastMessage ? 1 : 0,
             pinned:       chat.pinned || false,
           }
@@ -195,28 +194,21 @@ export async function getLiveChats() {
             time: new Date().toISOString(), messageCount: 0, pinned: false,
           }
         }
-      }))
-
-      chatsCache = result
-      chatsCacheTime = Date.now()
-      return result
-    } catch (e) {
-      console.error('[WA] getLiveChats error:', e.message)
-      return []
-    } finally {
-      chatsPromise = null
-    }
-  })()
-
-  return chatsPromise
+      })
+    )
+    chatsCacheTime = Date.now()
+  } catch (e) {
+    console.error('[WhatsApp] refreshChatsCache error:', e.message)
+  }
 }
 
 export async function getLiveChatMessages(chatId, limit = 50) {
-  if (!waClient || waStatus !== 'connected') return []
+  if (waStatus !== 'connected' || !waClient) return []
   try {
     const chat = await waClient.getChatById(chatId)
     await chat.sendSeen().catch(() => {})
     const msgs = await chat.fetchMessages({ limit })
+    chatsCache = null
     return msgs.map(m => ({
       id:     m.id._serialized,
       text:   m.body,
@@ -226,7 +218,25 @@ export async function getLiveChatMessages(chatId, limit = 50) {
       fromMe: m.fromMe,
     }))
   } catch (e) {
-    console.error('[WA] getLiveChatMessages error:', e.message)
+    console.error('[WhatsApp] getLiveChatMessages error:', e.message)
     return []
   }
+}
+
+export function getStatus() { return waStatus }
+export function getQR()     { return qrData   }
+
+async function saveMessageToDB(msg) {
+  try {
+    await query(`
+      INSERT INTO whatsapp_messages
+        (msg_id, from_number, body, timestamp, is_group, contact_name, direction, type, is_read)
+      VALUES($1,$2,$3,$4,$5,$6,'incoming','incoming',false)
+      ON CONFLICT(msg_id) DO NOTHING
+    `, [msg.id, msg.from, msg.body, msg.timestamp, msg.isGroup, msg.contact])
+  } catch {}
+}
+
+function broadcast(type, data) {
+  if (global.wsBroadcast) global.wsBroadcast({ type, ...data })
 }

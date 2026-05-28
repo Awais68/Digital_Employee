@@ -9,7 +9,7 @@ import net from 'net'
 import chokidar from 'chokidar'
 import compression from 'compression'
 import { refreshAndBroadcast, getVaultCounts, getRecentActivity, getPendingApprovals, getServiceStatus } from './system-status.js'
-import { testConnection, initializeSchema, closePool } from './database/connection.js'
+import { testConnection, initializeSchema, closePool, query } from './database/connection.js'
 import { generateCSRFToken, verifyCSRF } from './database/csrf.js'
 import { authenticateToken, authenticateApiKey, optionalAuth } from './database/auth.js'
 import { rateLimiter, authRateLimiter } from './database/rateLimiter.js'
@@ -45,7 +45,20 @@ app.use(compression())
 app.use(express.json())
 
 const server = createServer(app)
-const wss = new WebSocketServer({ server })
+const wss = new WebSocketServer({ server, path: '/ws' })
+
+global.wsBroadcast = (data) => {
+  const msg = JSON.stringify(data)
+  let sent = 0
+  wss.clients.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(msg)
+      sent++
+    }
+  })
+  if (sent > 0) console.log(`[WS] Broadcast to ${sent} clients:`, data.type)
+}
+global.broadcast = global.wsBroadcast
 
 // Initialize database
 let dbConnected = false
@@ -80,16 +93,10 @@ app.use((req, res, next) => {
 // Rate limiting (global)
 app.use('/api', rateLimiter({ windowMs: 15 * 60 * 1000, max: 1000 }))
 
-// Auth middleware (optional - enabled via ENABLE_AUTH=true)
-if (ENABLE_AUTH) {
-  app.use('/api', (req, res, next) => {
-    // Skip auth for login/register/health
-    if (req.path.startsWith('/auth/') || req.path.startsWith('/health') || req.path.startsWith('/whatsapp/') || req.path.startsWith('/internal/')) {
-      return next()
-    }
-    authenticateToken(req, res, next)
-  })
-}
+// ─── AUTH-FREE ROUTES (registered before auth middleware) ──────
+app.use('/api/notifications', notificationsRouter)
+app.use('/api/whatsapp',      whatsappRouter)
+app.use('/api/auth',          authRouter)
 
 // CSRF token endpoint
 app.get('/api/csrf-token', (req, res) => {
@@ -106,8 +113,20 @@ app.get('/api/health', (req, res) => {
   })
 })
 
-// API Routes
-app.use('/api/auth', authRouter)
+// ─── AUTH MIDDLEWARE (optional - enabled via ENABLE_AUTH=true) ──
+if (ENABLE_AUTH) {
+  app.use('/api', (req, res, next) => {
+    // Skip auth for routes registered above
+    if (req.path.startsWith('/notifications/') || req.path.startsWith('/whatsapp/') ||
+        req.path.startsWith('/internal/') || req.path.startsWith('/csrf-token') ||
+        req.path.startsWith('/health') || req.path.startsWith('/auth/')) {
+      return next()
+    }
+    authenticateToken(req, res, next)
+  })
+}
+
+// ─── PROTECTED ROUTES (after auth middleware) ──────────────────
 app.use('/api/approvals', approvalsRouter)
 app.use('/api/emails', emailsRouter)
 app.use('/api/drafts', draftsRouter)
@@ -115,21 +134,33 @@ app.use('/api/social', socialRouter)
 app.use('/api/system', systemRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/odoo', odooRouter)
-app.use('/api/whatsapp', whatsappRouter)
 app.use('/api/vault', vaultRouter)
 app.use('/api/export', exportRouter)
 app.use('/api/todos', todosRouter)
-app.use('/api/notifications', notificationsRouter)
 app.use('/api/email-templates', templatesRouter)
 app.use('/api/posts', postsRouter)
 app.use('/api/admin', adminRouter)
 
 // Internal notification endpoint (localhost only, no auth)
 app.post('/api/internal/notify', express.json(), async (req, res) => {
-  const { createNotification } = await import('./services/notificationService.js')
+  const { notify } = await import('./services/notificationService.js')
   const { type, title, message, data } = req.body
-  createNotification(type || 'info', title || 'Notification', message || '', data || {})
+  notify(type || 'info', title || 'Notification', message || '', data || {})
   res.json({ success: true })
+})
+
+// Email event endpoint — receives events from gmail_watcher.py
+app.post('/api/internal/email-event', express.json(), async (req, res) => {
+  res.json({ received: true })
+
+  setImmediate(async () => {
+    try {
+      const { bus, EVENTS } = await import('./services/eventBus.js')
+      bus.emit(EVENTS.EMAIL_NEW, req.body)
+    } catch (e) {
+      console.error('[EmailEvent]', e.message)
+    }
+  })
 })
 
 // Internal email processing endpoint — AI analysis + auto-reply + notifications
@@ -141,7 +172,7 @@ app.post('/api/internal/process-email', express.json(), async (req, res) => {
 
   try {
     const { callAI } = await import('./services/aiProvider.js')
-    const { createNotification } = await import('./services/notificationService.js')
+    const { notify } = await import('./services/notificationService.js')
 
     const systemPrompt = `You are an autonomous AI employee. Analyze this email and decide what action to take. Respond ONLY in valid JSON with no markdown formatting.`
     const userPrompt = `Email from: ${sender}
@@ -180,7 +211,7 @@ Respond with this exact JSON structure:
           [plan.task_title, plan.task_description || body?.substring(0, 200) || '',
            priority === 'high' ? 'high' : 'medium']
         )
-        createNotification('info', '✅ Task Created', plan.task_title)
+        notify('info', 'Task Created', plan.task_title)
       } catch (dbErr) {
         console.error('[AI Email] DB error creating todo:', dbErr.message)
       }
@@ -221,7 +252,7 @@ Move to /Approved/ to send this reply.
         fs.writeFileSync(approvalFile, replyContent, 'utf-8')
         console.log(`[AI Email] Approval file created: ${approvalFile}`)
 
-        createNotification('warning', '📝 Reply Draft Ready',
+        notify('warning', 'Reply Draft Ready',
           `Draft reply to "${subject?.substring(0, 50)}" needs your approval`,
           { file: approvalFile, action: 'approve_reply' })
       } catch (fsErr) {
@@ -247,9 +278,9 @@ Move to /Approved/ to send this reply.
     }
 
     // 4. Final confirmation notification
-    createNotification(
+    notify(
       priority === 'high' ? 'urgent' : 'info',
-      `📧 Email Processed: ${(subject || '').substring(0, 40)}`,
+      `Email Processed: ${(subject || '').substring(0, 40)}`,
       plan.summary || 'Email processed by AI',
       { action: plan.action_type, hasReply: !!plan.requires_response }
     )
@@ -263,11 +294,12 @@ Move to /Approved/ to send this reply.
 app.post('/api/notifications/subscribe', (req, res) => {
   const sub = req.body
   if (!sub || !sub.endpoint) return res.status(400).json({ error: 'Invalid subscription' })
-  import('./services/notificationService.js').then(ns => {
-    ns.getSubscriptions().set(sub.endpoint, sub)
-    console.log('[Push] Subscribed:', sub.endpoint.slice(0, 40) + '...')
-    res.json({ success: true })
-  })
+  // Store subscription (web-push module handled separately)
+  const subs = global._webPushSubs || new Map()
+  subs.set(sub.endpoint, sub)
+  global._webPushSubs = subs
+  console.log('[Push] Subscribed:', sub.endpoint.slice(0, 40) + '...')
+  res.json({ success: true })
 })
 
 // Serve uploaded images and generated images (always available)
@@ -287,37 +319,44 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 // WebSocket Connection
-wss.on('connection', async (ws) => {
-  console.log('WebSocket client connected')
+wss.on('connection', async (ws, req) => {
+  console.log('[WS] Client connected from', req.socket.remoteAddress)
 
-  // Send initial dashboard state
-  const initialState = {
-    type: 'initial_state',
-    vaultCounts: getVaultCounts(true),
-    recentActivity: getRecentActivity(10),
-    pendingApprovals: getPendingApprovals(),
-    services: await getServiceStatus(),
-    timestamp: new Date(),
-  }
-  ws.send(JSON.stringify(initialState))
+  // Send initial state
+  try {
+    const initialState = {
+      type: 'initial_state',
+      vaultCounts: getVaultCounts(true),
+      recentActivity: getRecentActivity(10),
+      pendingApprovals: getPendingApprovals(),
+      services: await getServiceStatus(),
+      timestamp: new Date(),
+    }
+    ws.send(JSON.stringify(initialState))
+  } catch {}
+
+  // Send WhatsApp status immediately
+  try {
+    const wa = await import('./services/whatsappService.js')
+    ws.send(JSON.stringify({
+      type:   'whatsapp:status',
+      status: wa.getStatus(),
+      qr:     wa.getQR()
+    }))
+  } catch {}
 
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message)
-      console.log('Received:', data)
-
       if (data.type === 'refresh') {
         const updated = await refreshAndBroadcast()
         ws.send(JSON.stringify(updated))
       }
-    } catch (err) {
-      console.error('Failed to parse message:', err)
-    }
+    } catch {}
   })
 
-  ws.on('close', () => {
-    console.log('WebSocket client disconnected')
-  })
+  ws.on('error', () => {})
+  ws.on('close', () => console.log('[WS] Client disconnected'))
 })
 
 // Vault file watcher - excluding session folders
@@ -380,23 +419,8 @@ if (vaultPath) {
   })
 }
 
-// Broadcast to all connected clients
-function broadcast(message) {
-  wss.clients.forEach((client) => {
-    if (client.readyState === 1) {
-      try {
-        client.send(JSON.stringify(message))
-      } catch (err) {
-        console.error('Broadcast error:', err)
-      }
-    }
-  })
-}
-
-global.broadcast = broadcast
-
-// Start cron scheduler
-import './services/scheduler.js'
+// Start cron scheduler — imported dynamically AFTER everything is initialized
+// (done inside initDatabase callback)
 
 // Graceful shutdown
 async function gracefulShutdown() {
@@ -444,15 +468,41 @@ async function findFreePort(ports) {
   return null
 }
 
-// Start servers
+// Start servers — CRITICAL STARTUP ORDER 🚨
 initDatabase().then(async () => {
-  // Load encrypted API keys from DB into process.env
+  // 1. Load encrypted API keys
   const { loadApiKeysFromDb } = await import('./database/connection.js')
   await loadApiKeysFromDb()
 
-  // Load secrets from encrypted file (fallback)
+  // 2. Load secrets
   const { loadSecrets } = await import('./services/secretsManager.js')
   loadSecrets()
+
+  // 3. Init notifications table (DB-backed)
+  try {
+    const { initNotificationsTable } = await import('./services/notificationService.js')
+    await initNotificationsTable()
+    console.log('[Startup] Notifications table ready')
+  } catch (e) {
+    console.warn('[Startup] Notifications table init skipped:', e.message)
+  }
+
+  // 4. Start event listeners (wires bus -> notifications, todos, etc.)
+  try {
+    const { startEventListeners } = await import('./services/eventListeners.js')
+    startEventListeners()
+    console.log('[Startup] Event listeners active')
+  } catch (e) {
+    console.warn('[Startup] Event listeners error:', e.message)
+  }
+
+  // 5. Start scheduler (cron jobs)
+  try {
+    await import('./services/scheduler.js')
+    console.log('[Startup] Scheduler started')
+  } catch (e) {
+    console.warn('[Startup] Scheduler error:', e.message)
+  }
 
   const startPort = parseInt(process.env.PORT || '3000')
   const portsToTry = [startPort, ...FALLBACK_PORTS.filter(p => p !== startPort)]
@@ -470,7 +520,7 @@ initDatabase().then(async () => {
     console.log(`[Auth] ${ENABLE_AUTH ? 'Enabled' : 'Disabled (dev mode)'}`)
     console.log(`[Database] ${dbConnected ? 'Connected' : 'Not connected (file-based mode)'}`)
 
-    // Initialize WhatsApp Web.js (QR code auth)
+    // 6. Initialize WhatsApp (after everything else is ready)
     import('./services/whatsappService.js').then(ws => {
       ws.initWhatsApp()
     }).catch(err => {
@@ -480,7 +530,6 @@ initDatabase().then(async () => {
     // Scheduled post checker — runs every 30 seconds
     setInterval(async () => {
       try {
-        const { query } = await import('./database/connection.js')
         const due = await query(
           `SELECT * FROM scheduled_posts WHERE status='scheduled' AND scheduled_for <= NOW() LIMIT 5`
         )
@@ -488,7 +537,6 @@ initDatabase().then(async () => {
           try {
             await query(`UPDATE scheduled_posts SET status='publishing' WHERE id=$1`, [post.id])
             console.log(`[Scheduler] Publishing scheduled post ${post.id}...`)
-            // Trigger publish via the social route
             const { default: axios } = await import('axios')
             await axios.post(`http://localhost:${freePort}/api/social/draft/${post.id}/publish`)
             await query(`UPDATE scheduled_posts SET status='published', published_at=NOW() WHERE id=$1`, [post.id])

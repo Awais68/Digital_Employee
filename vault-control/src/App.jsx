@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ToastProvider, useToast } from "./context/ToastContext";
-import { useWebSocket } from "./hooks/useWebSocket";
+import { AppProvider } from "./context/AppContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
@@ -175,28 +175,7 @@ function AppContent() {
     return true;
   });
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const { success, info, warning } = useToast();
   const isAuthEnabled = import.meta.env.VITE_ENABLE_AUTH === "true";
-
-  const handleWSMessage = useCallback((data) => {
-    if (data.type === 'approval_changed') {
-      const action = data.action
-      if (action === 'approved') success('Approval approved')
-      else if (action === 'rejected') warning('Approval rejected')
-      else if (action === 'undone') info('Approval action undone')
-      
-      // Browser notification if tab is hidden
-      if (document.hidden && Notification.permission === 'granted') {
-        new Notification('Vault Control', { body: `Item ${action}`, icon: '/favicon.svg' })
-      }
-    } else if (data.type === 'initial_state') {
-      // Dashboard loaded
-    } else if (data.type === 'vault_changed') {
-      info('Vault updated')
-    }
-  }, [success, info, warning])
-
-  useWebSocket(handleWSMessage)
 
   // Request notification permission
   useEffect(() => {
@@ -290,7 +269,9 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <AppContent />
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
       </ToastProvider>
     </AuthProvider>
   );

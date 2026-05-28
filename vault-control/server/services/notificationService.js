@@ -1,100 +1,95 @@
-import webpush from 'web-push'
+import { bus, EVENTS } from './eventBus.js'
+import { query } from '../database/connection.js'
 
-if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(
-    'mailto:' + (process.env.ADMIN_EMAIL || 'admin@aiemployee.com'),
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-  )
-}
+const store = []
+const MAX   = 200
 
-const subscriptions = new Map()
-const notifications = []
-const MAX_NOTIFICATIONS = 100
-
-export function getSubscriptions() {
-  return subscriptions
-}
-
-export async function sendNotification(subscription, payload) {
-  try {
-    await webpush.sendNotification(subscription, JSON.stringify(payload))
-  } catch (e) {
-    console.error('Push notification failed:', e)
-  }
-}
-
-export function createNotification(type, title, message, data = {}) {
+export function notify(type, title, message, data = {}) {
   const notif = {
-    id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    id:        `n_${Date.now()}_${Math.random().toString(36).substr(2,4)}`,
     type,
     title,
     message,
     data,
-    read: false,
-    createdAt: new Date().toISOString(),
-  }
-  notifications.unshift(notif)
-  if (notifications.length > MAX_NOTIFICATIONS) notifications.pop()
-
-  if (global.broadcast) {
-    global.broadcast({ type: 'notification', notification: notif })
+    read:      false,
+    createdAt: new Date().toISOString()
   }
 
-  console.log(`[NOTIF] ${type.toUpperCase()}: ${title} — ${message}`)
+  store.unshift(notif)
+  if (store.length > MAX) store.pop()
+
+  query(
+    `INSERT INTO notifications(id, type, title, message, data, created_at)
+     VALUES($1,$2,$3,$4,$5,NOW()) ON CONFLICT DO NOTHING`,
+    [notif.id, type, title, message, JSON.stringify(data)]
+  ).catch(() => {})
+
+  if (global.wsBroadcast) {
+    global.wsBroadcast({ type: 'notification', notification: notif })
+  }
+
+  bus.emit(EVENTS.NOTIFY, notif)
+
   return notif
 }
 
 export function getNotifications(limit = 50) {
-  return notifications.slice(0, limit)
+  return store.slice(0, limit)
 }
 
 export function markRead(id) {
-  const n = notifications.find(n => n.id === id)
-  if (n) n.read = true
+  const n = store.find(x => x.id === id)
+  if (n) {
+    n.read = true
+    query('UPDATE notifications SET read=true WHERE id=$1', [id]).catch(() => {})
+  }
   return n
 }
 
 export function markAllRead() {
-  notifications.forEach(n => n.read = true)
+  store.forEach(n => { n.read = true })
+  query('UPDATE notifications SET read=true').catch(() => {})
 }
 
 export function getUnreadCount() {
-  return notifications.filter(n => !n.read).length
+  return store.filter(n => !n.read).length
 }
 
-export function scheduleReminder(todo) {
-  const delay = new Date(todo.reminder_at) - new Date()
-  if (delay <= 0) return
+export async function initNotificationsTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id VARCHAR(50) PRIMARY KEY,
+      type VARCHAR(20),
+      title VARCHAR(200),
+      message TEXT,
+      data JSONB DEFAULT '{}',
+      read BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `)
 
-  setTimeout(async () => {
-    for (const [, sub] of subscriptions) {
-      await sendNotification(sub, {
-        title: `Reminder: ${todo.title}`,
-        body: todo.description || 'Task due soon',
-        icon: '/logo.png',
-        badge: '/badge.png',
-        data: { todoId: todo.id, url: '/todos' },
-      })
-    }
+  await query(`ALTER TABLE notifications ALTER COLUMN id TYPE VARCHAR(50)`).catch(() => {})
+  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'`).catch(() => {})
+  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS read BOOLEAN DEFAULT false`).catch(() => {})
+  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {})
 
-    createNotification('warning', `⏰ Reminder: ${todo.title}`, todo.description || 'Task due now', { todoId: todo.id })
-
-    const wa = await import('./whatsappService.js').catch(() => null)
-    const ownerPhone = process.env.OWNER_PHONE
-    if (wa) {
-      try {
-        if (wa.getStatus() === 'connected' && ownerPhone) {
-          await wa.sendMessage(ownerPhone,
-            `⏰ *Task Reminder*\n\n*${todo.title}*\n${todo.description || ''}\n\nPriority: ${todo.priority?.toUpperCase() || 'MEDIUM'}`
-          )
-        }
-      } catch (e) {
-        console.error('[Notif] WA reminder failed:', e.message)
-      }
-    }
-
-    const { query } = await import('../database/connection.js')
-    await query('UPDATE todos SET notification_sent=true WHERE id=$1', [todo.id]).catch(e => console.error('[Notif] DB update failed:', e.message))
-  }, delay)
+  try {
+    const result = await query(
+      'SELECT * FROM notifications ORDER BY created_at DESC LIMIT 100'
+    )
+    store.push(...result.rows.map(r => ({
+      id:        r.id,
+      type:      r.type,
+      title:     r.title,
+      message:   r.message,
+      data:      r.data || {},
+      read:      r.read,
+      createdAt: r.created_at
+    })))
+    console.log(`[Notifications] Loaded ${result.rows.length} from DB`)
+  } catch (e) {
+    console.warn('[Notifications] Could not load from DB:', e.message)
+  }
 }
+
+export { notify as createNotification }

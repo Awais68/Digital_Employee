@@ -55,11 +55,6 @@ router.post('/', async (req, res) => {
     `, [title, description || '', priority || 'medium', dueDate || null, reminderAt || null])
 
     const id = result.rows[0].id
-    if (reminderAt) {
-      import('../services/notificationService.js').then(ns => {
-        ns.scheduleReminder({ id, title, description, reminder_at: reminderAt })
-      })
-    }
     createNotification('info', 'Task Created', `"${title}" added`, { source: 'todo', id })
     if (global.broadcast) global.broadcast({ type: 'dashboard_update', message: 'New todo created' })
     res.status(201).json({ id, title, completed: false, priority: priority || 'medium', dueDate, reminderAt, description })
@@ -78,9 +73,6 @@ router.put('/:id', async (req, res) => {
       UPDATE todos SET title=$1, priority=$2, due_date=$3, status=$4, reminder_at=$5, description=$6, updated_at=NOW()
       WHERE id=$7
     `, [title || '', priority || 'medium', dueDate || null, status, reminderAt || null, description || '', id])
-    if (reminderAt) {
-      import('../services/notificationService.js').then(ns => ns.scheduleReminder({ id, title, description, reminder_at: reminderAt }))
-    }
     if (global.broadcast) global.broadcast({ type: 'dashboard_update', message: `Todo ${id} updated` })
     res.json({ id, title, completed: !!completed, priority, dueDate, reminderAt })
   } catch (err) {

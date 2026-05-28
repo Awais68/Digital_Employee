@@ -1,49 +1,20 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
-const SERVER_PORTS = [3000, 3001, 3002, 3003]
-
-async function findServerPort(ports, index = 0) {
-  if (index >= ports.length) return ports[0]
-  
-  // Use dynamic import for Node.js net module (Vite-compatible)
-  const { createConnection } = await import('net')
-  
-  return new Promise((resolve) => {
-    const socket = createConnection({ port: ports[index], host: 'localhost' })
-    socket.on('connect', () => {
-      socket.end()
-      console.log(`[Vite Proxy] Backend found on port ${ports[index]}`)
-      resolve(ports[index])
-    })
-    socket.on('error', () => {
-      socket.destroy()
-      resolve(findServerPort(ports, index + 1))
-    })
-  })
-}
-
-export default defineConfig(async () => {
-  const serverPort = await findServerPort(SERVER_PORTS)
-  
-  return {
-    plugins: [react()],
-    server: {
-      port: 5173,
-      proxy: {
-        '/api': {
-          target: `http://localhost:${serverPort}`,
-          changeOrigin: true,
-        },
-        '/ws': {
-          target: `ws://localhost:${serverPort}`,
-          ws: true,
-        }
-      }
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+      "/ws": {
+        target: "ws://localhost:3000",
+        ws: true,
+        changeOrigin: true,
+      },
     },
-    build: {
-      outDir: 'dist',
-      sourcemap: false
-    }
-  }
-})
+  },
+});
