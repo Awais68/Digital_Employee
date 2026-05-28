@@ -34,10 +34,10 @@ try:
     print(f"Response: {response.text}")
     
     if response.status_code == 200 and "true" in response.text.lower():
-        print(f"\n✅ Password reset successful!")
-        print(f"   Username: admin")
+        print("\n✅ Password reset successful!")
+        print("   Username: admin")
         print(f"   New Password: {NEW_PASSWORD}")
-        print(f"\nNow testing authentication...")
+        print("\nNow testing authentication...")
         
         # Update .env file
         import xmlrpc.client
@@ -50,7 +50,7 @@ try:
             print("⚠️  Password reset succeeded but authentication test failed")
             print("   You may need to wait a moment or restart Odoo")
     else:
-        print(f"\n❌ Password reset failed")
+        print("\n❌ Password reset failed")
         print("   This might mean:")
         print("   - Master password is incorrect")
         print("   - Database doesn't exist")

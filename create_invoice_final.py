@@ -51,7 +51,7 @@ def main():
     
     # Step 2: Search for customer "Shaikh Test"
     print(f"\n{'=' * 60}")
-    print(f"Step 2: Searching for customer 'Shaikh Test'...")
+    print("Step 2: Searching for customer 'Shaikh Test'...")
     print(f"{'=' * 60}")
     
     customer_domain = [['name', 'ilike', 'Shaikh Test']]
@@ -80,7 +80,7 @@ def main():
     
     # Step 3: Create the invoice
     print(f"\n{'=' * 60}")
-    print(f"Step 3: Creating invoice for amount 350...")
+    print("Step 3: Creating invoice for amount 350...")
     print(f"{'=' * 60}")
     
     invoice_vals = {
@@ -101,11 +101,11 @@ def main():
         )
         
         print(f"\n{'=' * 60}")
-        print(f"✅ INVOICE CREATED SUCCESSFULLY!")
+        print("✅ INVOICE CREATED SUCCESSFULLY!")
         print(f"{'=' * 60}")
         print(f"   Invoice ID: {invoice_id}")
         print(f"   Customer: Shaikh Test (ID: {customer_id})")
-        print(f"   Amount: $350.00")
+        print("   Amount: $350.00")
         
         # Read back the invoice details
         invoice = models.execute_kw(
@@ -116,7 +116,7 @@ def main():
         )
         
         if invoice:
-            print(f"\n📄 Invoice Details:")
+            print("\n📄 Invoice Details:")
             print(f"   Invoice Number: {invoice[0].get('name', 'N/A')}")
             print(f"   State: {invoice[0].get('state', 'N/A')}")
             print(f"   Total Amount: ${invoice[0].get('amount_total', 0):.2f}")

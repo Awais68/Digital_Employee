@@ -11,13 +11,10 @@ Example:
     python3 send_whatsapp_report.py "Awais"
 """
 
-import os
 import sys
 import json
-import time
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
 
 try:
     from playwright.sync_api import sync_playwright
@@ -344,7 +341,7 @@ def send_whatsapp_message(contact_name: str, message: str) -> dict:
         if browser:
             try:
                 browser.close()
-            except:
+            except Exception:
                 pass
         return {
             "success": False,

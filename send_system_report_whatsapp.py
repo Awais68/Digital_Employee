@@ -10,7 +10,6 @@ Usage:
 
 import os
 import sys
-import time
 import urllib.parse
 from pathlib import Path
 from datetime import datetime
@@ -169,7 +168,7 @@ def send_whatsapp_report(phone: str, message: str):
                         send_clicked = True
                         print(f"{GREEN}   ✅ Message sent!{RESET}")
                         break
-                except:
+                except Exception:
                     continue
             
             if not send_clicked:
@@ -179,7 +178,7 @@ def send_whatsapp_report(phone: str, message: str):
                     page.wait_for_timeout(2000)
                     send_clicked = True
                     print(f"{GREEN}   ✅ Message sent via Enter key!{RESET}")
-                except:
+                except Exception:
                     print(f"{YELLOW}   ⚠️  Message typed - please press Send manually{RESET}")
             
             # Wait to see result
@@ -235,13 +234,13 @@ def main():
         print(f"{GREEN}✅ Report sent to {phone}!{RESET}")
         print()
         print(f"{CYAN}📊 Report includes:{RESET}")
-        print(f"  ✅ System test results (5/6 passed)")
-        print(f"  ✅ Social media campaign (4 platforms)")
-        print(f"  ✅ Solar invoice (PKR 1,150,000)")
-        print(f"  ✅ Email report (delivered)")
+        print("  ✅ System test results (5/6 passed)")
+        print("  ✅ Social media campaign (4 platforms)")
+        print("  ✅ Solar invoice (PKR 1,150,000)")
+        print("  ✅ Email report (delivered)")
     else:
         print(f"{YELLOW}⚠️  Message may need manual send{RESET}")
-        print(f"   Open browser: https://web.whatsapp.com")
+        print("   Open browser: https://web.whatsapp.com")
     print("=" * 70)
     print()
 

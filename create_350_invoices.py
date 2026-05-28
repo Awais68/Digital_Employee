@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Create 350 invoices in Odoo - Direct approach"""
-import xmlrpc.client, random, os
+import xmlrpc.client
+import random
+import os
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -34,7 +36,7 @@ for i in range(1, 21):
 print(f"   ✅ Created 20 customers: {partner_ids}")
 
 # Step 2: Create 350 invoices
-print(f"\n2. Creating 350 invoices...")
+print("\n2. Creating 350 invoices...")
 print("-" * 60)
 
 services = [
@@ -86,12 +88,12 @@ for i in range(1, 351):
             errors.append(f"Invoice {i}: {str(e)[:120]}")
 
 print("-" * 60)
-print(f"\n📊 Final Results:")
+print("\n📊 Final Results:")
 print(f"   ✅ Successfully created: {created}")
 print(f"   ❌ Failed: {failed}")
 
 if errors:
-    print(f"\n⚠️  Sample errors:")
+    print("\n⚠️  Sample errors:")
     for err in errors[:3]:
         print(f"   - {err}")
 

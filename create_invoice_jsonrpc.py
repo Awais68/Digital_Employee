@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create and POST invoice via Odoo JSON-RPC"""
-import requests, os
+import requests
+import os
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -94,7 +95,7 @@ try:
         "method": "execute_kw",
         "args": [ODOO_DB, uid, ODOO_PASSWORD, "account.move", "action_post", [[invoice_id]]]
     })
-    print(f"   ✅ Invoice posted successfully!")
+    print("   ✅ Invoice posted successfully!")
 except Exception as e:
     print(f"   ⚠️  Post failed: {e}")
     print("   Invoice is in Draft state")
@@ -109,11 +110,11 @@ invoice_data = jsonrpc_call("call", {
 
 inv = invoice_data[0]
 print(f"\n{'=' * 60}")
-print(f"📄 Invoice Details:")
+print("📄 Invoice Details:")
 print(f"   Number: {inv.get('name', 'N/A')}")
 print(f"   Customer: {inv.get('partner_id', [''])[1] if isinstance(inv.get('partner_id'), list) else 'Awais Niaz'}")
 print(f"   Total: ${inv.get('amount_total', 300.00):.2f}")
 print(f"   State: {inv.get('state', 'Unknown')}")
 print(f"{'=' * 60}")
-print(f"\n🔗 View in browser:")
+print("\n🔗 View in browser:")
 print(f"   http://localhost:8069/web#id={invoice_id}&model=account.move")

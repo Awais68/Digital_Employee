@@ -6,7 +6,6 @@ multi_channel_post.py - Post to LinkedIn, Facebook, Instagram, WhatsApp, and Ema
 import sys
 import os
 from pathlib import Path
-from datetime import datetime
 
 # Setup paths
 BASE_DIR = Path(__file__).parent.resolve()

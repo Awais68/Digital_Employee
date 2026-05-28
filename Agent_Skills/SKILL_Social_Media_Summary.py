@@ -14,7 +14,6 @@ Features:
 Author: Digital Employee System
 """
 
-import os
 import sys
 import json
 import logging

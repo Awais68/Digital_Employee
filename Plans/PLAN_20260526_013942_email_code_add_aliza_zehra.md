@@ -1,0 +1,204 @@
+---
+type: plan
+status: pending
+priority: medium
+task_type: email
+created: 2026-05-26 02:40:18
+created_timestamp: 2026-05-26T02:40:18.843454
+orchestrator_tier: Silver v4.0
+version: 4.0.0
+---
+
+# 📋 Plan: 20260526_013942_email_code_add_aliza_zehra.md
+
+## 🎯 Objective
+Execute the task with precision and document all outcomes.
+
+| Property | Value |
+|----------|-------|
+| **Task Type** | Email |
+| **Complexity** | Complex |
+| **Priority** | Medium |
+| **Estimated Time** | 45+ min |
+| **Urgent** | No |
+| **Skill Agent** | `/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/email_mcp.py` |
+| **Created** | 2026-05-26 02:40:18 |
+
+---
+
+## 📝 Original Task Content
+
+```
+---
+type: email
+from: LinkedIn <messages-noreply@linkedin.com>
+subject: 🔗 Code, add Aliza Zehra
+received: 2026-05-25T20:39:42.246657+00:00
+priority: normal
+status: pending
+email_id: 19e5dd582e481f6f
+thread_id: 19e5dd582e481f6f
+---
+
+# 📧 Email: 🔗 Code, add Aliza Zehra
+
+## Email Details
+
+| Field | Value |
+|-------|-------|
+| **From** | LinkedIn <messages-noreply@linkedin.com> |
+| **To** | Code The Agent <codetheagent1@gmail.com> |
+| **Received** | Mon, 25 May 2026 06:32:13 +0000 (UTC) |
+| **Priority** | NORMAL |
+| **Status** | Pending |
+
+---
+
+## Email Content
+
+Do you know Aliza Zehra?1 mutual connection
+
+Yes, connect: https://www.linkedin.com/comm/mynetwork/send-invite/aliza-zehra-1a19a534a/?lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midSig=1JaId0l-J8Csg1&midToken=AQHS1HoyKBa5AA&trkEmail=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1465587913-null-ru5hfq%7Empktws2l%7Era-null-null&trk=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1465587913&_sig=2oxr1bBJ58Csg1
+
+
+More people you may know
+            
+    Syeda Afifa Muzaffar
+🎓 Nutrition & Food Science 
+|| Nutrition Awareness Advocate || Nutrition therapist || Nutrition trainer || Food researcher || HNS member || Health Councillor || Canva & MS Word Expert
+
+》Instagram: nut_ricure
+https://www.linkedin.com/comm/mynetwork/send-invite/syeda-afifa-muzaffar-987bb9266/?lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midSig=1JaId0l-J8Csg1&midToken=AQHS1HoyKBa5AA&trkEmail=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1095852343-null-ru5hfq%7Empktws2l%7Era-null-null&trk=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1095852343&_sig=1K9ZhsRK18Csg11 mutual connection
+            
+    Muzamil Hussain
+Student at University of Sindh, Jamshoro
+https://www.linkedin.com/comm/mynetwork/send-invite/muzamil-hussain-9442833a4/?lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midSig=1JaId0l-J8Csg1&midToken=AQHS1HoyKBa5AA&trkEmail=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1660877188-null-ru5hfq%7Empktws2l%7Era-null-null&trk=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1660877188&_sig=1JdtgTCUR8Csg11 mutual connection
+            
+    Rabia shaikh
+Frontend developer | React.js 
+https://www.linkedin.com/comm/mynetwork/send-invite/rabia-shaikh-31a499256/?lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midSig=1JaId0l-J8Csg1&midToken=AQHS1HoyKBa5AA&trkEmail=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1058236294-null-ru5hfq%7Empktws2l%7Era-null-null&trk=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1058236294&_sig=0SqV7vBax8Csg11 mutual connection
+            
+    Yamna Sayyeda
+Nutritionist | Meal Planning and Nutritional Counselling
+https://www.linkedin.com/comm/mynetwork/send-invite/yamnasayyeda/?lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midSig=1JaId0l-J8Csg1&midToken=AQHS1HoyKBa5AA&trkEmail=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1399854712-null-ru5hfq%7Empktws2l%7Era-null-null&trk=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1399854712&_sig=1lYXZ2wdN8Csg11 mutual connection
+            
+    Mohammad Farooque .
+Computer Science Student | Building Web Apps with MERN | Exploring UI/UX Design
+https://www.linkedin.com/comm/mynetwork/send-invite/mohammadfarooque/?lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midSig=1JaId0l-J8Csg1&midToken=AQHS1HoyKBa5AA&trkEmail=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1205445653-null-ru5hfq%7Empktws2l%7Era-null-null&trk=eml-email_pymk_02-pymkCard-0-pymk_cta%3A+urn%3Ali%3Amember%3A1205445653&_sig=2bFrt0Tvd8Csg11 mutual connection
+
+See more people you might know:https://www.linkedin.com/comm/mynetwork/add-connections/?lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midToken=AQHS1HoyKBa5AA&midSig=1JaId0l-J8Csg1&trk=eml-email_pymk_02-see_more-0-cta~text&trkEmail=eml-email_pymk_02-see_more-0-cta~text-null-ru5hfq~mpktws2l~ra-null-null&eid=ru5hfq-mpktws2l-ra&otpToken=MTMwMzE2ZTMxMDJkYzhjNWI1MmUwZmViNDExOWVlYjI4NmNlZDc0MjliYWI4NjYzN2JjNjAwNmI0ZDUyNTlmYmYyZDRkM2UzMThkMmUwZGY3NWE3ZjBjMzMwZTdlODVhODQwOTVmYjk4NjIyYzc2OWZhNzYyMzI5YjUsMSwx
+      
+
+----------------------------------------
+
+This email was intended for Code The Agent (Student at University of Sindh)
+Learn why we included this: https://www.linkedin.com/help/linkedin/answer/4788?lang=en&lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midToken=AQHS1HoyKBa5AA&midSig=1JaId0l-J8Csg1&trk=eml-email_pymk_02-SecurityHelp-0-textfooterglimmer&trkEmail=eml-email_pymk_02-SecurityHelp-0-textfooterglimmer-null-ru5hfq~mpktws2l~ra-null-null&eid=ru5hfq-mpktws2l-ra&otpToken=MTMwMzE2ZTMxMDJkYzhjNWI1MmUwZmViNDExOWVlYjI4NmNlZDc0MjliYWI4NjYzN2JjNjAwNmI0ZDUyNTlmYmYyZDRkM2UzMThkMmUwZGY3NWE3ZjBjMzMwZTdlODVhODQwOTVmYjk4NjIyYzc2OWZhNzYyMzI5YjUsMSwx
+You are receiving People You May Know notification emails.
+
+
+Unsubscribe: https://www.linkedin.com/comm/mypreferences/u/emailunsub?action=updateEmailSubscription&lipi=urn%3Ali%3Apage%3Aemail_email_pymk_02%3BWqcZ%2FP%2BZRLCV%2BVQa2YnOCQ%3D%3D&midToken=AQHS1HoyKBa5AA&midSig=1JaId0l-J8Csg1&trk=eml-email_pymk_02-unsubscribe-0-textfooterglimmer&trkEmail=eml-email_pymk_02-unsubscribe-0-textfooterglimmer-null-ru5hfq~mpktws2l~ra-null-null&eid=ru5hfq-mpktws2l-ra&loid=AQGu8q
+
+---
+
+## Action Items
+
+- [ ] Review email content
+- [ ] Determine required action
+- [ ] Draft response (if needed)
+- [ ] Execute action items
+- [ ] Mark as complete
+
+## Notes
+
+*Add context, decisions, or follow-up notes here*
+
+---
+*Generated by Gmail Watcher v2.0 on 2026-05-26 01:39:42*
+```
+
+---
+
+## Steps
+
+### Standard Workflow
+- [ ] Read and understand task requirements
+- [ ] Identify required tools/skills/agents
+- [ ] Check dependencies and prerequisites
+- [ ] Route to skill agent: `/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/email_mcp.py`
+
+### Completion
+- [ ] Execute primary action(s)
+- [ ] Verify successful completion
+- [ ] Document results and outcomes
+- [ ] Archive to appropriate folder
+
+
+
+## 📧 Proposed Reply Draft
+
+**Intent Detected:** Saas Developer Response
+**Generated:** 2026-05-26T02:40:18.843444
+
+---
+
+**To:** LinkedIn <messages-noreply@linkedin.com>
+**Subject:** Re: 🔗 Code, add Aliza Zehra
+
+```
+Dear LinkedIn,
+
+Thank you for considering me for the Agent/Developer position at AS Developers.
+
+I am excited about the opportunity to work on AI integration and SaaS development. 
+I would be available for a meeting this week to discuss:
+
+1. Project requirements and scope
+2. Technical stack and architecture
+3. Timeline and deliverables
+4. Collaboration framework
+
+Please let me know your preferred meeting time. I am flexible and can accommodate 
+your schedule.
+
+Looking forward to contributing to your team's success.
+
+Best regards,
+Awais Niaz
+CTO / AI Engineer
+```
+
+---
+
+### ✏️ Draft Actions
+
+- [ ] Review and edit draft content
+- [ ] Approve for sending → Move to `/Approved/`
+- [ ] Request regeneration → Add notes in file
+- [ ] Reject draft → Move to `/Rejected/`
+
+**Approval File:** `Pending_Approval/REPLY_20260526_013942_email_code_add_aliza_zehra.md`
+
+---
+
+
+## 🧠 Decision Framework
+
+### Analysis
+- **Detected Type:** Email (auto-detected)
+- **Content Analysis:** 273 words, 85 lines
+
+### Decision Log
+| Timestamp | Decision | Reasoning |
+|-----------|----------|-----------|
+| 2026-05-26 02:40 | Plan created | Auto-analysis complete |
+
+---
+
+## ✅ Approval Required?
+
+**Status:** ⏳ Yes - Human review required before execution
+
+---
+
+*🤖 Generated by Silver Tier Orchestrator v4.0*
+*📅 Created: 2026-05-26 02:40:18*

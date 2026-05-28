@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -23,13 +22,13 @@ except ImportError as e:
     print(f"⚠️ Warning: Some skills could not be imported: {e}")
 
 # Configuration
-TEST_PHONE = os.getenv("WHATSAPP_PHONE", "923001234567") 
+TEST_PHONE = os.getenv("WHATSAPP_PHONE", "923273363154") 
 REPORT_RECIPIENT = os.getenv("GMAIL_EMAIL", "codetheagent1@gmail.com")
 INSTA_IMAGE = str(BASE_DIR / "instagram_post_20260420.jpg")
 
 print("=" * 80)
 print("🚀 COMPREHENSIVE SYSTEM TEST STARTING...")
-print(f"📍 Target: ERM Solutions - ERP System for Geneva")
+print("📍 Target: ERM Solutions - ERP System for Geneva")
 print("=" * 80)
 
 results = {

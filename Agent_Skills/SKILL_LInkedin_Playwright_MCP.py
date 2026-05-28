@@ -265,70 +265,263 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
 
             # Wait for LinkedIn's JavaScript to fully load
             print("⏳ Waiting for LinkedIn to load...")
-            page.wait_for_timeout(5000)  # Increased wait time
+            page.wait_for_timeout(5000)
             
-            # Click on "Start a post" box
+            # Open post editor - if image provided, use Photo button flow (opens composer with image)
+            # Otherwise use Start a post button (text-only composer)
             print("📝 Opening post editor...")
             create_post_clicked = False
-            selectors_to_try = [
-                "div[role='button']:has-text('Start a post')",
-                "button:has-text('Start a post')",
-                "div.feed-shared-create-post__cta",
-                "button:has-text('Start')",
-            ]
-
-            for selector in selectors_to_try:
+            image_uploaded = False
+            
+            if image_path and os.path.exists(image_path):
+                print(f"📷 Attempting Photo button upload...")
                 try:
-                    locator = page.locator(selector).first
-                    if locator.is_visible(timeout=5000):  # Increased timeout
-                        locator.click()
-                        create_post_clicked = True
-                        print(f"   Clicked using selector: {selector}")
-                        break
-                except Exception:
-                    continue
+                    page.wait_for_timeout(2000)
+                    file_choosers = []
+                    def fc_handler(fc):
+                        file_choosers.append(fc)
+                    page.on("filechooser", fc_handler)
+                    
+                    photo_btn = page.locator('[role="button"]:has-text("Photo")').first
+                    if photo_btn.is_visible(timeout=3000):
+                        photo_btn.click()
+                        print("   Clicked Photo button...")
+                        
+                        for _ in range(20):
+                            page.wait_for_timeout(500)
+                            if len(file_choosers) > 0:
+                                file_choosers[0].set_files(image_path)
+                                image_uploaded = True
+                                create_post_clicked = True
+                                print("   ✅ Image + post editor opened via Photo button")
+                                page.wait_for_timeout(3000)
+                                break
+                        
+                        if not create_post_clicked:
+                            print("   ⚠️  File chooser didn't appear, trying Start a post approach")
+                            # Reload to clean state
+                            try:
+                                page.goto("https://www.linkedin.com/feed/", timeout=30000, wait_until="domcontentloaded")
+                                page.wait_for_timeout(5000)
+                            except:
+                                pass
+                except Exception as e:
+                    print(f"   Photo button error: {e}")
+                    try:
+                        page.goto("https://www.linkedin.com/feed/", timeout=30000, wait_until="domcontentloaded")
+                        page.wait_for_timeout(5000)
+                    except:
+                        pass
 
             if not create_post_clicked:
-                # Try alternative: click anywhere in the post creation area
+                selectors_to_try = [
+                    "div[role='button']:has-text('Start a post')",
+                    "button:has-text('Start a post')",
+                    "div.feed-shared-create-post__cta",
+                    "button:has-text('Start')",
+                ]
+
+                for selector in selectors_to_try:
+                    try:
+                        locator = page.locator(selector).first
+                        if locator.is_visible(timeout=5000):
+                            locator.click()
+                            create_post_clicked = True
+                            print(f"   Clicked using selector: {selector}")
+                            break
+                    except Exception:
+                        continue
+
+            if not create_post_clicked:
                 try:
                     page.click("div:has-text('Start a post')", timeout=5000)
                     create_post_clicked = True
                     print("   Clicked using text match")
-                except Exception as e:
+                except Exception:
                     return {
                         "success": False,
-                        "message": f"Could not find 'Start a post' element. Session may be expired. Try: python3 setup_linkedin_session.py",
+                        "message": "Could not find 'Start a post' element. Session may be expired. Try: python3 setup_linkedin_session.py",
                         "post_url": None
                     }
 
             # Wait for post editor modal to appear
-            page.wait_for_timeout(3000)  # Increased wait
+            try:
+                page.wait_for_selector('[role="dialog"], [role="textbox"], [contenteditable]', timeout=15000)
+                print("   ✅ Post editor dialog appeared")
+            except Exception:
+                print("   ⚠️  Dialog selector timed out, continuing...")
+            page.wait_for_timeout(3000)
             
             # Find the post editor and fill content
             print("✍️  Filling post content...")
             editor_found = False
-            editor_selectors = [
-                "div.ql-editor[contenteditable='true']",
-                "div[contenteditable='true']",
-                "div.artdeco-editor",
-                "div.ck-content",
-                "div[data-placeholder*='What do you want to talk about']",
-                "div[data-placeholder*='Write something']",
-            ]
             
-            for selector in editor_selectors:
-                try:
-                    editor = page.locator(selector).first
-                    if editor.is_visible(timeout=5000):  # Increased timeout
-                        # Clear and fill content
-                        editor.click()
-                        page.wait_for_timeout(500)
-                        editor.fill(content)
-                        editor_found = True
-                        print(f"   Filled content using selector: {selector}")
-                        break
-                except Exception:
-                    continue
+            # Wait for editor elements to fully render inside the dialog
+            try:
+                page.wait_for_function("""
+                    () => {
+                        const ce = document.querySelectorAll('[contenteditable="true"], [contenteditable="plaintext-only"], .ql-editor, .ProseMirror, [role="textbox"]');
+                        for (const el of ce) {
+                            if (el.offsetHeight > 20 && el.offsetWidth > 50) return true;
+                        }
+                        return false;
+                    }
+                """, timeout=15000)
+                print("   ✅ Editor element found")
+            except Exception:
+                print("   ⚠️  Editor wait timed out, continuing...")
+            
+            page.wait_for_timeout(2000)
+            
+            # Use comprehensive JS to find any editable element
+            try:
+                print("   Searching for editor...")
+                editor_info = page.evaluate("""
+                    () => {
+                        const candidates = [];
+                        
+                        // 1. Contenteditable elements
+                        document.querySelectorAll('[contenteditable="true"], [contenteditable="plaintext-only"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'contenteditable', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 2. role="textbox" elements
+                        document.querySelectorAll('[role="textbox"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'textbox', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 3. Quill editor
+                        document.querySelectorAll('.ql-editor').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'ql-editor', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 4. ProseMirror editor
+                        document.querySelectorAll('.ProseMirror').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'ProseMirror', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 5. Any div with data-placeholder (common in rich editors)
+                        document.querySelectorAll('[data-placeholder]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.getAttribute('role') === 'textbox') {
+                                    candidates.push({el, method: 'data-placeholder', tag: el.tagName, cls: el.className.substring(0,40), placeholder: el.getAttribute('data-placeholder')});
+                                }
+                            }
+                        });
+                        
+                        // 6. textarea elements
+                        document.querySelectorAll('textarea').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0 && !el.id.includes('captcha') && !el.id.includes('recaptcha')) {
+                                candidates.push({el, method: 'textarea', tag: el.tagName, id: el.id, placeholder: el.getAttribute('placeholder') || ''});
+                            }
+                        });
+                        
+                        // Return the first suitable candidate
+                        if (candidates.length > 0) {
+                            const first = candidates[0];
+                            return {
+                                found: true,
+                                method: first.method,
+                                tag: first.tag,
+                                cls: first.cls || '',
+                                id: first.id || '',
+                                placeholder: first.placeholder || ''
+                            };
+                        }
+                        return {found: false};
+                    }
+                """)
+                
+                if editor_info.get('found'):
+                    print(f"   Found editor via {editor_info['method']}: <{editor_info['tag']}> cls={editor_info['cls']}")
+                    
+                    method = editor_info['method']
+                    # Use appropriate fill method based on editor type
+                    if method == 'textarea':
+                        page.evaluate("""
+                            (content) => {
+                                const ta = document.querySelector('textarea');
+                                if (ta) {
+                                    ta.value = content;
+                                    ta.dispatchEvent(new Event('input', {bubbles: true}));
+                                }
+                            }
+                        """, content)
+                    elif method == 'ql-editor':
+                        page.evaluate("""
+                            (content) => {
+                                const el = document.querySelector('.ql-editor');
+                                if (el) {
+                                    el.focus();
+                                    el.innerHTML = '<p>' + content.replace(/\n/g, '</p><p>') + '</p>';
+                                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                                }
+                            }
+                        """, content)
+                    elif method == 'ProseMirror':
+                        page.evaluate("""
+                            (content) => {
+                                const el = document.querySelector('.ProseMirror');
+                                if (el) {
+                                    el.focus();
+                                    el.innerHTML = '<p>' + content.replace(/\n/g, '</p><p>') + '</p>';
+                                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                                }
+                            }
+                        """, content)
+                    else:
+                        # Generic contenteditable fill
+                        page.evaluate("""
+                            (content) => {
+                                const editable = document.querySelectorAll('[contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"]');
+                                for (let el of editable) {
+                                    if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                        el.focus();
+                                        el.textContent = content;
+                                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }
+                        """, content)
+                    editor_found = True
+                    print("   ✅ Content filled")
+            except Exception as e:
+                print(f"   Editor search error: {e}")
+            
+            # Fallback to selector approach
+            if not editor_found:
+                editor_selectors = [
+                    "div[contenteditable='true']",
+                    "div.ql-editor",
+                    ".ProseMirror",
+                    "div[role='textbox']",
+                    "p[contenteditable='true']",
+                    ".editor-content [contenteditable='true']",
+                    "[data-placeholder] [contenteditable='true']",
+                ]
+                
+                for selector in editor_selectors:
+                    try:
+                        editor = page.locator(selector).first
+                        if editor.is_visible(timeout=3000):
+                            editor.click()
+                            page.wait_for_timeout(500)
+                            editor.fill(content)
+                            editor_found = True
+                            print(f"   Filled content using selector: {selector}")
+                            break
+                    except Exception:
+                        continue
             
             if not editor_found:
                 return {
@@ -341,38 +534,23 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
             print("⏳ Waiting for content to register...")
             page.wait_for_timeout(3000)  # Increased from 1000ms
             
-            # Add image if provided
-            if image_path and os.path.exists(image_path):
+            # Add image if provided (but not already uploaded via Photo button above)
+            if image_path and os.path.exists(image_path) and not image_uploaded:
                 print(f"📷 Uploading image: {image_path}")
-                image_uploaded = False
                 
-                image_button_selectors = [
-                    "button[aria-label*='photo']",
-                    "button[aria-label*='image']",
-                    "button[aria-label*='Add an image']",
-                    "button[aria-label*='Add a photo']",
-                    "div[role='button'][aria-label*='photo']",
-                    "div[role='button'][aria-label*='image']",
-                ]
-                
-                for selector in image_button_selectors:
-                    try:
-                        btn = page.locator(selector).first
-                        if btn.is_visible(timeout=2000):
-                            with page.expect_file_chooser() as fc_info:
-                                btn.click()
-                            file_chooser = fc_info.value
-                            file_chooser.set_files(image_path)
-                            image_uploaded = True
-                            print(f"   Uploaded image using: {selector}")
-                            break
-                    except Exception:
-                        continue
+                # Direct file input
+                try:
+                    file_input = page.locator('input[type="file"]')
+                    if file_input.count() > 0:
+                        file_input.first.set_input_files(image_path, timeout=10000)
+                        image_uploaded = True
+                        print("   ✅ Uploaded image via direct file input")
+                except Exception:
+                    pass
                 
                 if not image_uploaded:
                     print("⚠️  Warning: Could not upload image, continuing with text-only post")
                 
-                # Wait for image to upload
                 page.wait_for_timeout(3000)
             
             # Find and click the Post button
@@ -397,7 +575,7 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                         is_aria_disabled = btn.get_attribute('aria-disabled')
                         
                         if is_disabled or is_aria_disabled == 'true':
-                            print(f"   ⏳ Button is disabled, waiting more... (3s)")
+                            print("   ⏳ Button is disabled, waiting more... (3s)")
                             page.wait_for_timeout(3000)
                             # Try again
                             if btn.is_visible(timeout=5000):
@@ -605,7 +783,7 @@ def save_linkedin_session(cookies_file: Optional[str] = None):
             os.chmod(cookies_file, 0o600)
             
             print(f"\n💾 Session saved to: {cookies_file}")
-            print(f"🔒 File permissions set to: 0600 (owner read/write only)")
+            print("🔒 File permissions set to: 0600 (owner read/write only)")
             print("✅ You can now close the browser")
             
             browser.close()
@@ -686,7 +864,7 @@ def test_linkedin_session():
             if browser:
                 try:
                     browser.close()
-                except:
+                except Exception:
                     pass
             
             error_msg = str(e)
@@ -694,7 +872,7 @@ def test_linkedin_session():
             # If it's a network error, retry
             if "ERR_NETWORK" in error_msg or "net::" in error_msg:
                 if attempt < max_retries - 1:
-                    print(f"   ⚠️  Network error, retrying...")
+                    print("   ⚠️  Network error, retrying...")
                     import time
                     time.sleep(2)
                     continue

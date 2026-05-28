@@ -53,23 +53,23 @@ try:
         
         person_urn = f"urn:li:person:{person_id}"
         
-        print(f"✅ Successfully connected to LinkedIn!")
+        print("✅ Successfully connected to LinkedIn!")
         print()
-        print(f"👤 Profile Information:")
+        print("👤 Profile Information:")
         print(f"   Name: {first_name} {last_name}")
         print(f"   ID: {person_id}")
         print()
-        print(f"📝 Your Person URN:")
+        print("📝 Your Person URN:")
         print(f"   {person_urn}")
         print()
         print("=" * 70)
         print("  NEXT STEP: Update .env file")
         print("=" * 70)
         print()
-        print(f"Replace this line in .env:")
-        print(f"   LINKEDIN_PERSON_URN=urn:li:person:YOUR_PERSON_ID")
+        print("Replace this line in .env:")
+        print("   LINKEDIN_PERSON_URN=urn:li:person:YOUR_PERSON_ID")
         print()
-        print(f"With:")
+        print("With:")
         print(f"   LINKEDIN_PERSON_URN={person_urn}")
         print()
         print("=" * 70)
@@ -93,10 +93,10 @@ try:
                 with open(env_file, 'w', encoding='utf-8') as f:
                     f.write(env_content)
                 
-                print(f"✅ .env file updated successfully!")
+                print("✅ .env file updated successfully!")
                 print(f"   New URN: {person_urn}")
             else:
-                print(f"⚠️  Could not find old URN line in .env")
+                print("⚠️  Could not find old URN line in .env")
                 print(f"   Please manually add: LINKEDIN_PERSON_URN={person_urn}")
         
     elif response.status_code == 401:

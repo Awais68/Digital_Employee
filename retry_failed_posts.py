@@ -4,8 +4,6 @@ retry_failed_posts.py - Retry only LinkedIn and Instagram with improved delays.
 """
 
 import sys
-import os
-import time
 from pathlib import Path
 
 # Setup paths

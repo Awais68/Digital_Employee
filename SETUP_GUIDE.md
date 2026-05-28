@@ -124,7 +124,7 @@ DRY_RUN=false  # Set to true for testing, false for production
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_auth_token_here
 TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
-MY_WHATSAPP_NUMBER=whatsapp:+923001234567
+MY_WHATSAPP_NUMBER=whatsapp:+923273363154
 WHATSAPP_ENABLED=true
 ```
 
@@ -325,7 +325,7 @@ python3 orchestrator.py
 
 ```bash
 # 1. Send test message via Twilio
-python3 whatsapp_watcher.py --send +923001234567 "Test message from Digital Employee"
+python3 whatsapp_watcher.py --send +3273363154 "Test message from Digital Employee"
 
 # 2. Run watcher to check for incoming messages
 python3 whatsapp_watcher.py
@@ -516,7 +516,7 @@ python3 whatsapp_watcher.py        # Run WhatsApp watcher once
 # === TESTING ===
 python3 email_mcp.py test          # Test email connection
 python3 linkedin_mcp.py test       # Test LinkedIn connection
-python3 whatsapp_watcher.py --send +923001234567 "Test"  # Send WhatsApp
+python3 whatsapp_watcher.py --send +923273363154 "Test"  # Send WhatsApp
 
 # === MONITORING ===
 tail -f Logs/orchestrator.log      # Watch orchestrator logs

@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-import sys
-import os
 import time
-import logging
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 

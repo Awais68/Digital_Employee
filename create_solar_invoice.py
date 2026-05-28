@@ -235,9 +235,9 @@ def create_solar_invoice():
             [invoice_vals]
         )
         
-        print(f"✅ INVOICE CREATED SUCCESSFULLY!")
+        print("✅ INVOICE CREATED SUCCESSFULLY!")
         print()
-        print(f"📋 Invoice Details:")
+        print("📋 Invoice Details:")
         print(f"   Invoice ID: {invoice_id}")
         print(f"   Customer: {customer_name}")
         print(f"   Invoice Date: {invoice_date}")
@@ -316,10 +316,10 @@ if __name__ == "__main__":
         print("  ✅ SOLAR SYSTEM INVOICE COMPLETED")
         print("=" * 80)
         print(f"  Invoice ID: {invoice_id}")
-        print(f"  Next Steps:")
-        print(f"  1. Review invoice in Odoo")
-        print(f"  2. Confirm and send to customer")
-        print(f"  3. Track payment")
+        print("  Next Steps:")
+        print("  1. Review invoice in Odoo")
+        print("  2. Confirm and send to customer")
+        print("  3. Track payment")
         print("=" * 80)
         
     except Exception as e:

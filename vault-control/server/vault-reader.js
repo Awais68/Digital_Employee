@@ -11,23 +11,47 @@ export function readVaultFiles(subdir = '', pattern = '*.md') {
       return []
     }
 
-    const files = fs.readdirSync(dirPath)
-      .filter(file => file.endsWith('.md'))
-      .map(file => {
-        const filePath = path.join(dirPath, file)
-        const content = fs.readFileSync(filePath, 'utf-8')
-        const { data, content: body } = matter(content)
+    const files = []
+    
+    // Read files from the main directory
+    const readDirectory = (dir, parentSubdir = '') => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true })
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name)
         
-        return {
-          id: file.replace('.md', ''),
-          filename: file,
-          path: filePath,
-          frontmatter: data,
-          content: body,
-          createdAt: fs.statSync(filePath).birthtime,
-          updatedAt: fs.statSync(filePath).mtime,
+        if (entry.isDirectory()) {
+          // Recursively read subdirectories
+          readDirectory(fullPath, parentSubdir ? `${parentSubdir}/${entry.name}` : entry.name)
+        } else if (entry.name.endsWith('.md') && !entry.name.startsWith('.')) {
+          try {
+            const content = fs.readFileSync(fullPath, 'utf-8')
+            let parsed
+            try {
+              parsed = matter(content)
+            } catch (parseErr) {
+              // If frontmatter parsing fails, use raw content
+              parsed = { data: {}, content: content }
+            }
+            
+            files.push({
+              id: entry.name.replace('.md', ''),
+              filename: entry.name,
+              path: fullPath,
+              frontmatter: parsed.data,
+              content: parsed.content,
+              createdAt: fs.statSync(fullPath).birthtime,
+              updatedAt: fs.statSync(fullPath).mtime,
+              subdir: parentSubdir,
+            })
+          } catch (readErr) {
+            console.error(`Error reading file ${fullPath}:`, readErr)
+          }
         }
-      })
+      }
+    }
+    
+    readDirectory(dirPath)
 
     return files.sort((a, b) => b.updatedAt - a.updatedAt)
   } catch (err) {
@@ -54,6 +78,13 @@ export function writeFile(filePath, frontmatter, content) {
       .join('\n')
     
     const fileContent = `---\n${yamlContent}\n---\n\n${content}`
+    
+    // Ensure parent directory exists
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    
     fs.writeFileSync(filePath, fileContent, 'utf-8')
     return true
   } catch (err) {
@@ -64,12 +95,36 @@ export function writeFile(filePath, frontmatter, content) {
 
 export function moveFile(sourcePath, destPath) {
   try {
+    // Ensure destination directory exists
     const destDir = path.dirname(destPath)
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true })
     }
-    fs.renameSync(sourcePath, destPath)
-    return true
+    
+    if (fs.existsSync(sourcePath)) {
+      fs.renameSync(sourcePath, destPath)
+      return true
+    }
+    
+    // If exact file doesn't exist, try to find it in subdirectories
+    const baseName = path.basename(sourcePath)
+    const parentDir = path.dirname(sourcePath)
+    
+    if (fs.existsSync(parentDir)) {
+      const entries = fs.readdirSync(parentDir, { withFileTypes: true })
+      
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const subPath = path.join(parentDir, entry.name, baseName)
+          if (fs.existsSync(subPath)) {
+            fs.renameSync(subPath, destPath)
+            return true
+          }
+        }
+      }
+    }
+    
+    return false
   } catch (err) {
     console.error(`Error moving file from ${sourcePath} to ${destPath}:`, err)
     return false
@@ -78,8 +133,30 @@ export function moveFile(sourcePath, destPath) {
 
 export function deleteFile(filePath) {
   try {
-    fs.unlinkSync(filePath)
-    return true
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath)
+      return true
+    }
+    
+    // Try to find in subdirectories
+    const baseName = path.basename(filePath)
+    const parentDir = path.dirname(filePath)
+    
+    if (fs.existsSync(parentDir)) {
+      const entries = fs.readdirSync(parentDir, { withFileTypes: true })
+      
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const subPath = path.join(parentDir, entry.name, baseName)
+          if (fs.existsSync(subPath)) {
+            fs.unlinkSync(subPath)
+            return true
+          }
+        }
+      }
+    }
+    
+    return false
   } catch (err) {
     console.error(`Error deleting file ${filePath}:`, err)
     return false
@@ -88,6 +165,33 @@ export function deleteFile(filePath) {
 
 export function getVaultPath(...parts) {
   return path.join(VAULT_PATH, ...parts)
+}
+
+export function searchVaultFiles(query) {
+  const folders = ['Pending_Approval', 'Approved', 'Rejected', 'Emails', 'WhatsApp', 'Social', 'Logs', 'Todos', 'Drafts']
+  const results = []
+  const q = query.toLowerCase()
+
+  for (const folder of folders) {
+    const files = readVaultFiles(folder)
+    for (const file of files) {
+      const matches = 
+        file.filename.toLowerCase().includes(q) ||
+        (file.frontmatter.title && file.frontmatter.title.toLowerCase().includes(q)) ||
+        (file.frontmatter.subject && file.frontmatter.subject.toLowerCase().includes(q)) ||
+        file.content.toLowerCase().includes(q) ||
+        (file.frontmatter.from && file.frontmatter.from.toLowerCase().includes(q))
+
+      if (matches) {
+        results.push({
+          ...file,
+          folder,
+          matchType: file.frontmatter.title ? 'title' : file.frontmatter.subject ? 'subject' : 'content'
+        })
+      }
+    }
+  }
+  return results.slice(0, 20) // Limit results
 }
 
 // Mock data generators for empty vault

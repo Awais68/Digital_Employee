@@ -1,0 +1,280 @@
+---
+type: plan
+status: pending
+priority: medium
+task_type: email
+created: 2026-05-28 11:02:38
+created_timestamp: 2026-05-28T11:02:38.187923
+orchestrator_tier: Silver v4.0
+version: 4.0.0
+---
+
+# 📋 Plan: 20260506_131614_email_5_ways_claude_can_work_with_you_25.md
+
+## 🎯 Objective
+Execute the task with precision and document all outcomes.
+
+| Property | Value |
+|----------|-------|
+| **Task Type** | Email |
+| **Complexity** | Complex |
+| **Priority** | Medium |
+| **Estimated Time** | 45+ min |
+| **Urgent** | No |
+| **Skill Agent** | `/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/email_mcp.py` |
+| **Created** | 2026-05-28 11:02:38 |
+
+---
+
+## 📝 Original Task Content
+
+```
+---
+type: email
+from: Claude Team <no-reply@email.claude.com>
+subject: 5 ways Claude can work with you (2/5)
+received: 2026-05-06T08:16:14.635332+00:00
+priority: normal
+status: pending
+email_id: 19dcd3d2d094bd93
+thread_id: 19dcd3d2d094bd93
+---
+
+# 📧 Email: 5 ways Claude can work with you (2/5)
+
+## Email Details
+
+| Field | Value |
+|-------|-------|
+| **From** | Claude Team <no-reply@email.claude.com> |
+| **To** | codetheagent1@gmail.com |
+| **Received** | 2026-04-27 04:40:30 UTC |
+| **Priority** | NORMAL |
+| **Status** | Pending |
+
+---
+
+## Email Content
+
+Imagine what you could do with a few more hours in your day. 
+
+
+
+
+ <https://claude.ai/chat?utm_content=logo> 
+
+
+
+5 ways Claude can work with you 
+
+
+
+
+ <https://claude.ai/chat?utm_content=hero-image> 
+
+
+
+Life can be busy! Imagine what you could do with a few more hours in your day? 
+Claude can give you those hours back. 
+
+Chat with Claude  <https://claude.ai/chat?utm_content=hero-cta> 
+
+
+
+Prompts to get you more time back in your day 
+The easiest way to get started is to simply ask Claude a question or give 
+Claude a task. Here are a few simple ideas: 
+
+
+
+
+
+Email management 
+Try: “Help me write a diplomatic email declining a project opportunity.”
+
+Claude can help draft emails for different situations, from follow-ups to 
+sensitive communications. 
+Send this to Claude 
+<https://claude.ai/new?&utm_content=inline-link&q=Help%20me%20write%20a%20diplomatic%20email%20declining%20a%20project%20opportunity>
+
+
+
+
+
+Research assistant 
+Try: “Summarize the latest trends in remote work technology.”
+
+Need to gather information quickly? Claude can synthesize information on 
+industry trends, competitors, or technical concepts. 
+Ask Claude for research help 
+<https://claude.ai/new?&utm_content=inline-link&q=Summarize%20the%20latest%20trends%20in%20remote%20work%20technology>
+
+
+
+
+
+Content creation 
+Try: “Help me outline a presentation on our quarterly results.”
+
+Whether it's blog posts, social media content, or presentations, Claude can 
+help generate ideas or draft content. 
+Create content with Claude 
+<https://claude.ai/new?&utm_content=inline-link&q=Help%20me%20outline%20a%20presentation%20on%20our%20quarterly%20results>
+
+
+
+
+
+Problem-solving 
+Try: “Help me see the different angles of this problem and potential 
+solutions.”
+
+Stuck on a challenging problem? Explain it to Claude to help you think through 
+different approaches. Claude might ask questions that lead to breakthrough 
+insights. 
+Problem solve with Claude 
+<https://claude.ai/new?&utm_content=inline-link&q=Help%20me%20see%20the%20different%20angles%20of%20this%20problem%20and%20potential%20solutions>
+
+
+
+
+
+Meeting prep 
+Try: “Help me prep for my 10am marketing meeting by summarizing relevant 
+emails and docs.”
+
+Claude Pro and Max users can integrate their Google Workspace to search 
+emails, review documents, and see calendar commitments. 
+Explore Pro and Max plan <https://claude.ai/upgrade?utm_content=inline-link> 
+
+
+
+Chat with Claude  <https://claude.ai/chat?utm_content=secondary-cta> 
+
+
+
+
+ <https://claude.ai/chat?utm_content=logo-footer> 
+
+ <https://apps.apple.com/us/app/claude-by-anthropic/id6473753684>  
+<https://play.google.com/store/apps/details?id=com.anthropic.claude> 
+
+
+
+ <https://www.instagram.com/claudeai/> 
+
+ <https://www.linkedin.com/showcase/claude/> 
+
+ <https://x.com/claudeai> 
+
+ <https://www.youtube.com/@anthropic-ai> 
+
+
+
+Anthropic PBC, 548 Market St, PMB 90375, San Francisco, CA 94104 
+This email was sent to codetheagent1@gmail.com. To opt out of future emails, 
+clickunsubscribe 
+<https://links.email.claude.com/s/u/Ks_lzpvtcvmLD4tHqyLG5ZrOxcZrXbbX_4-j1qT7L099g90Hh5UmDdB37VGCb_fz147oz-arNqzoT-xnJYxsw3M9V4PkqzvsHPYlc7rAKhMX5miSP4P3LpQoSshjqPcD_pFzdyvi6WdmSvOeDCsVgu1nzdlPNE8_0eQQ-FkVoQTgexu1s22-xlc3LCEi3lPH3RJ0_Gxwb3lh1AHB/hNvr_e-l2ertg4-WMl5jeBFCVXHoxy8W/20>
+.
+
+---
+
+## Action Items
+
+- [ ] Review email content
+- [ ] Determine required action
+- [ ] Draft response (if needed)
+- [ ] Execute action items
+- [ ] Mark as complete
+
+## Notes
+
+*Add context, decisions, or follow-up notes here*
+
+---
+*Generated by Gmail Watcher v2.0 on 2026-05-06 13:16:14*
+```
+
+---
+
+## Steps
+
+### Standard Workflow
+- [ ] Read and understand task requirements
+- [ ] Identify required tools/skills/agents
+- [ ] Check dependencies and prerequisites
+- [ ] Route to skill agent: `/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/email_mcp.py`
+
+### Completion
+- [ ] Execute primary action(s)
+- [ ] Verify successful completion
+- [ ] Document results and outcomes
+- [ ] Archive to appropriate folder
+
+
+
+## 📧 Proposed Reply Draft
+
+**Intent Detected:** Meeting Request
+**Generated:** 2026-05-28T11:02:38.187903
+
+---
+
+**To:** Claude Team <no-reply@email.claude.com>
+**Subject:** Re: 5 ways Claude can work with you (2/5)
+
+```
+Dear Claude Team,
+
+Thank you for reaching out regarding 5 ways Claude can work with you (2/5).
+
+I would be happy to schedule a meeting to discuss this further. Please let me know your availability for the following time slots:
+
+- Thursday, May 28 at 10:00 AM
+- Thursday, May 28 at 2:00 PM
+- Thursday, May 28 at 4:00 PM
+
+Alternatively, please feel free to suggest a time that works best for you.
+
+Looking forward to our conversation.
+
+Best regards,
+Awais Niaz
+CTO / AI Engineer
+```
+
+---
+
+### ✏️ Draft Actions
+
+- [ ] Review and edit draft content
+- [ ] Approve for sending → Move to `/Approved/`
+- [ ] Request regeneration → Add notes in file
+- [ ] Reject draft → Move to `/Rejected/`
+
+**Approval File:** `Pending_Approval/REPLY_20260506_131614_email_5_ways_claude_can_work_with_you_25.md`
+
+---
+
+
+## 🧠 Decision Framework
+
+### Analysis
+- **Detected Type:** Email (auto-detected)
+- **Content Analysis:** 438 words, 164 lines
+
+### Decision Log
+| Timestamp | Decision | Reasoning |
+|-----------|----------|-----------|
+| 2026-05-28 11:02 | Plan created | Auto-analysis complete |
+
+---
+
+## ✅ Approval Required?
+
+**Status:** ⏳ Yes - Human review required before execution
+
+---
+
+*🤖 Generated by Silver Tier Orchestrator v4.0*
+*📅 Created: 2026-05-28 11:02:38*

@@ -32,7 +32,6 @@ Author: Digital Employee System
 Tier: Gold v6.0
 """
 
-import os
 import sys
 import json
 import time
@@ -70,7 +69,7 @@ def exchange_for_long_lived_token(short_token: str, app_id: str, app_secret: str
     """
     Exchange a short-lived User Access Token for a long-lived one (60 days).
     """
-    url = f"https://graph.facebook.com/v18.0/oauth/access_token"
+    url = "https://graph.facebook.com/v18.0/oauth/access_token"
     params = {
         "grant_type": "fb_exchange_token",
         "client_id": app_id,
@@ -202,7 +201,7 @@ def create_photo_container(
         "access_token": access_token,
     }
     
-    logger.info(f"Creating photo container...")
+    logger.info("Creating photo container...")
     response = requests.post(url, json=payload, timeout=30)
     
     if response.status_code == 200:
@@ -245,7 +244,7 @@ def create_carousel_container(
         "access_token": access_token,
     }
     
-    logger.info(f"Creating carousel container...")
+    logger.info("Creating carousel container...")
     response = requests.post(url, json=payload, timeout=30)
     
     if response.status_code == 200:

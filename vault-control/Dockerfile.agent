@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc g++ curl git && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all Python code
+COPY . .
+
+# Create vault directories
+RUN mkdir -p /app/Logs /app/Metrics /app/Done /app/Needs_Action \
+    /app/Pending_Approval /app/Approved /app/Rejected /app/Plans \
+    /app/credentials /app/tokens /app/Email_Templates \
+    /app/Todos /app/Inbox
+
+# Default: run the universal orchestrator loop
+CMD ["python", "universal_orchestrator.py"]

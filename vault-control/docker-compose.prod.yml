@@ -1,0 +1,230 @@
+services:
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL Database
+  # ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: de-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vault_control
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./server/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - de-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # ─────────────────────────────────────────────────────────────
+  # Backend API Server (Express + WebSocket)
+  # ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: de-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - VAULT_PATH=/vault
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=vault_control
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRY=24h
+      - NODE_ENV=production
+      - ENABLE_AUTH=${ENABLE_AUTH:-false}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - WHATSAPP_SESSION_PATH=/whatsapp_session
+      # API keys for AI provider
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    ports:
+      - "3000:3000"
+    volumes:
+      - vault_data:/vault
+      - whatsapp_session:/whatsapp_session
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - de-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ─────────────────────────────────────────────────────────────
+  # Frontend (Nginx + Vite build)
+  # ─────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: de-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - de-network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # ─────────────────────────────────────────────────────────────
+  # Python Orchestrator (autonomous loop)
+  # ─────────────────────────────────────────────────────────────
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: vault-control/Dockerfile.agent
+    container_name: de-orchestrator
+    restart: unless-stopped
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-4}
+      - SENDER_NAME=${SENDER_NAME:-Digital Employee}
+      - SENDER_EMAIL=${SENDER_EMAIL}
+      - SENDER_TITLE=${SENDER_TITLE:-CTO / AI Engineer}
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-*/30 * * * *}
+      - DRY_RUN=${DRY_RUN:-true}
+      - VAULT_PATH=/vault
+    volumes:
+      - vault_data:/vault
+      - gmail_credentials:/app/credentials
+      - gmail_tokens:/app/tokens
+    networks:
+      - de-network
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ─────────────────────────────────────────────────────────────
+  # Email MCP Service
+  # ─────────────────────────────────────────────────────────────
+  email-mcp:
+    image: node:20-alpine
+    container_name: de-email-mcp
+    command: node email_mcp.js
+    working_dir: /app
+    environment:
+      - GMAIL_CREDENTIALS_PATH=/app/credentials/credentials.json
+      - GMAIL_TOKEN_PATH=/app/tokens/token.json
+      - SENDER_NAME=${SENDER_NAME:-Digital Employee}
+      - DRY_RUN=${DRY_RUN:-true}
+    volumes:
+      - ./email_mcp.js:/app/email_mcp.js
+      - ./package.json:/app/package.json
+      - gmail_credentials:/app/credentials
+      - gmail_tokens:/app/tokens
+    restart: unless-stopped
+    networks:
+      - de-network
+
+  # ─────────────────────────────────────────────────────────────
+  # Gmail Watcher
+  # ─────────────────────────────────────────────────────────────
+  gmail-watcher:
+    build:
+      context: ..
+      dockerfile: vault-control/Dockerfile.agent
+    container_name: de-gmail-watcher
+    command: python gmail_watcher.py
+    environment:
+      - GMAIL_CREDENTIALS_PATH=/app/credentials/credentials.json
+      - GMAIL_TOKEN_PATH=/app/tokens/token.json
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - WATCH_INTERVAL=${GMAIL_WATCH_INTERVAL:-60}
+      - DRY_RUN=${DRY_RUN:-true}
+    volumes:
+      - gmail_credentials:/app/credentials
+      - gmail_tokens:/app/tokens
+      - vault_data:/vault
+    restart: unless-stopped
+    networks:
+      - de-network
+    depends_on:
+      - email-mcp
+    profiles:
+      - full
+
+  # ─────────────────────────────────────────────────────────────
+  # WhatsApp Watcher (optional — needs Twilio)
+  # ─────────────────────────────────────────────────────────────
+  whatsapp-watcher:
+    build:
+      context: ..
+      dockerfile: vault-control/Dockerfile.agent
+    container_name: de-whatsapp-watcher
+    command: python whatsapp_watcher.py
+    environment:
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - DRY_RUN=${DRY_RUN:-true}
+    volumes:
+      - vault_data:/vault
+    restart: unless-stopped
+    networks:
+      - de-network
+    profiles:
+      - full
+
+# ─────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  vault_data:
+  whatsapp_session:
+  gmail_credentials:
+  gmail_tokens:
+
+# ─────────────────────────────────────────────────────────────
+# Network
+# ─────────────────────────────────────────────────────────────
+networks:
+  de-network:
+    driver: bridge

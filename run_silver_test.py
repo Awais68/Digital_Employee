@@ -12,11 +12,8 @@ This script tests the complete Silver Tier workflow:
 Usage: python3 run_silver_test.py
 """
 
-import os
 import sys
-import shutil
 from pathlib import Path
-from datetime import datetime
 
 # =============================================================================
 # Configuration
@@ -266,23 +263,23 @@ def show_next_steps():
             print(f"  {i}. {f.name}")
         
         print(f"\n{Colors.YELLOW}Approval Commands:{Colors.RESET}")
-        print(f"  # Approve (will send email/post):")
-        print(f"  mv Pending_Approval/<file>.md Approved/")
-        print(f"  python3 orchestrator.py")
-        print(f"\n  # Reject:")
-        print(f"  mv Pending_Approval/<file>.md Rejected/")
-        print(f"  python3 orchestrator.py")
-        print(f"\n  # Request regeneration:")
-        print(f"  # Add notes to file, then:")
-        print(f"  mv Pending_Approval/<file>.md Needs_Action/")
-        print(f"  python3 orchestrator.py")
+        print("  # Approve (will send email/post):")
+        print("  mv Pending_Approval/<file>.md Approved/")
+        print("  python3 orchestrator.py")
+        print("\n  # Reject:")
+        print("  mv Pending_Approval/<file>.md Rejected/")
+        print("  python3 orchestrator.py")
+        print("\n  # Request regeneration:")
+        print("  # Add notes to file, then:")
+        print("  mv Pending_Approval/<file>.md Needs_Action/")
+        print("  python3 orchestrator.py")
     else:
         print_success("No pending approvals - all clear!")
     
     print(f"\n{Colors.GREEN}View Dashboard:{Colors.RESET}")
-    print(f"  cat Dashboard.md")
-    print(f"  # or")
-    print(f"  python3 -c \"print(open('Dashboard.md').read())\"")
+    print("  cat Dashboard.md")
+    print("  # or")
+    print("  python3 -c \"print(open('Dashboard.md').read())\"")
 
 # =============================================================================
 # Cleanup
@@ -305,7 +302,7 @@ def cleanup_test_files():
                 for f in folder.glob(f"REPLY_{test_file}*"):
                     f.unlink()
             if "linkedin" in test_file:
-                for f in folder.glob(f"LINKEDIN_POST_*.md"):
+                for f in folder.glob("LINKEDIN_POST_*.md"):
                     f.unlink()
 
 # =============================================================================
@@ -318,7 +315,7 @@ def main():
     print_header("🧪 SILVER TIER TEST SUITE")
     print_info("Testing complete email + LinkedIn workflow")
     print_info(f"Base Directory: {BASE_DIR}")
-    print_info(f"Dry Run Mode: Check .env for DRY_RUN setting")
+    print_info("Dry Run Mode: Check .env for DRY_RUN setting")
     
     # Ensure directories exist
     for folder in [NEEDS_ACTION, PENDING_APPROVAL, PLANS, DONE]:

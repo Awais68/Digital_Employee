@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-gmail_watcher.py v2.0 - Production Gmail Monitor for Digital Employee
+    if DRY_RUN:
+        logger.info(f"[DRY RUN] Would save draft for: {email.subject}")
+        return "DRY_RUN_MODE"
+    gmail_watcher.py v2.0 - Production Gmail Monitor for Digital Employee
 
 Monitors Gmail for unread + important emails every 2 minutes and converts
 them to structured task files in /Needs_Action directory.
@@ -31,7 +34,6 @@ import os
 import sys
 import json
 import time
-import signal
 import logging
 import subprocess
 import base64
@@ -39,7 +41,31 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Set
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
+import requests
+
+# DRY_RUN mode — set via env, defaults to true for safety
+DRY_RUN = os.getenv('DRY_RUN', 'true').lower() == 'true'
+
+# Retry decorator for API resilience
+import functools
+
+def with_retry(max_attempts=3, base_delay=2, max_delay=30):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_attempts - 1:
+                        logging.error(f"All {max_attempts} attempts failed for {func.__name__}: {e}")
+                        raise
+                    delay = min(base_delay * (2 ** attempt), max_delay)
+                    logging.warning(f"Attempt {attempt+1}/{max_attempts} failed: {e}. Retry in {delay}s")
+                    time.sleep(delay)
+        return wrapper
+    return decorator
 
 # Environment loading
 try:
@@ -232,7 +258,7 @@ class BaseWatcher:
 
     def log_action(self, action: str, details: str, level: str = "info") -> None:
         """Log an action with timestamp."""
-        log_entry = {
+        {
             'timestamp': datetime.now().isoformat(),
             'action': action,
             'details': details,
@@ -259,6 +285,179 @@ class BaseWatcher:
 
 
 # =============================================================================
+# GMAIL LABEL MANAGER
+# =============================================================================
+
+class GmailLabelManager:
+    """Manages Gmail labels for AI-based email classification."""
+
+    CATEGORY_LABELS = {
+        'Support': 'AI/Support',
+        'Sales Inquiry': 'AI/Sales_Inquiry',
+        'Meeting Request': 'AI/Meeting_Request',
+        'Invoice': 'AI/Invoice',
+        'Newsletter': 'AI/Newsletter',
+        'Spam': 'AI/Spam',
+        'Internal': 'AI/Internal',
+    }
+
+    def __init__(self, service):
+        self.service = service
+        self._label_cache = None
+
+    @with_retry(max_attempts=2, base_delay=1, max_delay=5)
+    def get_or_create_label(self, label_name: str) -> Optional[str]:
+        """Get or create a Gmail label. Returns label ID."""
+        try:
+            if self._label_cache is None:
+                results = self.service.users().labels().list(userId='me').execute()
+                self._label_cache = {l['name']: l['id'] for l in results.get('labels', [])}
+
+            if label_name in self._label_cache:
+                return self._label_cache[label_name]
+
+            label = self.service.users().labels().create(
+                userId='me',
+                body={
+                    'name': label_name,
+                    'labelListVisibility': 'labelShow',
+                    'messageListVisibility': 'show'
+                }
+            ).execute()
+            self._label_cache[label_name] = label['id']
+            logger.info(f"Created Gmail label: {label_name}")
+            return label['id']
+        except HttpError as e:
+            logger.error(f"Failed to create label {label_name}: {e}")
+            return None
+
+    def apply_category_label(self, message_id: str, category: str) -> bool:
+        """Apply the AI category label to an email."""
+        label_name = self.CATEGORY_LABELS.get(category)
+        if not label_name:
+            logger.warning(f"No label defined for category: {category}")
+            return False
+
+        label_id = self.get_or_create_label(label_name)
+        if not label_id:
+            return False
+
+        try:
+            self.service.users().messages().modify(
+                userId='me',
+                id=message_id,
+                body={'addLabelIds': [label_id]}
+            ).execute()
+            logger.info(f"Applied label {label_name} to message {message_id}")
+            return True
+        except HttpError as e:
+            logger.error(f"Failed to apply label {label_name}: {e}")
+            return False
+
+
+# =============================================================================
+# EMAIL DEDUPLICATION DB
+# =============================================================================
+
+class EmailDeduplicationDB:
+    """SQLite-based persistent deduplication for emails."""
+
+    def __init__(self, db_path: Optional[Path] = None):
+        self.db_path = db_path or (METRICS_DIR / "email_dedup.db")
+        self._init_db()
+
+    def _init_db(self):
+        try:
+            import sqlite3
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(str(self.db_path), timeout=5)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS processed_emails (
+                    email_id TEXT PRIMARY KEY,
+                    thread_id TEXT,
+                    subject TEXT,
+                    sender TEXT,
+                    processed_at TEXT,
+                    category TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS dedup_stats (
+                    date TEXT PRIMARY KEY,
+                    total_processed INTEGER DEFAULT 0,
+                    duplicates_skipped INTEGER DEFAULT 0
+                )
+            """)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"[DedupDB] Init failed: {e}")
+
+    def _get_conn(self):
+        import sqlite3
+        return sqlite3.connect(str(self.db_path), timeout=5)
+
+    def is_processed(self, email_id: str) -> bool:
+        try:
+            conn = self._get_conn()
+            row = conn.execute(
+                "SELECT 1 FROM processed_emails WHERE email_id = ?",
+                (email_id,)
+            ).fetchone()
+            conn.close()
+            return row is not None
+        except Exception:
+            return False
+
+    def mark_processed(
+        self,
+        email_id: str,
+        thread_id: str = "",
+        subject: str = "",
+        sender: str = "",
+        category: str = ""
+    ):
+        try:
+            conn = self._get_conn()
+            conn.execute("""
+                INSERT OR IGNORE INTO processed_emails
+                    (email_id, thread_id, subject, sender, processed_at, category)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                email_id, thread_id, subject, sender,
+                datetime.now(timezone.utc).isoformat(), category
+            ))
+            conn.execute("""
+                INSERT INTO dedup_stats (date, total_processed, duplicates_skipped)
+                VALUES (date('now'), 1, 0)
+                ON CONFLICT(date) DO UPDATE SET total_processed = total_processed + 1
+            """)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"[DedupDB] Mark failed: {e}")
+
+    def get_stats(self) -> Dict:
+        try:
+            conn = self._get_conn()
+            total = conn.execute(
+                "SELECT COUNT(*) FROM processed_emails"
+            ).fetchone()[0]
+            today = conn.execute(
+                "SELECT total_processed, duplicates_skipped FROM dedup_stats "
+                "WHERE date = date('now')"
+            ).fetchone()
+            conn.close()
+            return {
+                'total_processed': total,
+                'today_processed': today[0] if today else 0,
+                'today_skipped': today[1] if today else 0,
+            }
+        except Exception:
+            return {'total_processed': 0, 'today_processed': 0, 'today_skipped': 0}
+
+
+# =============================================================================
 # GMAIL WATCHER
 # =============================================================================
 
@@ -275,6 +474,7 @@ class GmailWatcher(BaseWatcher):
         super().__init__(dest_dir, check_interval)
         self.service = None
 
+    @with_retry(max_attempts=2, base_delay=1, max_delay=5)
     def authenticate(self) -> bool:
         """
         Authenticate with Gmail API using OAuth2.
@@ -351,11 +551,13 @@ class GmailWatcher(BaseWatcher):
             logger.error(f"Authentication failed: {e}")
             return False
 
-    def fetch_unread_emails(self, max_results: int = MAX_RESULTS) -> List[Dict]:
+    @with_retry(max_attempts=3, base_delay=2, max_delay=30)
+    def fetch_emails(self, query: str, max_results: int = MAX_RESULTS) -> List[Dict]:
         """
-        Fetch unread + important emails from Gmail.
+        Fetch emails from Gmail using a specific query.
 
         Args:
+            query: Gmail search query string
             max_results: Maximum emails to fetch
 
         Returns:
@@ -366,9 +568,6 @@ class GmailWatcher(BaseWatcher):
             return []
 
         try:
-            # Query: unread, in inbox, not promotions/social, important
-            query = "is:unread in:inbox -category:promotions -category:social"
-
             logger.info(f"Fetching emails with query: {query}")
 
             response = self.service.users().messages().list(
@@ -378,7 +577,7 @@ class GmailWatcher(BaseWatcher):
             ).execute()
 
             messages = response.get('messages', [])
-            logger.info(f"Found {len(messages)} unread emails")
+            logger.info(f"Found {len(messages)} emails for query")
 
             if not messages:
                 return []
@@ -405,6 +604,39 @@ class GmailWatcher(BaseWatcher):
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
             return []
+
+    def fetch_unread_emails(self, max_results: int = MAX_RESULTS) -> List[Dict]:
+        """
+        Fetch unread emails from Gmail using improved query.
+        Also fetches recent emails to catch already-read but unprocessed emails.
+
+        Args:
+            max_results: Maximum emails to fetch per query
+
+        Returns:
+            List of email message dicts (deduplicated)
+        """
+        # Query 1: Unread emails (excluding forums and updates, but keeping promotions and social)
+        query1 = "is:unread in:inbox -category:forums -category:updates"
+
+        # Query 2: Recent emails (last 24h) to catch already-read emails
+        query2 = "in:inbox newer_than:1d -category:forums"
+
+        # Fetch from both queries
+        emails1 = self.fetch_emails(query1, max_results)
+        emails2 = self.fetch_emails(query2, max_results)
+
+        # Merge and deduplicate by email ID
+        seen_ids = set()
+        merged = []
+        for email in emails1 + emails2:
+            eid = email['id']
+            if eid not in seen_ids:
+                seen_ids.add(eid)
+                merged.append(email)
+
+        logger.info(f"Total unique emails after merging queries: {len(merged)}")
+        return merged
 
     def parse_email(self, message: Dict) -> EmailData:
         """
@@ -479,7 +711,7 @@ class GmailWatcher(BaseWatcher):
     def _assess_priority(self, email_dict: Dict) -> str:
         """Assess email priority based on content."""
         subject = email_dict['subject'].lower()
-        from_addr = email_dict['from_addr'].lower()
+        email_dict['from_addr'].lower()
 
         # High priority keywords
         high_keywords = ['urgent', 'asap', 'immediate', 'important', 'action required',
@@ -519,7 +751,7 @@ class GmailWatcher(BaseWatcher):
             try:
                 parsed_date = datetime.strptime(email.date, '%a, %d %b %Y %H:%M:%S %z')
                 formatted_date = parsed_date.strftime('%Y-%m-%d %H:%M:%S %Z')
-            except:
+            except Exception:
                 formatted_date = email.date
 
             # Create markdown with YAML frontmatter
@@ -574,6 +806,23 @@ thread_id: {email.thread_id}
                 f.write(content)
 
             logger.info(f"✅ Created task file: {filename}")
+
+            try:
+                notify_resp = requests.post(
+                    f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/notify",
+                    json={
+                        'type': 'urgent' if email.priority == 'high' else 'info',
+                        'title': f'📧 {"🔴 URGENT" if email.priority == "high" else "New"} Email',
+                        'message': f'From: {email.from_addr}\nSubject: {email.subject}',
+                        'data': {'source': 'email', 'file': filename, 'priority': email.priority}
+                    },
+                    timeout=5
+                )
+                if notify_resp.ok:
+                    logger.info(f"🔔 Dashboard notification sent for {filename}")
+            except Exception as e:
+                logger.warning(f"[Notify] Dashboard notification failed: {e}")
+
             return task_path
 
         except Exception as e:
@@ -637,12 +886,81 @@ thread_id: {email.thread_id}
                 f"'{email.subject}' -> {task_path.name}"
             )
 
+            # IMMEDIATELY trigger AI analysis and action plan creation
+            self.process_email_with_ai(email, task_path.name)
+
             return True
 
         except Exception as e:
             logger.error(f"Error processing email {email.id}: {e}")
             self.stats['errors'] += 1
             return False
+
+    def _validate_processed_ids(self) -> None:
+        """
+        Check processed IDs and remove any that don't have corresponding draft files.
+        This handles the case where an email was marked processed but no draft was created.
+        """
+        folders_to_check = ['Pending_Approval', 'Approved', 'Done']
+        draft_exists_cache = {}
+
+        for email_id in list(self.processed_ids):
+            # Check if a draft file exists for this email
+            draft_exists = False
+
+            for folder_name in folders_to_check:
+                folder_path = VAULT_ROOT / folder_name
+                if not folder_path.exists():
+                    continue
+
+                if folder_name not in draft_exists_cache:
+                    try:
+                        files = [f for f in os.listdir(folder_path) if os.path.isfile(folder_path / f)]
+                        draft_exists_cache[folder_name] = files
+                    except OSError:
+                        draft_exists_cache[folder_name] = []
+
+                # Check if any file contains this email_id
+                for filename in draft_exists_cache[folder_name]:
+                    if email_id in filename or self._file_contains_email_id(folder_path / filename, email_id):
+                        draft_exists = True
+                        break
+                if draft_exists:
+                    break
+
+            if not draft_exists:
+                logger.info(f"Re-queuing lost email: {email_id}")
+                self.processed_ids.discard(email_id)
+
+    def _file_contains_email_id(self, filepath: Path, email_id: str) -> bool:
+        """Check if a markdown file contains the given email ID."""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+                return email_id in content
+        except Exception:
+            return False
+
+    def process_email_with_ai(self, email: EmailData, filename: str) -> None:
+        """Send email to backend AI for analysis, action plan, and auto-reply generation."""
+        try:
+            resp = requests.post(
+                f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/process-email",
+                json={
+                    'subject': email.subject,
+                    'sender': email.from_addr,
+                    'body': email.body[:2000],
+                    'priority': email.priority,
+                    'filename': filename
+                },
+                timeout=30
+            )
+            if resp.ok:
+                logger.info(f"🤖 AI analysis triggered for {filename}")
+            else:
+                logger.warning(f"[AI Process] Returned {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            logger.warning(f"[AI Process] Failed: {e}")
 
     def run(self) -> Dict:
         """
@@ -660,6 +978,9 @@ thread_id: {email.thread_id}
             if not self.authenticate():
                 logger.error("Authentication failed")
                 return self.get_stats()
+
+        # Validate processed IDs - remove orphaned entries
+        self._validate_processed_ids()
 
         # Fetch emails
         emails = self.fetch_unread_emails()
@@ -707,6 +1028,95 @@ thread_id: {email.thread_id}
             stats = self.get_stats()
             logger.info(f"Final stats - Processed: {stats['processed']}, "
                        f"Errors: {stats['errors']}, Skipped: {stats['skipped']}")
+
+
+# =============================================================================
+# STANDALONE PROCESSING FUNCTIONS
+# =============================================================================
+
+def classify_email(email: EmailData, ai_endpoint: str = None) -> str:
+    """Use AI to classify email into a category (Support, Invoice, etc.)."""
+    endpoint = ai_endpoint or (
+        f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/classify-email"
+    )
+    try:
+        resp = requests.post(
+            endpoint,
+            json={
+                'subject': email.subject,
+                'sender': email.from_addr,
+                'body': email.body[:1000],
+            },
+            timeout=15
+        )
+        if resp.ok:
+            data = resp.json()
+            category = data.get('category', 'Uncategorized')
+            logger.info(f"📊 Classified '{email.subject[:40]}' as: {category}")
+            return category
+        else:
+            logger.warning(f"[Classify] {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"[Classify] Failed: {e}")
+    return 'Uncategorized'
+
+
+def process_emails():
+    """Fetch, classify, dedup, and process unread emails in one pass."""
+    watcher = GmailWatcher()
+    if not watcher.authenticate():
+        logger.error("Cannot process emails: authentication failed")
+        return
+
+    dedup_db = EmailDeduplicationDB()
+    label_manager = GmailLabelManager(watcher.service)
+
+    emails = watcher.fetch_unread_emails()
+    if not emails:
+        logger.info("No new emails to process")
+        return
+
+    for msg in emails:
+        email_id = msg['id']
+
+        if dedup_db.is_processed(email_id):
+            logger.debug(f"[Dedup] Skipping already processed: {email_id}")
+            continue
+
+        email_data = watcher.parse_email(msg)
+        category = classify_email(email_data)
+
+        dedup_db.mark_processed(
+            email_id, email_data.thread_id,
+            email_data.subject, email_data.from_addr, category
+        )
+        label_manager.apply_category_label(email_id, category)
+        watcher.process_item(email_data)
+
+    dedup_stats = dedup_db.get_stats()
+    logger.info(f"[Dedup] Stats: {dedup_stats}")
+
+
+def notify_dashboard(event_type: str, title: str, message: str,
+                     data: dict = None) -> None:
+    """Send a notification event to the dashboard."""
+    try:
+        resp = requests.post(
+            f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/notify",
+            json={
+                'type': event_type,
+                'title': title,
+                'message': message,
+                'data': data or {},
+            },
+            timeout=5
+        )
+        if resp.ok:
+            logger.info(f"🔔 Dashboard notified: {title}")
+        else:
+            logger.warning(f"[Notify] {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"[Notify] Failed: {e}")
 
 
 # =============================================================================
@@ -762,7 +1172,7 @@ def start_watcher_in_tmux(interval: int = CHECK_INTERVAL) -> None:
     print(f"✓ Gmail watcher started in tmux session '{TMUX_SESSION_NAME}'")
     print(f"  Interval: {interval} seconds")
     print(f"  Attach: tmux attach -t {TMUX_SESSION_NAME}")
-    print(f"  Detach: Ctrl+b, then d")
+    print("  Detach: Ctrl+b, then d")
     print(f"  Stop:   python3 {script_path.name} --stop")
     print(f"  Logs:   {LOG_FILE}")
 
@@ -785,13 +1195,13 @@ def stop_watcher_in_tmux() -> None:
 def show_status() -> None:
     """Show watcher status."""
     if is_watcher_running():
-        print(f"✓ Gmail watcher is RUNNING")
+        print("✓ Gmail watcher is RUNNING")
         print(f"  Session: {TMUX_SESSION_NAME}")
         print(f"  Logs: {LOG_FILE}")
         print(f"  Attach: tmux attach -t {TMUX_SESSION_NAME}")
     else:
         print("✗ Gmail watcher is NOT running")
-        print(f"  Start: python3 gmail_watcher.py --start")
+        print("  Start: python3 gmail_watcher.py --start")
 
 
 def run_authentication() -> None:
@@ -867,6 +1277,11 @@ Examples:
         help="Run OAuth2 authentication"
     )
     parser.add_argument(
+        "--process",
+        action="store_true",
+        help="Fetch, classify, dedup, and process emails (standalone)"
+    )
+    parser.add_argument(
         "--continuous",
         action="store_true",
         help="Run continuously (used internally by tmux)"
@@ -889,6 +1304,9 @@ Examples:
         show_status()
     elif args.auth:
         run_authentication()
+    elif args.process:
+        logger.info("Gmail Watcher - Standalone process mode")
+        process_emails()
     elif args.continuous:
         logger.info(f"Starting Gmail Watcher v2.0 (interval: {args.interval}s)")
         watcher = GmailWatcher(check_interval=args.interval)

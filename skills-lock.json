@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "oracle-cloud": {
+      "source": "dauquangthanh/hanoi-rainbow",
+      "sourceType": "github",
+      "skillPath": "skills/oracle-cloud/SKILL.md",
+      "computedHash": "a9e2631e3bfc2356fce79147791c644bd8a020eb781b74cd62f813a6bf78a8ae"
+    }
+  }
+}

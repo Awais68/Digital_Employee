@@ -72,10 +72,10 @@ invoice_id = models.execute_kw(
     [invoice_vals]
 )
 
-print(f"\n✅ INVOICE CREATED!")
+print("\n✅ INVOICE CREATED!")
 print(f"   Invoice ID: {invoice_id}")
 print(f"   Customer: Shaikh Test (ID: {customer_id})")
-print(f"   Amount: $350.00")
+print("   Amount: $350.00")
 
 # Read details
 invoice = models.execute_kw(
@@ -86,7 +86,7 @@ invoice = models.execute_kw(
 )
 
 if invoice:
-    print(f"\n📄 Details:")
+    print("\n📄 Details:")
     print(f"   Number: {invoice[0].get('name', 'N/A')}")
     print(f"   State: {invoice[0].get('state', 'N/A')}")
     print(f"   Total: ${invoice[0].get('amount_total', 0):.2f}")

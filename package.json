@@ -20,6 +20,7 @@
   "homepage": "https://github.com/Awais68/Digital_Employee#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "compression": "^1.8.1",
     "googleapis": "^171.4.0",
     "mime-types": "^2.1.35"
   }

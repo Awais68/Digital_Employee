@@ -12,7 +12,6 @@ Returns:
     ❌ Session expired - re-run: python3 setup_linkedin_session.py
 """
 
-import os
 import sys
 import json
 from pathlib import Path
@@ -109,7 +108,7 @@ def test_session():
                         print()
                         browser.close()
                         return False
-                except:
+                except Exception:
                     print(f"{RED}❌ Could not verify session{RESET}")
                     print()
                     browser.close()

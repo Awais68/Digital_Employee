@@ -132,3 +132,5 @@ out/
 tmp/
 temp/
 *.tmp
+Logs/
+.secrets.enc

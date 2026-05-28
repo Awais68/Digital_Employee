@@ -68,7 +68,7 @@ def main():
     print(f"   Currency ID: {currency_id}")
     
     # Step 4: Create invoice
-    print(f"\n📄 Creating invoice for 5000...")
+    print("\n📄 Creating invoice for 5000...")
     invoice_vals = {
         'move_type': 'out_invoice',
         'partner_id': customer_id,
@@ -103,7 +103,7 @@ def main():
         if invoice:
             inv = invoice[0]
             print(f"\n{'='*60}")
-            print(f"📋 INVOICE DETAILS")
+            print("📋 INVOICE DETAILS")
             print(f"{'='*60}")
             print(f"   Invoice Number: {inv.get('name', 'N/A')}")
             print(f"   Customer: {inv.get('partner_id', ['N/A'])[1]}")
@@ -114,14 +114,14 @@ def main():
             print(f"{'='*60}")
         
         # Step 5: Post/Validate the invoice
-        print(f"\n📤 Posting invoice to make it official...")
+        print("\n📤 Posting invoice to make it official...")
         try:
             models.execute_kw(
                 ODOO_DB, uid, ODOO_PASSWORD,
                 'account.move', 'action_post',
                 [[invoice_id]]
             )
-            print(f"✅ Invoice posted successfully!")
+            print("✅ Invoice posted successfully!")
             
             # Read updated invoice
             invoice = models.execute_kw(
@@ -132,7 +132,7 @@ def main():
             )
             
             if invoice:
-                print(f"\n📄 Final Invoice Status:")
+                print("\n📄 Final Invoice Status:")
                 print(f"   Number: {invoice[0].get('name')}")
                 print(f"   State: {invoice[0].get('state')}")
                 print(f"   Amount: {invoice[0].get('amount_total'):,.2f}")
@@ -140,23 +140,23 @@ def main():
                 
         except Exception as e:
             print(f"⚠️  Invoice created but posting failed: {str(e)}")
-            print(f"   You can manually post it in Odoo UI")
+            print("   You can manually post it in Odoo UI")
         
         # Step 6: Send by email (if configured)
-        print(f"\n📧 Attempting to send invoice by email...")
+        print("\n📧 Attempting to send invoice by email...")
         try:
             models.execute_kw(
                 ODOO_DB, uid, ODOO_PASSWORD,
                 'account.move', 'action_invoice_sent',
                 [[invoice_id]]
             )
-            print(f"✅ Invoice email sent!")
-        except Exception as e:
-            print(f"⚠️  Email sending requires mail server configuration")
-            print(f"   You can manually send from Odoo UI: Accounting > Customers > Invoice > Send & Print")
+            print("✅ Invoice email sent!")
+        except Exception:
+            print("⚠️  Email sending requires mail server configuration")
+            print("   You can manually send from Odoo UI: Accounting > Customers > Invoice > Send & Print")
         
         print(f"\n{'='*60}")
-        print(f"✅ INVOICE CREATION COMPLETE!")
+        print("✅ INVOICE CREATION COMPLETE!")
         print(f"{'='*60}")
         print(f"\n🔗 View in Odoo: {ODOO_URL}/web#id={invoice_id}&model=account.move")
         

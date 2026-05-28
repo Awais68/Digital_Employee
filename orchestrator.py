@@ -19,9 +19,10 @@ import sys
 import re
 import json
 import time
+import uuid
 import shutil
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple
 from dotenv import load_dotenv
 
@@ -31,8 +32,6 @@ from audit_log import (
     AuditEntry,
     AuditCategory,
     AuditLevel,
-    ErrorRecoveryManager,
-    RetryPolicy,
     get_audit_manager,
     get_recovery_manager,
 )
@@ -521,33 +520,33 @@ def generate_linkedin_hook(content: str, topic: str) -> str:
     # Detect content type and generate appropriate hook
     if any(word in content_lower for word in ["announce", "launch", "release", "new"]):
         hooks = [
-            f"🚀 Excited to share what we've been building...",
-            f"Big news! We're launching something special...",
-            f"After months of development, it's finally here...",
+            "🚀 Excited to share what we've been building...",
+            "Big news! We're launching something special...",
+            "After months of development, it's finally here...",
         ]
     elif any(word in content_lower for word in ["learn", "insight", "thought", "opinion"]):
         hooks = [
-            f"Unpopular opinion about AI development...",
-            f"Here's what most people miss about building AI agents...",
-            f"💡 Hot take: The future of SaaS isn't what you think...",
+            "Unpopular opinion about AI development...",
+            "Here's what most people miss about building AI agents...",
+            "💡 Hot take: The future of SaaS isn't what you think...",
         ]
     elif any(word in content_lower for word in ["how", "tutorial", "guide", "tips"]):
         hooks = [
-            f"Here's how to build AI agents in 2026...",
-            f"🎯 5 lessons learned from shipping AI features...",
-            f"Want to integrate AI into your SaaS? Start here...",
+            "Here's how to build AI agents in 2026...",
+            "🎯 5 lessons learned from shipping AI features...",
+            "Want to integrate AI into your SaaS? Start here...",
         ]
     elif any(word in content_lower for word in ["daily", "update", "progress"]):
         hooks = [
-            f"📈 Daily build update: Here's what we shipped today...",
-            f"Building in public: Day X of our AI journey...",
-            f"Today's win: Solved a problem that saved us 10+ hours...",
+            "📈 Daily build update: Here's what we shipped today...",
+            "Building in public: Day X of our AI journey...",
+            "Today's win: Solved a problem that saved us 10+ hours...",
         ]
     else:
         hooks = [
-            f"🤖 The intersection of AI agents and SaaS is exploding...",
-            f"Here's why AI agents are changing how we build software...",
-            f"💼 What we're learning about AI + SaaS development...",
+            "🤖 The intersection of AI agents and SaaS is exploding...",
+            "Here's why AI agents are changing how we build software...",
+            "💼 What we're learning about AI + SaaS development...",
         ]
 
     return hooks[0]  # Return first hook (could be randomized)
@@ -571,7 +570,7 @@ Key areas we're exploring:
 The goal? Build once, automate forever."""
 
     elif "ai" in content_lower and "saas" in content_lower:
-        body = f"""The convergence of AI agents and SaaS is creating unprecedented opportunities.
+        body = """The convergence of AI agents and SaaS is creating unprecedented opportunities.
 
 We're seeing three major trends:
 
@@ -1258,7 +1257,7 @@ Only send this reply after moving this file to `/Approved/`.
 
         logger.success(f"✅ Created WhatsApp approval file: {approval_filename}")
         logger.info("   📋 Draft created in Pending_Approval — Waiting for human approval")
-        print(f"   📋 Draft created in Pending_Approval — Waiting for human approval")
+        print("   📋 Draft created in Pending_Approval — Waiting for human approval")
         return approval_path
 
     except Exception as e:
@@ -1560,10 +1559,8 @@ def generate_colorful_dashboard() -> str:
             for i, item in enumerate(other_approvals, 1):
                 if item.get("type") == "linkedin":
                     icon = "📱"
-                    action = "Post LinkedIn"
                 else:
                     icon = "📧"
-                    action = "Send Email"
 
                 dashboard += f"| {i} | {icon} | `{item['filename']}` | {item['modified']} | → `/Approved/` |\n"
 
@@ -1649,7 +1646,7 @@ def generate_colorful_dashboard() -> str:
     dashboard += "\n"
 
     # 📋 QUICK ACTIONS & SCHEDULING
-    dashboard += f"""---
+    dashboard += """---
 
 ## ⚡ Quick Actions & Scheduling
 
@@ -1920,7 +1917,7 @@ class MetricsManager:
         with open(self.metrics_file, "w", encoding="utf-8") as f:
             json.dump(all_metrics, f, indent=2, default=str)
 
-        logger.info(f"📈 Metrics saved")
+        logger.info("📈 Metrics saved")
 
         # Audit session end
         entry = AuditEntry(
@@ -2236,7 +2233,7 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
                     if move_file(file_path, destination_path):
                         # Append Ralph completion note
                         with open(destination_path, "a", encoding="utf-8") as f:
-                            f.write(f"\n\n---\n## 🧸 Ralph Wiggum Loop Completion\n")
+                            f.write("\n\n---\n## 🧸 Ralph Wiggum Loop Completion\n")
                             f.write(f"- **Completed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                             f.write(f"- **Iterations:** {ralph_result['iterations_run']}\n")
                             f.write(f"- **Duration:** {ralph_result['total_duration']:.1f}s\n")
@@ -2535,7 +2532,7 @@ def send_approved_email(file_path: Path, metrics: MetricsManager) -> Tuple[bool,
         subject = email_data["subject"] or "Email Reply"
         body = email_data["body"]
 
-        logger.info(f"📧 Sending email via email_mcp.py:")
+        logger.info("📧 Sending email via email_mcp.py:")
         logger.info(f"   To: {to}")
         logger.info(f"   Subject: {subject}")
 
@@ -2729,7 +2726,7 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
 
         post_content = post_data["content"]
 
-        logger.info(f"📱 Publishing LinkedIn post:")
+        logger.info("📱 Publishing LinkedIn post:")
         logger.info(f"   Content preview: {post_content[:100]}...")
 
         # Audit: publish attempt start
@@ -2763,7 +2760,7 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
 
             if result.get("success"):
                 used_method = "Playwright MCP"
-                logger.success(f"✅ Posted via Playwright MCP")
+                logger.success("✅ Posted via Playwright MCP")
             else:
                 logger.warning(f"⚠️  Playwright MCP failed: {result.get('message', 'Unknown error')}")
                 result = None
@@ -2788,7 +2785,7 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
 
                 if result.get("success"):
                     used_method = "LinkedIn API MCP"
-                    logger.success(f"✅ Posted via LinkedIn API MCP")
+                    logger.success("✅ Posted via LinkedIn API MCP")
                 else:
                     logger.error(f"❌ LinkedIn API MCP failed: {result.get('message', 'Unknown error')}")
 
@@ -3145,7 +3142,7 @@ def generate_status_report(processed: int, approval_results: Dict[str, int],
                            metrics: MetricsManager) -> str:
     """Generate comprehensive status report."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    counts = get_folder_counts()
+    get_folder_counts()
 
     report = f"""
 {'=' * 70}
@@ -3189,67 +3186,6 @@ ORCHESTRATOR STATUS REPORT - {now}
 {'=' * 70}
 """
     return report
-
-
-# =============================================================================
-# MAIN ORCHESTRATOR
-# =============================================================================
-
-def main(run_mode: str = "once") -> None:
-    """
-    Main orchestrator entry point.
-
-    Args:
-        run_mode: 'once' for single run, 'scheduled' for continuous
-    """
-    print("\n" + "=" * 70)
-    print("  SILVER TIER ORCHESTRATOR v4.0 - Human-in-the-Loop")
-    print("=" * 70 + "\n")
-
-    logger.info("🚀 Orchestrator starting...")
-
-    # Initialize
-    load_environment()
-    ensure_directories()
-
-    # Initialize managers
-    metrics = MetricsManager(METRICS_FILE)
-
-    # Handle scheduled mode
-    if run_mode == "scheduled":
-        interval = int(os.getenv("ORCHESTRATOR_INTERVAL", "30"))
-        logger.info(f"⏰ Scheduled mode not fully implemented. Use cron instead.")
-
-    # Process Needs_Action
-    print("\n" + "─" * 70)
-    logger.info("📥 Scanning Needs_Action folder...")
-    print("─" * 70)
-    processed_count = process_needs_action_files(metrics)
-
-    if processed_count == 0:
-        logger.info("📭 Nothing to process in Needs_Action folder.")
-
-    # Check Approval Workflow (Approved, Rejected, Pending_Approval)
-    print("\n" + "─" * 70)
-    logger.info("✅ Processing approval workflow...")
-    print("─" * 70)
-    approval_results = process_approval_folder(metrics)
-    
-    # Log approval workflow results
-    logger.info(f"📊 Approval Workflow Results:")
-    logger.info(f"   ✅ Emails Sent: {approval_results['sent']}")
-    logger.info(f"   ❌ Rejected: {approval_results['rejected']}")
-    logger.info(f"   ⏳ Pending: {approval_results['pending']}")
-    logger.info(f"   🐛 Errors: {approval_results['errors']}")
-
-    # Save metrics
-    metrics.save_metrics()
-
-    # Generate report
-    print("\n" + generate_status_report(processed_count, approval_results, metrics))
-
-    logger.info("✨ Orchestrator run complete.")
-    print("=" * 70 + "\n")
 
 
 # =============================================================================
@@ -3314,7 +3250,6 @@ def process_task_with_llm_routing(task_description: str, metrics: MetricsManager
             
             # Try Playwright MCP first (easier setup - just QR scan), fallback to API MCP
             linkedin_result = {"success": False, "message": "LinkedIn MCP not available"}
-            used_method = ""
 
             # Attempt 1: Playwright MCP (uses saved browser session - NO API tokens needed)
             try:
@@ -3324,7 +3259,6 @@ def process_task_with_llm_routing(task_description: str, metrics: MetricsManager
                 linkedin_result = post_to_linkedin(content, image_path=image_path, target=target)
 
                 if linkedin_result.get("success"):
-                    used_method = "Playwright MCP"
                     result["success"] = True
                     result["message"] = f"LinkedIn post published via Playwright: {linkedin_result.get('message', '')}"
                     logger.success(f"✅ {result['message']}")
@@ -3353,7 +3287,6 @@ def process_task_with_llm_routing(task_description: str, metrics: MetricsManager
                     )
 
                     if linkedin_result.get("success"):
-                        used_method = "LinkedIn API MCP"
                         result["success"] = True
                         result["message"] = f"LinkedIn post published via API: {linkedin_result.get('message', '')}"
                         logger.success(f"✅ {result['message']}")
@@ -3362,7 +3295,7 @@ def process_task_with_llm_routing(task_description: str, metrics: MetricsManager
                     else:
                         result["message"] = f"LinkedIn API failed: {linkedin_result.get('message', 'Unknown error')}"
                         logger.error(f"❌ {result['message']}")
-                except ImportError as e:
+                except ImportError:
                     result["message"] = "LinkedIn not configured - please save session using: python3 Agent_Skills/SKILL_LInkedin_Playwright_MCP.py save"
                     logger.error(f"❌ {result['message']}")
                 except Exception as e:
@@ -3376,15 +3309,13 @@ def process_task_with_llm_routing(task_description: str, metrics: MetricsManager
             logger.info("💬 Routing to WhatsApp watcher...")
             
             # Extract recipient and message
-            recipient = "default_recipient"
-            message = task_description
             
             if "Send WhatsApp message to" in task_description:
                 # Parse recipient
                 parts = task_description.split("Send WhatsApp message to")[1]
                 if ":" in parts:
-                    recipient = parts.split(":")[0].strip()
-                    message = ":".join(parts.split(":")[1:]).strip()
+                    parts.split(":")[0].strip()
+                    ":".join(parts.split(":")[1:]).strip()
             
             # WhatsApp requires manual sending - create approval file instead
             logger.info("   ⚠️  WhatsApp requires manual approval - creating approval file")
@@ -3512,11 +3443,11 @@ def process_complex_task_with_ralph(
             "fallback": True,
         }
 
-    logger.separator("🧸")
+    logger.info("🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸")
     logger.info("🧸 RALPH WIGGUM LOOP — Autonomous Task Activation")
     logger.info(f"📋 Task: {task_description[:120]}...")
     logger.info(f"📋 Max iterations: {max_iterations}")
-    logger.separator("🧸")
+    logger.info("🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸🧸")
 
     result = {
         "task": task_description,
@@ -3642,7 +3573,7 @@ def main(run_mode: str = "once") -> None:
 
     # Initialize Gold Tier Audit Manager
     audit = get_audit_manager()
-    recovery = get_recovery_manager()
+    get_recovery_manager()
 
     # Initialize
     load_environment()
@@ -3670,10 +3601,26 @@ def main(run_mode: str = "once") -> None:
         metrics.save_metrics()
         return
     
+    # Handle continuous mode (from workers.py)
+    if run_mode in ("--continuous", "continuous"):
+        logger.info("♻️ Continuous mode — watching for new tasks every 60s")
+        while True:
+            # Run one full cycle
+            logger.info("📥 Scanning Needs_Action folder...")
+            processed_count = process_needs_action_files(metrics)
+            if processed_count == 0:
+                logger.info("📭 Nothing to process.")
+            logger.info("✅ Processing approval workflow...")
+            approval_results = process_approval_folder(metrics)
+            logger.info(f"   ✅ Sent: {approval_results['sent']} | ❌ Rejected: {approval_results['rejected']} | ⏳ Pending: {approval_results['pending']}")
+            metrics.save_metrics()
+            logger.info(f"💤 Sleeping 60s...")
+            time.sleep(60)
+
     # Handle scheduled mode
     if run_mode == "scheduled":
-        interval = int(os.getenv("ORCHESTRATOR_INTERVAL", "30"))
-        logger.info(f"⏰ Scheduled mode not fully implemented. Use cron instead.")
+        int(os.getenv("ORCHESTRATOR_INTERVAL", "30"))
+        logger.info("⏰ Scheduled mode not fully implemented. Use cron instead.")
         logger.info("   Recommended: python setup_cron.py")
     
     # Process Needs_Action
@@ -3692,7 +3639,7 @@ def main(run_mode: str = "once") -> None:
     approval_results = process_approval_folder(metrics)
     
     # Log approval workflow results
-    logger.info(f"📊 Approval Workflow Results:")
+    logger.info("📊 Approval Workflow Results:")
     logger.info(f"   ✅ Emails Sent: {approval_results['sent']}")
     logger.info(f"   ❌ Rejected: {approval_results['rejected']}")
     logger.info(f"   ⏳ Pending: {approval_results['pending']}")

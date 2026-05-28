@@ -11,7 +11,6 @@ Amount: 350
 import os
 import sys
 import xmlrpc.client
-import json
 from dotenv import load_dotenv
 
 # Load environment variables from .env
@@ -105,10 +104,10 @@ def main():
             [invoice_vals]
         )
         
-        print(f"\n✅ Invoice created successfully!")
+        print("\n✅ Invoice created successfully!")
         print(f"   Invoice ID: {invoice_id}")
         print(f"   Customer: Shaikh Test (ID: {customer_id})")
-        print(f"   Amount: $350.00")
+        print("   Amount: $350.00")
         
         # Read back the invoice details
         invoice = models.execute_kw(
@@ -119,7 +118,7 @@ def main():
         )
         
         if invoice:
-            print(f"\n📄 Invoice Details:")
+            print("\n📄 Invoice Details:")
             print(f"   Invoice Number: {invoice[0].get('name', 'N/A')}")
             print(f"   State: {invoice[0].get('state', 'N/A')}")
             print(f"   Total Amount: ${invoice[0].get('amount_total', 0):.2f}")

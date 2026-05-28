@@ -45,15 +45,9 @@ def change_admin_password():
     print(f"Status: {response.status_code}")
     
     # Try to change password via the manage endpoint
-    change_url = f"{ODOO_URL}/web/database/change_password"
     
-    payload = {
-        'db': ODOO_DB,
-        'master_pwd': MASTER_PASSWORD,
-        'password': NEW_ADMIN_PASSWORD,
-    }
     
-    print(f"\nTrying to change database password...")
+    print("\nTrying to change database password...")
     print(f"This will change the master password for the '{ODOO_DB}' database")
     
     # Actually, we need to change a user's password, not the database password
@@ -64,7 +58,6 @@ def change_admin_password():
     print("=" * 60)
     
     # Try to connect to PostgreSQL as the odoo system user
-    import subprocess
     
     # Use sudo -u odoo to run psql
     try:

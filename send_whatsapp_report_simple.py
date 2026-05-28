@@ -8,9 +8,7 @@ Usage:
     python3 send_whatsapp_report_simple.py "Contact Name"
 """
 
-import os
 import sys
-import time
 from pathlib import Path
 from datetime import datetime
 from playwright.sync_api import sync_playwright
@@ -156,7 +154,7 @@ def send_report(contact_name: str):
                         search_box = potential
                         print(f"   ✅ Found search box with: {selector}")
                         break
-                except:
+                except Exception:
                     continue
             
             if not search_box:

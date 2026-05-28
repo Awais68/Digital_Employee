@@ -5,3 +5,17 @@ dist/
 .DS_Store
 *.log
 .vite/
+.secrets.enc
+whatsapp_session/
+linkedin_session/
+facebook_session/
+instagram_session/
+
+# Allow database schema and config
+!server/database/
+!server/database/*.js
+!server/database/*.sql
+!server/database/*.sh
+
+# Allow example env
+!.env.example

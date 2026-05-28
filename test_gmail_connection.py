@@ -17,7 +17,7 @@ print("  GMAIL SMTP CONNECTION TEST")
 print("=" * 60)
 print(f"\n📧 Sender Email: {sender_email}")
 print(f"🔑 App Password: {'*' * 16}")
-print(f"🌐 SMTP Server: smtp.gmail.com:587")
+print("🌐 SMTP Server: smtp.gmail.com:587")
 print()
 
 try:
@@ -37,7 +37,7 @@ try:
     server.quit()
     
 except smtplib.SMTPAuthenticationError as e:
-    print(f"\n❌ Authentication FAILED!")
+    print("\n❌ Authentication FAILED!")
     print(f"   Error: {str(e)}")
     print("\n📋 Solution:")
     print("   1. Visit: https://myaccount.google.com/apppasswords")

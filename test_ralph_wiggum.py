@@ -14,14 +14,10 @@ Tests all components of the Ralph Wiggum Loop system:
 Run: python3 test_ralph_wiggum.py
 """
 
-import os
 import sys
-import json
-import time
 import tempfile
 import unittest
 from pathlib import Path
-from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 # Add project root to path
@@ -31,14 +27,12 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from ralph_wiggum import (
     RalphWiggumLoop,
     RalphState,
-    RalphLogger,
     ralph_process_task,
     check_sentinel_in_output,
     check_file_moved_to_done,
     check_custom_hook,
     is_task_complete,
     build_claude_command,
-    DEFAULT_MAX_ITERATIONS,
     FOLDERS,
 )
 
@@ -145,7 +139,8 @@ class TestCompletionMultiStrategy(unittest.TestCase):
         self.assertFalse(is_task_complete("still working", None, None, {}))
 
     def test_custom_hook_triggers_completion(self):
-        hook = lambda out, state: "done" in out.lower()
+        def hook(out, state):
+            return "done" in out.lower()
         self.assertTrue(is_task_complete("All done!", None, hook, {}))
 
 
@@ -431,7 +426,7 @@ class TestOrchestratorIntegration(unittest.TestCase):
     def test_ralph_imports_in_orchestrator(self):
         """orchestrator.py should import ralph_wiggum successfully."""
         import importlib.util
-        spec = importlib.util.spec_from_file_location(
+        importlib.util.spec_from_file_location(
             "orchestrator", PROJECT_ROOT / "orchestrator.py"
         )
         # We can't fully load orchestrator (it needs .env etc.)

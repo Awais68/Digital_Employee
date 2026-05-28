@@ -21,7 +21,7 @@ for user, pwd in test_cases:
         uid = common.authenticate(ODOO_DB, user, pwd, {})
         if uid:
             print(f"  ✅ SUCCESS! {user} / {pwd} => UID: {uid}")
-            print(f"\nUpdate your .env with:")
+            print("\nUpdate your .env with:")
             print(f"  ODOO_USERNAME={user}")
             print(f"  ODOO_PASSWORD={pwd}")
         else:

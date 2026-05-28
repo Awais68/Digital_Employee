@@ -5,7 +5,6 @@ Tests all major components of the Digital Employee system
 """
 
 import os
-import sys
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -100,7 +99,7 @@ try:
     
     if gmail_email and gmail_password and gmail_password != "your-gmail-app-password":
         print(f"  ✅ Gmail Email: {gmail_email}")
-        print(f"  ✅ App Password: Configured (****)")
+        print("  ✅ App Password: Configured (****)")
         print(f"  ✅ DRY_RUN: {os.getenv('DRY_RUN', 'true')}")
         test_results["email_mcp"] = "✅ PASS"
     else:

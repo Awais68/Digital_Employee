@@ -12,9 +12,7 @@ Example:
     python3 send_whatsapp_report_url.py 923001234567
 """
 
-import os
 import sys
-import time
 import urllib.parse
 from pathlib import Path
 from datetime import datetime
@@ -154,7 +152,7 @@ def send_via_click_to_chat(phone: str, message: str):
                         send_clicked = True
                         print(f"{GREEN}   ✅ Message sent!{RESET}")
                         break
-                except:
+                except Exception:
                     continue
             
             if not send_clicked:
@@ -163,9 +161,9 @@ def send_via_click_to_chat(phone: str, message: str):
                     page.keyboard.press("Enter")
                     send_clicked = True
                     print(f"{GREEN}   ✅ Message sent via Enter!{RESET}")
-                except:
+                except Exception:
                     print(f"{YELLOW}   ⚠️  Could not auto-send{RESET}")
-                    print(f"   Message is typed - press Send manually in browser")
+                    print("   Message is typed - press Send manually in browser")
             
             # Wait to see result
             page.wait_for_timeout(3000)
@@ -188,7 +186,7 @@ def main():
     if len(sys.argv) > 1:
         phone = sys.argv[1]
     else:
-        phone = input(f"{GREEN}Enter phone number (with country code, e.g., 923001234567): {RESET}").strip()
+        phone = input(f"{GREEN}Enter phone number (with country code, e.g., 923273363154): {RESET}").strip()
     
     if not phone:
         print(f"{RED}❌ No phone number provided{RESET}")
@@ -210,7 +208,7 @@ def main():
         print(f"{GREEN}✅ Report sent to {phone}!{RESET}")
     else:
         print(f"{YELLOW}⚠️  Message may need manual send{RESET}")
-        print(f"   Open browser to verify: https://web.whatsapp.com")
+        print("   Open browser to verify: https://web.whatsapp.com")
     print("=" * 70)
     print()
 

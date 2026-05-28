@@ -5,7 +5,6 @@ Launches browser, waits for login, auto-saves session
 """
 
 import time
-import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 

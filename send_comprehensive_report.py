@@ -449,7 +449,7 @@ try:
     print("📧 Sending comprehensive email report...")
     print("-" * 80)
     print(f"   To: {recipient_email}")
-    print(f"   Subject: 🚀 Digital Employee - Complete System Report (Test + Social Media + Solar Invoice)")
+    print("   Subject: 🚀 Digital Employee - Complete System Report (Test + Social Media + Solar Invoice)")
     print()
 
     result = email_mcp.send_email(

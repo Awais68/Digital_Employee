@@ -7,7 +7,6 @@ Sends LinkedIn test report via WhatsApp click-to-chat.
 
 import sys
 import os
-import time
 from pathlib import Path
 from datetime import datetime
 
@@ -165,7 +164,7 @@ def send_whatsapp_report(phone: str, message: str) -> dict:
                         sent = True
                         print(f"{GREEN}   ✅ Message sent!{RESET}")
                         break
-                except Exception as e:
+                except Exception:
                     print(f"{YELLOW}   ⚠️  Selector failed: {selector}{RESET}")
                     continue
             
@@ -199,7 +198,7 @@ def send_whatsapp_report(phone: str, message: str) -> dict:
         if browser:
             try:
                 browser.close()
-            except:
+            except Exception:
                 pass
         return {
             "success": False,

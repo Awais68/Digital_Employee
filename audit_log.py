@@ -15,11 +15,9 @@ Author: Digital Employee System
 Tier: Gold v5.0 — Business Operator
 """
 
-import os
 import json
 import uuid
 import hashlib
-import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Callable
@@ -251,7 +249,7 @@ class AuditLogManager:
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
             temp_file.replace(file_path)
-        except Exception as e:
+        except Exception:
             # Fallback to direct write if atomic fails
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
@@ -717,7 +715,7 @@ if __name__ == "__main__":
     elif command == "verify":
         manager = get_audit_manager()
         integrity = manager.verify_integrity()
-        print(f"\n🔒 Audit Log Integrity Check")
+        print("\n🔒 Audit Log Integrity Check")
         print(f"  Status:  {integrity['integrity_status']}")
         print(f"  Valid:   {integrity['valid_entries']}")
         print(f"  Invalid: {integrity['invalid_entries']}")

@@ -47,8 +47,8 @@ print(f"Status: {response.status_code}")
 print(f"Response: {response.text}")
 
 if response.status_code == 200 and "true" in response.text.lower():
-    print(f"\n✅ Password reset successful!")
-    print(f"   Login: admin")
-    print(f"   Password: [set in .env as ODOO_NEW_ADMIN_PASSWORD]")
+    print("\n✅ Password reset successful!")
+    print("   Login: admin")
+    print("   Password: [set in .env as ODOO_NEW_ADMIN_PASSWORD]")
 else:
-    print(f"\n❌ Password reset failed")
+    print("\n❌ Password reset failed")

@@ -34,6 +34,7 @@ export default {
       animation: {
         pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         slideDown: 'slideDown 0.3s ease-out',
+        slideIn: 'slideIn 0.3s ease-out',
         fadeIn: 'fadeIn 0.2s ease-out',
       },
       keyframes: {
@@ -44,6 +45,10 @@ export default {
         slideDown: {
           'from': { transform: 'translateY(-10px)', opacity: '0' },
           'to': { transform: 'translateY(0)', opacity: '1' },
+        },
+        slideIn: {
+          'from': { transform: 'translateX(100%)', opacity: '0' },
+          'to': { transform: 'translateX(0)', opacity: '1' },
         },
         fadeIn: {
           'from': { opacity: '0' },

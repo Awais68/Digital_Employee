@@ -3,7 +3,6 @@
 
 import os
 import xmlrpc.client
-import hashlib
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -40,7 +39,6 @@ try:
         print(f"✅ Authenticated with master password (uid: {uid})")
         
         # Hash the new password
-        from werkzeug.utils import import_string
         try:
             # Odoo 19 uses passlib
             from passlib.context import CryptContext
@@ -65,10 +63,10 @@ try:
                 {'password': NEW_PASSWORD}  # Odoo will hash it automatically
             )
             
-            print(f"✅ Admin password updated successfully!")
-            print(f"   Username: admin")
+            print("✅ Admin password updated successfully!")
+            print("   Username: admin")
             print(f"   New Password: {NEW_PASSWORD}")
-            print(f"\nNow update your .env file with:")
+            print("\nNow update your .env file with:")
             print(f"   ODOO_PASSWORD={NEW_PASSWORD}")
         else:
             print("❌ Could not hash password")
