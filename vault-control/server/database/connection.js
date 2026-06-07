@@ -281,6 +281,12 @@ export async function initializeSchema() {
       )
     `);
 
+    // Add thread_id column if missing (migration for existing schemas)
+    try { await pool.query(`ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id VARCHAR(255)`); } catch {}
+    try { await pool.query(`ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_name VARCHAR(255)`); } catch {}
+    // Create index on msg_id for fast dedup lookups
+    try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_emails_msg_id ON emails(msg_id)`); } catch {}
+
     console.log('[PostgreSQL] Schema initialized successfully');
     return true;
   } catch (err) {

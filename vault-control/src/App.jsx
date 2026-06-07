@@ -5,6 +5,8 @@ import { AppProvider } from "./context/AppContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
+import ChatbotPanel from "./components/Chatbot/ChatbotPanel";
+import ChatbotButton from "./components/Chatbot/ChatbotButton";
 import { Loader2, Lock } from "lucide-react";
 
 // Lazy load page components to reduce initial bundle size (bundle-dynamic-imports)
@@ -166,6 +168,7 @@ function LoginPage() {
 
 function AppContent() {
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [chatOpen, setChatOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem("theme");
     if (saved) return saved === "dark";
@@ -261,6 +264,9 @@ function AppContent() {
           </main>
         </div>
       </div>
+
+      <ChatbotButton onClick={() => setChatOpen(!chatOpen)} isOpen={chatOpen} />
+      <ChatbotPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} />
     </div>
   );
 }

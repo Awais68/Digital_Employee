@@ -254,6 +254,8 @@ export default function SocialMedia() {
   const [topicSuggestions, setTopicSuggestions] = useState([])
   const [generatedImages, setGeneratedImages] = useState({})
   const [generateError, setGenerateError] = useState(null)
+  const [workflowSteps, setWorkflowSteps] = useState({})
+  const [resizedVariants, setResizedVariants] = useState({})
 
   useEffect(() => {
     axios.get('/api/posts/topics').then(r => setTopicSuggestions(r.data.topics || [])).catch(() => {})
@@ -263,6 +265,8 @@ export default function SocialMedia() {
     if (!topic.trim()) return
     setIsGenerating(true)
     setGenerateError(null)
+    setWorkflowSteps({})
+    setResizedVariants({})
     try {
       const res = await axios.post('/api/posts/generate', {
         topic: topic.trim(),
@@ -273,12 +277,22 @@ export default function SocialMedia() {
         if (res.data.posts) {
           setGeneratedPosts(res.data.posts)
           const images = {}
+          const workflow = {}
+          const variants = {}
           for (const [platform, platformPosts] of Object.entries(res.data.posts)) {
             images[platform] = platformPosts.map(p => p.imageUrl)
+            if (platformPosts[0]?.workflow) {
+              workflow[platform] = platformPosts[0].workflow
+            }
+            if (platformPosts[0]?.resizedImages) {
+              variants[platform] = platformPosts[0].resizedImages
+            }
           }
           setGeneratedImages(images)
+          setWorkflowSteps(workflow)
+          setResizedVariants(variants)
         }
-        success(`Generated posts for "${topic}"`)
+        success(`Generated posts for "${topic}" with validation`)
       } else {
         setGenerateError(res.data.error || 'Generation failed')
       }
@@ -533,12 +547,63 @@ export default function SocialMedia() {
                 const posts = generatedPosts[p.id]
                 if (!posts || posts.length === 0) return null
                 const Icon = p.icon
+                const platformWorkflow = workflowSteps[p.id] || {}
+                const platformVariants = resizedVariants[p.id] || {}
                 return (
                   <div key={p.id} className="card p-6">
-                    <h3 className="font-bold dark:text-[#E0E0E6] text-sm mb-4 flex items-center gap-2">
-                      <Icon size={16} style={{ color: p.color }} />
-                      {p.name} ({posts.length} option{posts.length > 1 ? 's' : ''})
-                    </h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold dark:text-[#E0E0E6] text-sm flex items-center gap-2">
+                        <Icon size={16} style={{ color: p.color }} />
+                        {p.name} ({posts.length} option{posts.length > 1 ? 's' : ''})
+                      </h3>
+                      {platformWorkflow.modelUsed && (
+                        <span className="text-[10px] px-2 py-1 rounded bg-[#00FF88]/20 text-[#00FF88] font-bold font-mono">
+                          Model: {platformWorkflow.modelUsed}
+                        </span>
+                      )}
+                    </div>
+
+                    {Object.keys(platformWorkflow).length > 0 && (
+                      <div className="mb-4 p-3 rounded-lg dark:bg-[#1A1A24] bg-gray-50 border dark:border-[#1A1A24] border-gray-200">
+                        <p className="text-[10px] font-bold dark:text-[#B0C4FF] text-blue-600 mb-2 font-mono">WORKFLOW STATUS</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { key: 'step1_research', label: 'Research' },
+                            { key: 'step2_brief', label: 'Brief' },
+                            { key: 'step3_content', label: 'Content' },
+                            { key: 'step4_image_validation', label: 'Img Valid' },
+                            { key: 'step5_assembly', label: 'Assembly' },
+                          ].map(step => (
+                            <span key={step.key} className={`text-[10px] px-2 py-1 rounded font-bold ${
+                              platformWorkflow[step.key] 
+                                ? 'bg-green-500/20 text-green-400' 
+                                : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {step.label}: {platformWorkflow[step.key] ? '✓' : '✗'}
+                            </span>
+                          ))}
+                        </div>
+                        {platformWorkflow.contentType && (
+                          <p className="text-[10px] dark:text-[#7A7A85] text-gray-500 mt-2 font-mono">
+                            Content Type: {platformWorkflow.contentType}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {Object.keys(platformVariants).length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-[10px] font-bold dark:text-[#B0C4FF] text-blue-600 mb-2 font-mono">RESIZED VARIANTS</p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(platformVariants).map(([variant, data]) => (
+                            <span key={variant} className="text-[10px] px-2 py-1 rounded bg-blue-500/20 text-blue-400 font-bold font-mono">
+                              {variant}: {data.width}×{data.height} ({data.aspect})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-3">
                       {(Array.isArray(posts) ? posts : [posts]).map((post, idx) => {
                         const imageUrl = generatedImages[p.id] || generatedImages[p.id]?.[idx]
@@ -546,7 +611,7 @@ export default function SocialMedia() {
                           <div key={idx} className="p-4 rounded-lg dark:bg-[#1A1A24] bg-gray-50 border dark:border-[#1A1A24] border-gray-200">
                             {imageUrl && <img src={imageUrl} alt={`Generated for ${p.name}`} className="w-full h-40 object-cover rounded-lg mb-3" />}
                             <p className="text-sm dark:text-[#E0E0E6] mb-3 whitespace-pre-wrap">{typeof post === 'string' ? post : post.content || post.text || ''}</p>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <button onClick={() => handleUseGeneratedPost(p.id, typeof post === 'string' ? post : post.content || post.text || '')}
                                 className="text-xs font-bold dark:text-[#00FF88] text-green-600 hover:underline">USE THIS →</button>
                               <button onClick={() => copyToClipboard(typeof post === 'string' ? post : post.content || post.text || '', `${p.id}-${idx}`)}

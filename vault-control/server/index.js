@@ -32,6 +32,12 @@ import notificationsRouter from './routes/notifications.js'
 import templatesRouter from './routes/templates.js'
 import postsRouter from './routes/posts.js'
 import adminRouter from './routes/admin.js'
+import { bus as chatbotEventBus } from './services/eventBus.js'
+
+// Chatbot router lives at repo root server/ as CommonJS — bridge via createRequire
+import { createRequire } from 'module'
+const cjsRequire = createRequire(import.meta.url)
+const { router: chatbotRouter, setEventBus: setChatbotEventBus } = cjsRequire('../../server/chatbotRouter.js')
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -41,7 +47,13 @@ const PORT = process.env.PORT || 3000
 const ENABLE_AUTH = process.env.ENABLE_AUTH === 'true'
 
 const app = express()
-app.use(compression())
+app.use(compression({
+  filter: (req, res) => {
+    // SSE streams must not be buffered by compression
+    if (req.path === '/api/chat/stream') return false
+    return compression.filter(req, res)
+  },
+}))
 app.use(express.json())
 
 const server = createServer(app)
@@ -141,6 +153,10 @@ app.use('/api/email-templates', templatesRouter)
 app.use('/api/posts', postsRouter)
 app.use('/api/admin', adminRouter)
 
+// Chatbot SSE — eventBus injected after import (already initialized above)
+setChatbotEventBus(chatbotEventBus)
+app.use('/api', chatbotRouter)
+
 // Internal notification endpoint (localhost only, no auth)
 app.post('/api/internal/notify', express.json(), async (req, res) => {
   const { notify } = await import('./services/notificationService.js')
@@ -164,18 +180,118 @@ app.post('/api/internal/email-event', express.json(), async (req, res) => {
 })
 
 // Internal email processing endpoint — AI analysis + auto-reply + notifications
+// PostgreSQL atomic dedup via emails.msg_id UNIQUE constraint
+const _recentlyProcessedEmailIds = new Set()
+setInterval(() => _recentlyProcessedEmailIds.clear(), 5 * 60 * 1000)
+
 app.post('/api/internal/process-email', express.json(), async (req, res) => {
+  const { subject, sender, body, priority, email_id, thread_id } = req.body
+  console.log(`[AI Email] Processing: "${subject?.substring(0, 60)}" from ${sender} [${priority}]${email_id ? ` id=${email_id}` : ''}`)
+
+  // ── LAYER 1: In-memory dedup (fast path) ──
+  if (email_id && _recentlyProcessedEmailIds.has(email_id)) {
+    console.log(`[AI Email] Dedup (memory): Already processed email ${email_id} — skipping`)
+    return res.status(409).json({ error: 'duplicate', layer: 'memory' })
+  }
+
+  // ── LAYER 2: PostgreSQL atomic dedup (ultimate guarantee) ──
+  try {
+    const { query } = await import('./database/connection.js')
+    const result = await query(
+      `INSERT INTO emails(msg_id, from_address, subject, body, status, received_at, thread_id)
+       VALUES($1, $2, $3, $4, 'pending', NOW(), $5)
+       ON CONFLICT(msg_id) DO NOTHING
+       RETURNING id`,
+      [email_id || `no-id-${Date.now()}`, sender || 'unknown', subject || '', body || '', thread_id || '']
+    )
+    if (result.rows.length === 0 && email_id) {
+      console.log(`[AI Email] Dedup (DB): Email ${email_id} already exists in DB — skipping`)
+      return res.status(409).json({ error: 'duplicate', layer: 'database' })
+    }
+  } catch (dbErr) {
+    // If DB is down, fall back to memory-only dedup
+    console.warn('[AI Email] DB dedup check failed, proceeding with memory-only:', dbErr.message)
+  }
+
+  if (email_id) _recentlyProcessedEmailIds.add(email_id)
+
+  // ── Create Needs_Action/ task file (server-side, atomic with processing) ──
+  try {
+    const fs = await import('fs')
+    const path = await import('path')
+    const vaultPath = process.env.VAULT_PATH || '.'
+    const needsActionDir = path.join(vaultPath, 'Needs_Action')
+    fs.mkdirSync(needsActionDir, { recursive: true })
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)
+    const safeSubject = (subject || 'email').replace(/[^\w\s-]/g, '').replace(/[-\s]+/g, '_').toLowerCase().substring(0, 50) || 'email'
+    const filename = `${timestamp.replace(/[T]/g, '_')}_email_${safeSubject}.md`
+    const taskPath = path.join(needsActionDir, filename)
+
+    // Skip if file already exists (belt-and-suspenders)
+    if (!fs.existsSync(taskPath)) {
+      const taskContent = `---
+type: email
+from: ${sender || 'unknown'}
+subject: ${subject || ''}
+received: ${new Date().toISOString()}
+priority: ${priority || 'medium'}
+status: pending
+email_id: ${email_id || ''}
+thread_id: ${thread_id || ''}
+---
+
+# 📧 Email: ${subject || ''}
+
+## Email Details
+
+| Field | Value |
+|-------|-------|
+| **From** | ${sender || 'unknown'} |
+| **Received** | ${new Date().toISOString()} |
+| **Priority** | ${(priority || 'medium').toUpperCase()} |
+| **Status** | Pending |
+
+---
+
+## Email Content
+
+${body || ''}
+
+---
+
+*Processed by vault-control server on ${new Date().toISOString()}*
+`
+      fs.writeFileSync(taskPath, taskContent, 'utf-8')
+      console.log(`[AI Email] Task file created: ${filename}`)
+    } else {
+      console.log(`[AI Email] Task file already exists: ${filename}`)
+    }
+
+    // Broadcast to dashboard via WebSocket
+    try {
+      if (typeof global.wsBroadcast === 'function') {
+        global.wsBroadcast({
+          type: 'dashboard_update',
+          message: `New email: ${subject?.substring(0, 40)}`,
+          timestamp: new Date()
+        })
+      }
+    } catch {}
+  } catch (fsErr) {
+    console.error('[AI Email] Error creating task file:', fsErr.message)
+  }
+
+  // ── AI ANALYSIS ──
   res.json({ received: true })
 
-  const { subject, sender, body, priority, filename } = req.body
-  console.log(`[AI Email] Processing: "${subject?.substring(0, 60)}" from ${sender} [${priority}]`)
+  setImmediate(async () => {
+    try {
+      const { callAI } = await import('./services/aiProvider.js')
+      const { notify } = await import('./services/notificationService.js')
 
-  try {
-    const { callAI } = await import('./services/aiProvider.js')
-    const { notify } = await import('./services/notificationService.js')
-
-    const systemPrompt = `You are an autonomous AI employee. Analyze this email and decide what action to take. Respond ONLY in valid JSON with no markdown formatting.`
-    const userPrompt = `Email from: ${sender}
+      const systemPrompt = `You are an autonomous AI employee. Analyze this email and decide what action to take. Respond ONLY in valid JSON with no markdown formatting.`
+      const userPrompt = `Email from: ${sender}
 Subject: ${subject}
 Priority: ${priority}
 Body: ${body?.substring(0, 1500) || ''}
@@ -191,44 +307,73 @@ Respond with this exact JSON structure:
   "summary": "one line summary of what needs to happen"
 }`
 
-    let plan
-    try {
-      const raw = await callAI(systemPrompt, userPrompt, 800)
-      const cleaned = raw.replace(/```json|```/g, '').trim()
-      plan = JSON.parse(cleaned)
-    } catch {
-      plan = { requires_response: false, urgency: 'today', action_type: 'archive', summary: 'Email logged for review' }
-    }
-
-    console.log('[AI Email] Plan:', JSON.stringify(plan))
-
-    // 1. Create todo if action needed
-    if (plan.task_title) {
+      let plan
       try {
-        const { query } = await import('./database/connection.js')
-        await query(
-          `INSERT INTO todos(title, description, source, priority) VALUES($1,$2,'email',$3)`,
-          [plan.task_title, plan.task_description || body?.substring(0, 200) || '',
-           priority === 'high' ? 'high' : 'medium']
-        )
-        notify('info', 'Task Created', plan.task_title)
-      } catch (dbErr) {
-        console.error('[AI Email] DB error creating todo:', dbErr.message)
+        const raw = await callAI(systemPrompt, userPrompt, 800)
+        const cleaned = raw.replace(/```json|```/g, '').trim()
+        plan = JSON.parse(cleaned)
+      } catch {
+        plan = { requires_response: false, urgency: 'today', action_type: 'archive', summary: 'Email logged for review' }
       }
-    }
 
-    // 2. Create draft reply in Pending_Approval if response needed
-    if (plan.requires_response && plan.draft_reply) {
-      try {
-        const fs = await import('fs')
-        const path = await import('path')
-        const vaultPath = process.env.VAULT_PATH || '.'
-        const approvalDir = path.join(vaultPath, 'Pending_Approval')
-        fs.mkdirSync(approvalDir, { recursive: true })
+      console.log('[AI Email] Plan:', JSON.stringify(plan))
 
-        const approvalFile = path.join(approvalDir, `EMAIL_REPLY_${Date.now()}.md`)
+      // 1. Create todo if action needed (with dedup check)
+      if (plan.task_title) {
+        try {
+          const { query } = await import('./database/connection.js')
+          const existing = await query(
+            `SELECT id FROM todos WHERE title = $1 AND source = 'email' AND created_at > NOW() - INTERVAL '24 hours' LIMIT 1`,
+            [plan.task_title]
+          )
+          if (existing.rows.length === 0) {
+            await query(
+              `INSERT INTO todos(title, description, source, priority) VALUES($1,$2,'email',$3)`,
+              [plan.task_title, plan.task_description || body?.substring(0, 200) || '',
+               priority === 'high' ? 'high' : 'medium']
+            )
+            notify('info', 'Task Created', plan.task_title)
+          } else {
+            console.log(`[AI Email] Dedup: Todo already exists for "${plan.task_title}" — skipping`)
+          }
+        } catch (dbErr) {
+          console.error('[AI Email] DB error creating todo:', dbErr.message)
+        }
+      }
 
-        const replyContent = `---
+      // 2. Create draft reply in Pending_Approval if response needed (with dedup check)
+      if (plan.requires_response && plan.draft_reply) {
+        try {
+          const fs = await import('fs')
+          const path = await import('path')
+          const vaultPath = process.env.VAULT_PATH || '.'
+          const approvalDir = path.join(vaultPath, 'Pending_Approval')
+          fs.mkdirSync(approvalDir, { recursive: true })
+
+          const emailIdCheck = email_id || ''
+          let alreadyExists = false
+          if (emailIdCheck && fs.existsSync(approvalDir)) {
+            const existingFiles = fs.readdirSync(approvalDir)
+            for (const f of existingFiles) {
+              const fPath = path.join(approvalDir, f)
+              try {
+                const content = fs.readFileSync(fPath, 'utf-8')
+                if (content.includes(`email_id: ${emailIdCheck}`)) {
+                  console.log(`[AI Email] Dedup: Approval file already exists for email ${emailIdCheck} — skipping`)
+                  alreadyExists = true
+                  break
+                }
+              } catch {}
+            }
+          }
+
+          if (alreadyExists) {
+            notify('info', 'Reply Already Exists',
+              `Draft reply already exists for "${subject?.substring(0, 50)}"`,
+              { action: 'approve_reply' })
+          } else {
+            const approvalFile = path.join(approvalDir, `EMAIL_REPLY_${Date.now()}.md`)
+            const replyContent = `---
 type: email_reply
 to: ${sender || 'unknown'}
 subject: Re: ${subject || ''}
@@ -236,6 +381,8 @@ priority: ${priority || 'medium'}
 status: pending_approval
 created: ${new Date().toISOString()}
 action: send_email
+email_id: ${email_id || ''}
+thread_id: ${thread_id || ''}
 ---
 
 ## Proposed Reply
@@ -249,45 +396,83 @@ Subject: ${subject || ''}
 ---
 Move to /Approved/ to send this reply.
 `
-        fs.writeFileSync(approvalFile, replyContent, 'utf-8')
-        console.log(`[AI Email] Approval file created: ${approvalFile}`)
+            fs.writeFileSync(approvalFile, replyContent, 'utf-8')
+            console.log(`[AI Email] Approval file created: ${approvalFile}`)
 
-        notify('warning', 'Reply Draft Ready',
-          `Draft reply to "${subject?.substring(0, 50)}" needs your approval`,
-          { file: approvalFile, action: 'approve_reply' })
-      } catch (fsErr) {
-        console.error('[AI Email] Error creating approval file:', fsErr.message)
-      }
-    }
-
-    // 3. WhatsApp notification for urgent emails
-    if (priority === 'high') {
-      try {
-        const whatsapp = await import('./services/whatsappService.js')
-        if (whatsapp.getStatus() === 'connected') {
-          const ownerPhone = process.env.OWNER_PHONE
-          if (ownerPhone) {
-            await whatsapp.sendMessage(ownerPhone,
-              `🔴 *URGENT EMAIL*\n\nFrom: ${sender}\nSubject: ${subject}\n\nAI Action: ${plan.summary || 'Review required'}${plan.requires_response ? '\n📝 Draft reply created — check dashboard' : ''}`
-            ).catch(() => {})
+            notify('warning', 'Reply Draft Ready',
+              `Draft reply to "${subject?.substring(0, 50)}" needs your approval`,
+              { file: approvalFile, action: 'approve_reply' })
           }
+        } catch (fsErr) {
+          console.error('[AI Email] Error creating approval file:', fsErr.message)
         }
-      } catch (waErr) {
-        console.error('[AI Email] WhatsApp notify error:', waErr.message)
       }
+
+      // 3. WhatsApp notification for urgent emails
+      if (priority === 'high') {
+        try {
+          const whatsapp = await import('./services/whatsappService.js')
+          if (whatsapp.getStatus() === 'connected') {
+            const ownerPhone = process.env.OWNER_PHONE
+            if (ownerPhone) {
+              await whatsapp.sendMessage(ownerPhone,
+                `🔴 *URGENT EMAIL*\n\nFrom: ${sender}\nSubject: ${subject}\n\nAI Action: ${plan.summary || 'Review required'}${plan.requires_response ? '\n📝 Draft reply created — check dashboard' : ''}`
+              ).catch(() => {})
+            }
+          }
+        } catch (waErr) {
+          console.error('[AI Email] WhatsApp notify error:', waErr.message)
+        }
+      }
+
+      // 4. Final confirmation notification
+      notify(
+        priority === 'high' ? 'urgent' : 'info',
+        `Email Processed: ${(subject || '').substring(0, 40)}`,
+        plan.summary || 'Email processed by AI',
+        { action: plan.action_type, hasReply: !!plan.requires_response }
+      )
+
+    } catch (e) {
+      console.error('[AI Email] Processing error:', e.message)
     }
+  })
+})
 
-    // 4. Final confirmation notification
-    notify(
-      priority === 'high' ? 'urgent' : 'info',
-      `Email Processed: ${(subject || '').substring(0, 40)}`,
-      plan.summary || 'Email processed by AI',
-      { action: plan.action_type, hasReply: !!plan.requires_response }
-    )
+// Gmail webhook endpoint — receives Google Pub/Sub push notifications
+// When Gmail API watch() is set up, Google sends push notifications here
+app.post('/api/webhook/gmail', express.json(), async (req, res) => {
+  res.status(200).end()  // Acknowledge immediately per Pub/Sub protocol
 
-  } catch (e) {
-    console.error('[AI Email] Processing error:', e.message)
-  }
+  setImmediate(async () => {
+    try {
+      const { message } = req.body
+      if (!message || !message.data) return
+
+      // Pub/Sub sends base64-encoded data
+      const decoded = JSON.parse(Buffer.from(message.data, 'base64').toString())
+      const emailId = decoded?.message?.data?.emailId ||
+                       decoded?.historyId ||
+                       decoded?.email_id
+
+      if (!emailId) {
+        console.log('[Gmail Webhook] No email ID in push notification')
+        return
+      }
+
+      console.log(`[Gmail Webhook] Push notification for email: ${emailId}`)
+
+      // To fully process, the server would need Gmail API credentials.
+      // For now, this is a placeholder for future Gmail Pub/Sub integration.
+      // When credentials are added, it will:
+      //   1. Fetch email content via Gmail API
+      //   2. Call /api/internal/process-email
+      //
+      // Until then, the gmail_watcher.py handles email fetching.
+    } catch (e) {
+      console.error('[Gmail Webhook] Error:', e.message)
+    }
+  })
 })
 
 // WebPush notification subscription

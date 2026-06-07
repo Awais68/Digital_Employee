@@ -49,9 +49,8 @@ export async function hostImageLocally(source) {
 }
 
 export async function downloadImageBuffer(url, retries = 3) {
-  const fetch = (await import('node-fetch')).default
   for (let attempt = 1; attempt <= retries; attempt++) {
-    const resp = await fetch(url, { timeout: 30000 })
+    const resp = await fetch(url, { signal: AbortSignal.timeout(30000) })
     if (!resp.ok) throw new Error(`Download failed: ${resp.status} ${url}`)
     const buffer = Buffer.from(await resp.arrayBuffer())
     if (buffer.length > 0) return buffer

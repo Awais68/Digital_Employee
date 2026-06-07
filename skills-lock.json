@@ -1,11 +1,41 @@
 {
   "version": 1,
   "skills": {
+    "ai-image-generation": {
+      "source": "agentspace-so/runcomfy-agent-skills",
+      "sourceType": "github",
+      "skillPath": "ai-image-generation/SKILL.md",
+      "computedHash": "765f5ce859b1943e948d4f747b768389d7a9f0c563d4e93f2a3231bc1a617944"
+    },
+    "canva-creator": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "skillPath": "small-business/skills/canva-creator/SKILL.md",
+      "computedHash": "2224fa53fd3fdad05dbb297c94db1bcddc8790c6ac855e8abe228ebf03acae76"
+    },
+    "canvas-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/canvas-design/SKILL.md",
+      "computedHash": "3fa7ea60170023ad8268bf9fd734ea75dd404279a2ef8ddf5abaa1102ad8e5f4"
+    },
+    "gpt-image-2": {
+      "source": "runcomfy-com/skills",
+      "sourceType": "github",
+      "skillPath": "gpt-image-2/SKILL.md",
+      "computedHash": "d47ab3bd8e415520a06902cce5e2e2314263f7843b309cffa3e6115cf6adaf8d"
+    },
     "oracle-cloud": {
       "source": "dauquangthanh/hanoi-rainbow",
       "sourceType": "github",
       "skillPath": "skills/oracle-cloud/SKILL.md",
       "computedHash": "a9e2631e3bfc2356fce79147791c644bd8a020eb781b74cd62f813a6bf78a8ae"
+    },
+    "social-media-image-sizes": {
+      "source": "branding5/social-media-image-sizes",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "7d060f8a6f28a2b03ffbeea150f5e08c31c1c175eb10059d8ed575acf42d7af1"
     }
   }
 }

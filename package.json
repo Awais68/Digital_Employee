@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/Awais68/Digital_Employee#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.101.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "compression": "^1.8.1",
     "googleapis": "^171.4.0",

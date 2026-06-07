@@ -121,6 +121,7 @@ CREDENTIALS_FILE = VAULT_ROOT / "token.json"
 CREDENTIALS_JSON = VAULT_ROOT / "credentials.json"
 PROCESSED_IDS_FILE = METRICS_DIR / "gmail_processed_ids.json"
 LOG_FILE = LOGS_DIR / f"gmail_watcher_{datetime.now().strftime('%Y%m%d')}.log"
+RUN_LOCK_FILE = METRICS_DIR / "gmail_watcher_run.lock"
 
 # tmux session name
 TMUX_SESSION_NAME = "gmail_watcher"
@@ -473,6 +474,8 @@ class GmailWatcher(BaseWatcher):
         """Initialize Gmail watcher."""
         super().__init__(dest_dir, check_interval)
         self.service = None
+        # Initialize persistent SQLite dedup database as a second layer
+        self.dedup_db = EmailDeduplicationDB()
 
     @with_retry(max_attempts=2, base_delay=1, max_delay=5)
     def authenticate(self) -> bool:
@@ -729,6 +732,24 @@ class GmailWatcher(BaseWatcher):
 
         return 'normal'
 
+    def _existing_file_for_email(self, email_id: str) -> Optional[Path]:
+        """Check if a task file already exists for this email_id in Needs_Action."""
+        try:
+            if not self.dest_dir.exists():
+                return None
+            for fname in os.listdir(self.dest_dir):
+                fpath = self.dest_dir / fname
+                if fname.endswith('.md') and fpath.is_file():
+                    try:
+                        with open(fpath, 'r', encoding='utf-8') as f:
+                            if f'email_id: {email_id}' in f.read():
+                                return fpath
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        return None
+
     def create_task_file(self, email: EmailData) -> Optional[Path]:
         """
         Create structured markdown task file from email.
@@ -737,9 +758,15 @@ class GmailWatcher(BaseWatcher):
             email: EmailData object
 
         Returns:
-            Path to created file
+            Path to created file (or existing file if already created)
         """
         try:
+            # DEDUP CHECK: Skip if file already exists for this email_id
+            existing = self._existing_file_for_email(email.id)
+            if existing:
+                logger.info(f"Task file already exists for email {email.id}: {existing.name} — skipping creation")
+                return existing
+
             # Generate filename
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             safe_subject = re.sub(r'[^\w\s-]', '', email.subject[:50])
@@ -849,7 +876,9 @@ thread_id: {email.thread_id}
 
     def process_item(self, email: EmailData) -> bool:
         """
-        Process a single email.
+        Process a single email via server API.
+        Server handles ALL dedup (PostgreSQL atomic constraint) + file creation.
+        Watcher is thin — just fetch, send, mark-as-read on success.
 
         Args:
             email: EmailData object
@@ -858,36 +887,45 @@ thread_id: {email.thread_id}
             True if successful
         """
         try:
-            # Skip if already processed
+            # ── LAYER 1: In-memory processed_ids check ──
             if email.id in self.processed_ids:
-                logger.debug(f"Email {email.id} already processed")
+                logger.debug(f"Email {email.id} already processed (memory)")
                 self.stats['skipped'] += 1
                 return True
 
-            # Create task file
-            task_path = self.create_task_file(email)
-            if not task_path:
-                logger.error(f"Failed to create task for email {email.id}")
+            # ── LAYER 2: SQLite dedup DB check (persistent across restarts) ──
+            if self.dedup_db.is_processed(email.id):
+                logger.info(f"Email {email.id} already processed (SQLite dedup DB)")
+                self.processed_ids.add(email.id)
+                self._save_processed_ids()
+                self.stats['skipped'] += 1
+                return True
+
+            # ── Send to server for atomic processing ──
+            # Server runs: INSERT ... ON CONFLICT(msg_id) DO NOTHING
+            #              → if dup, returns 409
+            #              → if new, creates file, runs AI, drafts reply
+            server_ok = self.process_email_with_ai(email)
+            if not server_ok:
+                logger.warning(f"Server rejected or failed email {email.id} — will retry")
                 return False
 
-            # Mark as read
+            # Mark as read in Gmail only AFTER server confirms processing
             if self.mark_email_read(email.id):
                 logger.info(f"Email {email.id} marked as read")
             else:
                 logger.warning(f"Failed to mark email {email.id} as read")
 
-            # Update tracking
-            self.stats['processed'] += 1
+            # ── Mark as processed locally ──
             self.processed_ids.add(email.id)
-
-            # Log action
-            self.log_action(
-                "EMAIL_PROCESSED",
-                f"'{email.subject}' -> {task_path.name}"
+            self.dedup_db.mark_processed(
+                email.id, email.thread_id,
+                email.subject, email.from_addr, self._categorize_email(email)
             )
+            self._save_processed_ids()
+            self.stats['processed'] += 1
 
-            # IMMEDIATELY trigger AI analysis and action plan creation
-            self.process_email_with_ai(email, task_path.name)
+            self.log_action("EMAIL_PROCESSED", f"'{email.subject}' via server API")
 
             return True
 
@@ -896,12 +934,25 @@ thread_id: {email.thread_id}
             self.stats['errors'] += 1
             return False
 
+    def _categorize_email(self, email: EmailData) -> str:
+        """Quick category based on subject keywords."""
+        subj = email.subject.lower()
+        if any(w in subj for w in ['invoice', 'payment', 'billing']):
+            return 'Invoice'
+        if any(w in subj for w in ['support', 'help', 'issue', 'problem']):
+            return 'Support'
+        if any(w in subj for w in ['meeting', 'schedule', 'calendar']):
+            return 'Meeting Request'
+        if any(w in subj for w in ['newsletter', 'digest', 'weekly']):
+            return 'Newsletter'
+        return 'General'
+
     def _validate_processed_ids(self) -> None:
         """
-        Check processed IDs and remove any that don't have corresponding draft files.
-        This handles the case where an email was marked processed but no draft was created.
+        Check processed IDs and remove any that don't have corresponding task or draft files.
+        This handles the case where an email was marked processed but no file was created.
         """
-        folders_to_check = ['Pending_Approval', 'Approved', 'Done']
+        folders_to_check = ['Needs_Action', 'Pending_Approval', 'Approved', 'Done']
         draft_exists_cache = {}
 
         for email_id in list(self.processed_ids):
@@ -929,7 +980,7 @@ thread_id: {email.thread_id}
                     break
 
             if not draft_exists:
-                logger.info(f"Re-queuing lost email: {email_id}")
+                logger.info(f"Removing stale processed ID (no file found): {email_id}")
                 self.processed_ids.discard(email_id)
 
     def _file_contains_email_id(self, filepath: Path, email_id: str) -> bool:
@@ -941,8 +992,9 @@ thread_id: {email.thread_id}
         except Exception:
             return False
 
-    def process_email_with_ai(self, email: EmailData, filename: str) -> None:
-        """Send email to backend AI for analysis, action plan, and auto-reply generation."""
+    def process_email_with_ai(self, email: EmailData) -> bool:
+        """Send email to backend server for atomic processing (dedup + AI + file creation).
+        Returns True only if server accepted and processed the email."""
         try:
             resp = requests.post(
                 f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/process-email",
@@ -951,16 +1003,53 @@ thread_id: {email.thread_id}
                     'sender': email.from_addr,
                     'body': email.body[:2000],
                     'priority': email.priority,
-                    'filename': filename
+                    'email_id': email.id,
+                    'thread_id': email.thread_id
                 },
-                timeout=30
+                timeout=60
             )
             if resp.ok:
-                logger.info(f"🤖 AI analysis triggered for {filename}")
+                logger.info(f"🤖 Server accepted email {email.id}: {email.subject[:50]}")
+                return True
+            elif resp.status_code == 409:
+                logger.info(f"⏭️  Server duplicate (409) for {email.id} — already processed")
+                self.processed_ids.add(email.id)
+                self.dedup_db.mark_processed(
+                    email.id, email.thread_id,
+                    email.subject, email.from_addr, self._categorize_email(email)
+                )
+                self._save_processed_ids()
+                return True
             else:
-                logger.warning(f"[AI Process] Returned {resp.status_code}: {resp.text[:200]}")
+                logger.warning(f"[AI Process] Server returned {resp.status_code}: {resp.text[:200]}")
+                return False
         except Exception as e:
             logger.warning(f"[AI Process] Failed: {e}")
+            return False
+
+    def _acquire_run_lock(self) -> bool:
+        """Acquire a lock file to prevent multiple instances running simultaneously."""
+        try:
+            if RUN_LOCK_FILE.exists():
+                lock_age = time.time() - RUN_LOCK_FILE.stat().st_mtime
+                if lock_age < 60:  # Another instance running within last 60 seconds
+                    logger.warning(f"Another watcher instance is running (lock age: {lock_age:.0f}s) — skipping")
+                    return False
+                else:
+                    # Lock is stale (older than 60s), remove and re-acquire
+                    RUN_LOCK_FILE.unlink(missing_ok=True)
+            RUN_LOCK_FILE.touch()
+            return True
+        except Exception as e:
+            logger.warning(f"Lock check failed: {e}")
+            return True  # Proceed if lock check fails
+
+    def _release_run_lock(self):
+        """Release the run lock file."""
+        try:
+            RUN_LOCK_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     def run(self) -> Dict:
         """
@@ -969,41 +1058,46 @@ thread_id: {email.thread_id}
         Returns:
             Statistics dict
         """
+        # Lock check: prevent overlapping runs (cron + tmux conflict)
+        if not self._acquire_run_lock():
+            return self.get_stats()
+
         logger.info("=" * 60)
         logger.info("Gmail Watcher - Starting iteration")
         logger.info("=" * 60)
 
-        # Authenticate
-        if not self.service:
-            if not self.authenticate():
-                logger.error("Authentication failed")
+        try:
+            # Authenticate
+            if not self.service:
+                if not self.authenticate():
+                    logger.error("Authentication failed")
+                    return self.get_stats()
+
+            # Validate processed IDs - remove orphaned entries
+            self._validate_processed_ids()
+
+            # Fetch emails
+            emails = self.fetch_unread_emails()
+
+            if not emails:
+                logger.info("No new important emails")
                 return self.get_stats()
 
-        # Validate processed IDs - remove orphaned entries
-        self._validate_processed_ids()
+            # Process each email
+            logger.info(f"Processing {len(emails)} email(s)...")
+            for msg in emails:
+                email_data = self.parse_email(msg)
+                self.process_item(email_data)  # Saves processed_ids internally after each email
 
-        # Fetch emails
-        emails = self.fetch_unread_emails()
+            # Log summary
+            stats = self.get_stats()
+            logger.info(f"Iteration complete - Processed: {stats['processed']}, "
+                       f"Errors: {stats['errors']}, Skipped: {stats['skipped']}")
 
-        if not emails:
-            logger.info("No new important emails")
-            return self.get_stats()
+            return stats
 
-        # Process each email
-        logger.info(f"Processing {len(emails)} email(s)...")
-        for msg in emails:
-            email_data = self.parse_email(msg)
-            self.process_item(email_data)
-
-        # Save processed IDs
-        self._save_processed_ids()
-
-        # Log summary
-        stats = self.get_stats()
-        logger.info(f"Iteration complete - Processed: {stats['processed']}, "
-                   f"Errors: {stats['errors']}, Skipped: {stats['skipped']}")
-
-        return stats
+        finally:
+            self._release_run_lock()
 
     def run_continuous(self) -> None:
         """Run watcher continuously with configured interval."""
