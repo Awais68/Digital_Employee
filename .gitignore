@@ -9,6 +9,7 @@ tokens/
 
 # Environment & Credentials
 .env
+.env copy
 .env.*
 !.env.example
 

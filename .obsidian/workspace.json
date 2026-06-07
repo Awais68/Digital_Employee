@@ -13,15 +13,29 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Done/APPROVAL_TEST_REPLY.md",
+                "file": "Done/20260506_130809_email_code_add_misbah_asghar.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "APPROVAL_TEST_REPLY"
+              "title": "20260506_130809_email_code_add_misbah_asghar"
+            }
+          },
+          {
+            "id": "88cda1eef92e33d3",
+            "type": "leaf",
+            "state": {
+              "type": "bases",
+              "state": {
+                "file": "Untitled 2.base",
+                "viewName": "Table"
+              },
+              "icon": "lucide-table",
+              "title": "Untitled 2"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -41,7 +55,7 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": true
               },
               "icon": "lucide-folder-closed",
               "title": "Files"
@@ -183,8 +197,18 @@
       "bases:Create new base": false
     }
   },
-  "active": "96c8b7a509553e1e",
+  "active": "88cda1eef92e33d3",
   "lastOpenFiles": [
+    "Untitled.md",
+    "Untitled 2.base",
+    "Done/20260506_130809_email_code_add_misbah_asghar.md",
+    "Untitled 1",
+    "Untitled",
+    "Logs/audit/audit_log.tmp",
+    "Logs/audit/audit_errors.tmp",
+    "Untitled 1.base",
+    "2026-05-31.md",
+    "vault-control/node_modules/@modelcontextprotocol/sdk/node_modules/send/README.md",
     "Done/20260402_004847_email_OpenAI_Dev_News_GPT_54_Plugins_in_Codex_and_ot.md",
     "Done/20260402_213815_email_agent_testing.md",
     "Done/20260402_004847_email_New_login_to_Instagram_from_Chrome_on_Linux.md",
@@ -194,8 +218,6 @@
     "Approved/20260407_184004_email_code_the_agents_your_performance_report_for_march.md",
     "Approved/CEO_BRIEFING_TEMPLATE.md",
     "Needs_Action/20260513_000005_email_google_for_developers_shared_a_post_join_the_glob.md",
-    "Logs/audit/audit_errors.tmp",
-    "Logs/audit/audit_log.tmp",
     "Needs_Action/20260513_000005_email_your_puzzle_is_live_code.md",
     "Needs_Action/20260513_000006_email_openai_dev_news_realtime_20_codex_for_chrome_a.md",
     "Needs_Action/20260506_130808_email_your_puzzle_is_live_code.md",
@@ -203,12 +225,8 @@
     "Logs/audit/audit_recovery.json",
     "Logs/audit/audit_log.json",
     "Logs/workers.log",
-    "Logs/whatsapp_watcher_20260513.log",
-    "Logs/whatsapp_watcher_20260512.log",
-    "Logs/watcher_20260513.log",
     "Logs/system_test_20260512_222147.md",
     "Logs/system_test_20260512_222140.md",
-    "Logs/ralph_wiggum.log",
     "Logs/email_log_20260512.md",
     "Approved/REPLY_20260512_222806_email_urgent_meeting.md",
     "Done/REPLY_20260512_222806_email_urgent_meeting.md",
@@ -216,11 +234,6 @@
     "Needs_Action/20260512_235606_email_your_puzzle_is_live_code.md",
     "Needs_Action/20260512_235605_email_google_for_developers_shared_a_post_join_the_glob.md",
     "Plans/PLAN_20260401_235247_test_file.meta.md",
-    "Plans/GMAIL_WATCHER_SETUP.md",
-    "Pending_Approval/REPLY_20260512_222806_email_urgent_meeting.md",
-    "Needs_Action/20260512_235207_email_openai_dev_news_realtime_20_codex_for_chrome_a.md",
-    "Needs_Action/20260512_235207_email_your_puzzle_is_live_code.md",
-    "Needs_Action/20260512_235206_email_google_for_developers_shared_a_post_join_the_glob.md",
     "Untitled 2.canvas",
     "Untitled 1.canvas",
     "Untitled.canvas"
