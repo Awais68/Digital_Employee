@@ -1,0 +1,119 @@
+name: Deploy to Oracle Cloud
+
+# Auto-deploy on push to main, or run manually from the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vault-control/server/**'
+      - 'vault-control/src/**'
+      - 'vault-control/package.json'
+      - 'vault-control/package-lock.json'
+      - '*.py'
+      - 'deploy/**'
+      - '.github/workflows/deploy-oracle.yml'
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: 'Skip frontend build (server-only change)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: oracle-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: vault-control/package-lock.json
+
+      - name: Install dependencies
+        working-directory: vault-control
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax-check server code
+        working-directory: vault-control
+        run: |
+          for f in $(find server -name "*.js"); do
+            node --check "$f" || exit 1
+          done
+          echo "All server files pass syntax check"
+
+      - name: Build frontend
+        working-directory: vault-control
+        run: npx vite build
+
+      - name: Syntax-check Python workers
+        run: |
+          python3 -m py_compile gmail_watcher.py orchestrator.py workers.py audit_log.py
+          echo "Python workers pass syntax check"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: vault-control/dist
+          retention-days: 1
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: vault-control/dist
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ORACLE_SSH_KEY }}" > ~/.ssh/oracle_key
+          chmod 600 ~/.ssh/oracle_key
+          ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Pack code tarball
+        run: |
+          tar -czf /tmp/digitalfte_deploy.tar.gz \
+            --exclude='vault-control/node_modules' \
+            --exclude='vault-control/.env' \
+            --exclude='vault-control/server/.secrets.enc' \
+            vault-control/server \
+            vault-control/dist \
+            vault-control/package.json \
+            vault-control/package-lock.json \
+            vault-control/nginx.conf \
+            $(ls *.py 2>/dev/null) \
+            deploy/remote_deploy.sh
+          du -h /tmp/digitalfte_deploy.tar.gz
+
+      - name: Upload to Oracle VM
+        run: |
+          scp -i ~/.ssh/oracle_key /tmp/digitalfte_deploy.tar.gz \
+            ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }}:/tmp/digitalfte_deploy.tar.gz
+
+      - name: Deploy with backup + health check + rollback
+        run: |
+          ssh -i ~/.ssh/oracle_key ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} \
+            "tar -xzf /tmp/digitalfte_deploy.tar.gz -C ~/Digital_Employee deploy/remote_deploy.sh && \
+             chmod +x ~/Digital_Employee/deploy/remote_deploy.sh && \
+             ~/Digital_Employee/deploy/remote_deploy.sh"
+
+      - name: Verify public health endpoint
+        run: |
+          sleep 5
+          curl -sf -m 10 http://${{ secrets.ORACLE_HOST }}/api/health || \
+          curl -sfk -m 10 https://digitalfte.online/api/health || \
+          (echo "Public health check failed" && exit 1)
+          echo "✅ Deployment verified"

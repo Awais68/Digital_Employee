@@ -215,7 +215,7 @@ class AuditLogManager:
         error_data["total_errors"] = error_data.get("total_errors", 0) + 1
 
         if len(error_data["errors"]) > self.max_errors:
-            self._rotate_log(error_data, self.errors_file)
+            self._rotate_log(error_data, self.errors_file, list_key="errors")
 
         self._save_json(self.errors_file, error_data)
 
@@ -226,7 +226,7 @@ class AuditLogManager:
         recovery_data["total_recoveries"] = recovery_data.get("total_recoveries", 0) + 1
 
         if len(recovery_data["recoveries"]) > self.max_recovery:
-            self._rotate_log(recovery_data, self.recovery_file)
+            self._rotate_log(recovery_data, self.recovery_file, list_key="recoveries")
 
         self._save_json(self.recovery_file, recovery_data)
 
@@ -254,24 +254,28 @@ class AuditLogManager:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
 
-    def _rotate_log(self, data: Dict, file_path: Path):
-        """Rotate audit log by archiving oldest entries."""
+    def _rotate_log(self, data: Dict, file_path: Path, list_key: str = "entries"):
+        """Rotate audit log by archiving oldest entries.
+
+        list_key: the key holding the entry list — "entries" for the main
+        index, "errors" for the error log, "recoveries" for the recovery log.
+        """
         rotation_count = data.get("rotation_count", 0) + 1
         archive_file = file_path.with_suffix(f".archive.{rotation_count}.json")
 
         # Archive first half of entries
-        half = len(data["entries"]) // 2
+        half = len(data[list_key]) // 2
         archive_data = {
             "rotation": rotation_count,
             "rotated_at": datetime.now(timezone.utc).isoformat(),
-            "archived_entries": data["entries"][:half],
+            "archived_entries": data[list_key][:half],
         }
 
         with open(archive_file, "w", encoding="utf-8") as f:
             json.dump(archive_data, f, indent=2, default=str)
 
         # Keep only second half in main file
-        data["entries"] = data["entries"][half:]
+        data[list_key] = data[list_key][half:]
         data["last_rotation"] = datetime.now(timezone.utc).isoformat()
         data["rotation_count"] = rotation_count
 

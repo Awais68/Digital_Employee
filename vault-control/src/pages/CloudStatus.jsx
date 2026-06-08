@@ -1,88 +1,113 @@
-import { useState } from 'react'
-import { Power, AlertTriangle, GitBranch } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { AlertTriangle, GitBranch, RefreshCw } from 'lucide-react'
+import axios from 'axios'
+
+const REFRESH_INTERVAL = 10000 // 10s live refresh
+
+function formatUptime(seconds) {
+  if (!seconds && seconds !== 0) return '—'
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
 
 export default function CloudStatus() {
-  const [vmStatus, setVmStatus] = useState('offline')
-  const [showConfirm, setShowConfirm] = useState(false)
+  const [vmInfo, setVmInfo] = useState(null)
+  const [services, setServices] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [lastUpdated, setLastUpdated] = useState(null)
 
-  const toggleVM = (newStatus) => {
-    if (newStatus === 'off') {
-      setShowConfirm(true)
-    } else {
-      setVmStatus('online')
-      setShowConfirm(false)
+  const fetchVmInfo = useCallback(async () => {
+    try {
+      const [vmRes, statsRes] = await Promise.all([
+        axios.get('/api/system/vm-info'),
+        axios.get('/api/system/stats').catch(() => null),
+      ])
+      setVmInfo(vmRes.data)
+      if (statsRes?.data?.services) setServices(statsRes.data.services)
+      setLastUpdated(new Date())
+      setError(null)
+    } catch (err) {
+      setError(err.response?.data?.message || err.message)
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [])
 
-  const confirmTurnOff = () => {
-    setVmStatus('offline')
-    setShowConfirm(false)
-  }
+  useEffect(() => {
+    fetchVmInfo()
+    const interval = setInterval(fetchVmInfo, REFRESH_INTERVAL)
+    return () => clearInterval(interval)
+  }, [fetchVmInfo])
 
-  const vmMetrics = {
-    cpu: { used: 45, total: 100 },
-    memory: { used: 8, total: 16 },
-    disk: { used: 256, total: 500 },
-  }
+  const vmOnline = vmInfo?.online
+  const metrics = vmInfo?.metrics
 
-  const cloudServices = [
-    { name: 'Email Triage', status: 'running' },
-    { name: 'Post Drafts', status: 'running' },
-    { name: 'LinkedIn Watch', status: 'running' },
-  ]
+  const cloudServices = services.filter(s =>
+    ['Email MCP', 'Gmail Watcher', 'LinkedIn MCP'].includes(s.name)
+  )
+  const localServices = services.filter(s =>
+    ['WhatsApp Watcher', 'Odoo MCP', 'Instagram Bot', 'Facebook Bot'].includes(s.name)
+  )
 
-  const localServices = [
-    { name: 'WhatsApp Session', status: 'running' },
-    { name: 'Payments', status: 'running' },
-    { name: 'Approvals', status: 'running' },
-  ]
-
-  const ProgressBar = ({ used, total, label, color }) => {
-    const percent = (used / total) * 100
+  const ProgressBar = ({ used, total, label, color, unit = 'GB' }) => {
+    const percent = total > 0 ? (used / total) * 100 : 0
     return (
       <div>
         <div className="flex justify-between mb-2">
           <span className="text-sm dark:text-[#7A7A85] text-gray-600">{label}</span>
-          <span className="text-sm font-bold dark:text-[#E0E0E6] text-gray-900">{used}/{total}GB</span>
+          <span className="text-sm font-bold dark:text-[#E0E0E6] text-gray-900">
+            {unit === '%' ? `${used}%` : `${used}/${total}${unit}`}
+          </span>
         </div>
         <div className="w-full h-2 dark:bg-[#1A1A24] bg-gray-200 rounded-full overflow-hidden">
           <div
             className={`h-full transition-all ${color}`}
-            style={{ width: `${percent}%` }}
+            style={{ width: `${Math.min(100, percent)}%` }}
           />
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Confirmation Dialog */}
-      {showConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="card p-6 max-w-md">
-            <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 mb-3 flex items-center gap-2">
-              <AlertTriangle size={20} className="text-yellow-500" />
-              Turn Off Cloud VM?
-            </h3>
-            <p className="text-sm dark:text-[#7A7A85] text-gray-600 mb-4">
-              All cloud watchers will stop. Are you sure?
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={confirmTurnOff}
-                className="flex-1 px-3 py-2 rounded font-medium text-sm dark:bg-red-500/20 dark:text-red-400 bg-red-50 text-red-700"
-              >
-                Yes, Turn Off
-              </button>
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="flex-1 px-3 py-2 rounded font-medium text-sm dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-900"
-              >
-                Cancel
-              </button>
+  const ServiceList = ({ title, items }) => (
+    <div className="card p-6">
+      <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 mb-4">{title}</h3>
+      <div className="space-y-3">
+        {items.length === 0 && (
+          <p className="text-sm dark:text-[#7A7A85] text-gray-500">No services found</p>
+        )}
+        {items.map((svc, i) => (
+          <div key={i} className="flex items-center justify-between p-3 dark:bg-[#1A1A24] bg-gray-50 rounded">
+            <span className="dark:text-[#E0E0E6] text-gray-900">{svc.name}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs dark:text-[#7A7A85] text-gray-500">{svc.lastActivity}</span>
+              <div className={`w-2 h-2 rounded-full ${svc.status === 'running' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
             </div>
           </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <RefreshCw className="animate-spin dark:text-[#00FF88] text-blue-500" size={32} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {error && (
+        <div className="card p-4 border-l-4 border-l-red-500 flex items-center gap-2">
+          <AlertTriangle size={18} className="text-red-500" />
+          <span className="text-sm dark:text-red-400 text-red-700">Failed to load VM info: {error}</span>
         </div>
       )}
 
@@ -90,47 +115,72 @@ export default function CloudStatus() {
       <div className="card p-6 bg-gradient-to-r dark:from-blue-500/10 dark:to-[#12121A] from-blue-50 to-white border-l-4 dark:border-l-blue-500 border-l-blue-500">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 text-lg">Oracle Cloud VM</h3>
+            <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 text-lg">
+              {vmInfo?.provider || 'Oracle Cloud'} VM
+            </h3>
             <div className="flex items-center gap-2 mt-2">
-              <div className={`w-3 h-3 rounded-full animate-pulse ${vmStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className={`text-sm font-semibold ${vmStatus === 'online' ? 'dark:text-green-400 text-green-600' : 'dark:text-red-400 text-red-600'}`}>
-                {vmStatus === 'online' ? 'ONLINE' : 'OFFLINE'}
+              <div className={`w-3 h-3 rounded-full animate-pulse ${vmOnline ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className={`text-sm font-semibold ${vmOnline ? 'dark:text-green-400 text-green-600' : 'dark:text-red-400 text-red-600'}`}>
+                {vmOnline ? 'ONLINE' : 'OFFLINE'}
               </span>
+              {lastUpdated && (
+                <span className="text-xs dark:text-[#7A7A85] text-gray-400 ml-2">
+                  updated {lastUpdated.toLocaleTimeString()}
+                </span>
+              )}
             </div>
           </div>
           <button
-            onClick={() => toggleVM(vmStatus === 'online' ? 'off' : 'on')}
-            className={`flex items-center gap-2 px-4 py-2 rounded font-medium text-sm transition-all ${
-              vmStatus === 'online'
-                ? 'dark:bg-red-500/20 dark:text-red-400 bg-red-50 text-red-700 hover:dark:bg-red-500/30'
-                : 'dark:bg-green-500/20 dark:text-green-400 bg-green-50 text-green-700 hover:dark:bg-green-500/30'
-            }`}
+            onClick={fetchVmInfo}
+            className="flex items-center gap-2 px-4 py-2 rounded font-medium text-sm transition-all dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-900 hover:opacity-80"
           >
-            <Power size={16} />
-            {vmStatus === 'online' ? 'Turn Off' : 'Turn On'}
+            <RefreshCw size={16} />
+            Refresh
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
           <div>
             <p className="dark:text-[#7A7A85] text-gray-500">IP Address</p>
-            <p className="font-mono dark:text-[#E0E0E6] text-gray-900">203.0.113.42</p>
+            <p className="font-mono dark:text-[#E0E0E6] text-gray-900">{vmInfo?.ip || '—'}</p>
           </div>
           <div>
             <p className="dark:text-[#7A7A85] text-gray-500">Region</p>
-            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">US-Phoenix</p>
+            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">{vmInfo?.region || '—'}</p>
           </div>
           <div>
             <p className="dark:text-[#7A7A85] text-gray-500">Uptime</p>
-            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">47d 8h</p>
+            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">{formatUptime(metrics?.uptime)}</p>
+          </div>
+          <div>
+            <p className="dark:text-[#7A7A85] text-gray-500">CPU</p>
+            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">
+              {metrics?.cpu?.cores || '—'} cores
+            </p>
           </div>
         </div>
 
-        {/* Resource Usage */}
+        {/* Resource Usage — live data */}
         <div className="space-y-3">
-          <ProgressBar used={vmMetrics.cpu.used} total={vmMetrics.cpu.total} label="CPU" color="bg-blue-500" />
-          <ProgressBar used={vmMetrics.memory.used} total={vmMetrics.memory.total} label="RAM" color="bg-purple-500" />
-          <ProgressBar used={vmMetrics.disk.used} total={vmMetrics.disk.total} label="Storage" color="bg-orange-500" />
+          <ProgressBar
+            used={metrics?.cpu?.percent ?? 0}
+            total={100}
+            label={`CPU (load ${metrics?.cpu?.loadavg?.[0] ?? '—'})`}
+            color="bg-blue-500"
+            unit="%"
+          />
+          <ProgressBar
+            used={metrics?.memory?.used ?? 0}
+            total={metrics?.memory?.total ?? 0}
+            label={`RAM (${metrics?.memory?.percent ?? 0}%)`}
+            color="bg-purple-500"
+          />
+          <ProgressBar
+            used={metrics?.disk?.used ?? 0}
+            total={metrics?.disk?.total ?? 0}
+            label={`Storage (${metrics?.disk?.percent ?? 0}%)`}
+            color="bg-orange-500"
+          />
         </div>
       </div>
 
@@ -142,62 +192,20 @@ export default function CloudStatus() {
         </h3>
         <div className="space-y-3">
           <div className="flex justify-between items-center">
-            <span className="dark:text-[#7A7A85] text-gray-600">Last sync</span>
-            <span className="font-semibold dark:text-[#E0E0E6] text-gray-900">5 minutes ago</span>
+            <span className="dark:text-[#7A7A85] text-gray-600">Host</span>
+            <span className="font-semibold dark:text-[#E0E0E6] text-gray-900">{vmInfo?.hostname || '—'}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="dark:text-[#7A7A85] text-gray-600">Files synced</span>
-            <span className="font-semibold dark:text-[#E0E0E6] text-gray-900">247</span>
+            <span className="dark:text-[#7A7A85] text-gray-600">Platform</span>
+            <span className="font-semibold dark:text-[#E0E0E6] text-gray-900">{vmInfo?.platform || '—'}</span>
           </div>
-          <button className="w-full px-4 py-2 rounded font-medium text-sm dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white hover:opacity-90">
-            Force Sync
-          </button>
         </div>
       </div>
 
       {/* Cloud vs Local Delegation */}
-      <div className="grid grid-cols-2 gap-6">
-        {/* Cloud Services */}
-        <div className="card p-6">
-          <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 mb-4">Cloud Services</h3>
-          <div className="space-y-3">
-            {cloudServices.map((svc, i) => (
-              <div key={i} className="flex items-center justify-between p-3 dark:bg-[#1A1A24] bg-gray-50 rounded">
-                <span className="dark:text-[#E0E0E6] text-gray-900">{svc.name}</span>
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Local Services */}
-        <div className="card p-6">
-          <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 mb-4">Local Services</h3>
-          <div className="space-y-3">
-            {localServices.map((svc, i) => (
-              <div key={i} className="flex items-center justify-between p-3 dark:bg-[#1A1A24] bg-gray-50 rounded">
-                <span className="dark:text-[#E0E0E6] text-gray-900">{svc.name}</span>
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Delegation Queue */}
-      <div className="card p-6">
-        <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 mb-4">Delegation Queue</h3>
-        <p className="text-sm dark:text-[#7A7A85] text-gray-600 mb-4">
-          Files waiting to be merged into Dashboard
-        </p>
-        <div className="flex gap-3">
-          <button className="flex-1 px-4 py-2 rounded font-medium text-sm dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white hover:opacity-90">
-            Merge All
-          </button>
-          <button className="flex-1 px-4 py-2 rounded font-medium text-sm dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-900">
-            Review Each
-          </button>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <ServiceList title="Cloud Services" items={cloudServices} />
+        <ServiceList title="Local Services" items={localServices} />
       </div>
     </div>
   )

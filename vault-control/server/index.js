@@ -129,7 +129,7 @@ app.get('/api/health', (req, res) => {
 if (ENABLE_AUTH) {
   app.use('/api', (req, res, next) => {
     // Skip auth for routes registered above
-    if (req.path.startsWith('/notifications/') || req.path.startsWith('/whatsapp/') ||
+    if (req.path.startsWith('/chat/') || req.path.startsWith('/notifications/') || req.path.startsWith('/whatsapp/') ||
         req.path.startsWith('/internal/') || req.path.startsWith('/csrf-token') ||
         req.path.startsWith('/health') || req.path.startsWith('/auth/')) {
       return next()

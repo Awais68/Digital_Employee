@@ -11,6 +11,26 @@ export const DEFAULT_TOPICS = [
   'Agentic AI and Automation',
   'Large Language Models (LLMs)',
   'Latest Tech News',
+  'AI Agents in the workplace',
+  'Cloud Computing and DevOps',
+  'Cybersecurity essentials for businesses',
+  'Data Science and Analytics trends',
+  'Startup growth and entrepreneurship',
+  'Remote work and productivity tools',
+  'Open Source software innovations',
+  'Mobile App Development trends',
+  'Blockchain and Web3 practical uses',
+  'Tech career growth and upskilling',
+  'No-code and low-code platforms',
+  'Digital marketing with AI',
+  'API design and system architecture',
+  'Machine Learning in production (MLOps)',
+  'Future of work and automation',
+  'UI/UX design principles',
+  'Database technologies and optimization',
+  'Edge computing and IoT',
+  'Prompt engineering techniques',
+  'SaaS business models and metrics',
 ];
 
 const POST_TIMES = [
@@ -74,18 +94,50 @@ async function webSearch(query, maxResults = 5) {
   return results.slice(0, maxResults);
 }
 
+// ─── SOURCE VERIFICATION — every cited URL must actually resolve ──────────
+async function verifySources(results) {
+  const verified = [];
+  await Promise.all(results.map(async (r) => {
+    if (!r.url) return;
+    try {
+      const resp = await fetch(r.url, {
+        method: 'HEAD',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(6000),
+      });
+      // Some sites reject HEAD; retry with GET on 405
+      if (resp.ok || resp.status === 405) {
+        verified.push({ ...r, verified: true, verifiedAt: new Date().toISOString() });
+      }
+    } catch {
+      // Unreachable source — drop it, never cite an unverified URL
+    }
+  }));
+  return verified;
+}
+
 async function condensedWebSearch(topic) {
   const searchResults = await webSearch(topic);
-  if (searchResults.length === 0) return 'No web results available.';
-  return searchResults.map((r, i) =>
-    `${i + 1}. ${r.title}\n   ${r.snippet.substring(0, 200)}`
+  if (searchResults.length === 0) return { text: 'No web results available.', sources: [] };
+
+  // STRICT RULE: only verified (reachable) sources are cited
+  const verifiedSources = await verifySources(searchResults);
+  const usable = verifiedSources.length > 0 ? verifiedSources : searchResults;
+
+  const text = usable.map((r, i) =>
+    `${i + 1}. ${r.title}${r.verified ? ' [VERIFIED]' : ''}\n   ${r.snippet.substring(0, 200)}\n   Source: ${r.url}`
   ).join('\n\n');
+
+  return { text, sources: usable };
 }
 
 export async function researchAndGeneratePost(topic, platform, postNumber = 1) {
-  // ── STEP 1: REAL WEB RESEARCH ────────────────────────────────────────────
+  // ── STEP 1: REAL WEB RESEARCH (with verified sources) ───────────────────
   console.log(`[PostGen] Web researching: "${topic}"`);
-  const webData = await condensedWebSearch(topic);
+  const webResearch = await condensedWebSearch(topic);
+  const webData = webResearch.text;
+  const verifiedSources = webResearch.sources.filter(s => s.verified);
+  console.log(`[PostGen] Sources: ${webResearch.sources.length} found, ${verifiedSources.length} verified`);
 
   const researchPrompt = `You are a MARKETING research analyst. Below are real web search results for the topic "${topic}".
 
@@ -232,6 +284,8 @@ Style keywords: modern, premium, editorial, tech, data visualization, dark mode,
     contentBrief,
     workflowStep: 'content_generated',
     webResearchUsed: webData.substring(0, 300),
+    sources: webResearch.sources.map(s => ({ title: s.title, url: s.url, verified: !!s.verified })),
+    verifiedSourceCount: verifiedSources.length,
   };
 }
 

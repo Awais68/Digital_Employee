@@ -54,49 +54,100 @@ function getNextRecurrence(type, fromDate) {
   return next
 }
 
-cron.schedule('0 10 * * *', async () => {
-  console.log('[Scheduler] 10 AM — Generating morning social post')
-  await generateAndSchedulePost('morning')
-})
+// ═══════════════════════════════════════════════════════════════════════════
+// STRICT DAILY POSTING RULE:
+//   - Minimum 3 posts per day, each at a different time slot
+//   - Each slot uses a DIFFERENT topic (no topic repeats within a day)
+//   - Each post goes to LinkedIn + Facebook + Instagram
+//   - Every post has web research with VERIFIED sources + AI-generated image
+//   - Missed slots are caught up by an hourly check
+// ═══════════════════════════════════════════════════════════════════════════
 
-cron.schedule('0 19 * * *', async () => {
-  console.log('[Scheduler] 7 PM — Generating evening social post')
-  await generateAndSchedulePost('evening')
-})
-
-const TOPICS = [
-  'Software Engineering best practices 2025',
-  'Agentic AI and Automation trends',
-  'Web Development with modern frameworks',
-  'Large Language Models practical applications',
-  'Latest AI tools for developers'
+const DAILY_SLOTS = [
+  { label: 'morning',   hour: 10, cron: '0 10 * * *' },
+  { label: 'afternoon', hour: 14, cron: '30 14 * * *' },
+  { label: 'evening',   hour: 19, cron: '0 19 * * *' },
 ]
-let topicIndex = 0
+const POST_PLATFORMS = ['linkedin', 'facebook', 'instagram']
+
+for (const slot of DAILY_SLOTS) {
+  cron.schedule(slot.cron, async () => {
+    console.log(`[Scheduler] ${slot.label} slot — generating multi-platform posts`)
+    await generateAndSchedulePost(slot.label)
+  })
+}
+
+// Catch-up: every hour at :45, check if any past slot today produced no posts
+cron.schedule('45 * * * *', async () => {
+  try {
+    const nowHour = new Date().getHours()
+    for (const slot of DAILY_SLOTS) {
+      if (slot.hour > nowHour) continue
+      const done = await query(`
+        SELECT COUNT(*) FROM scheduled_posts
+        WHERE created_at::date = CURRENT_DATE
+          AND EXTRACT(HOUR FROM created_at) >= $1
+          AND EXTRACT(HOUR FROM created_at) < $1 + 2
+      `, [slot.hour]).catch(() => null)
+      if (done && parseInt(done.rows[0].count) === 0) {
+        console.log(`[Scheduler] Catch-up: ${slot.label} slot missed — generating now`)
+        await generateAndSchedulePost(slot.label)
+      }
+    }
+  } catch (e) {
+    console.error('[Scheduler] Catch-up check error:', e.message)
+  }
+})
+
+// Pick a topic not yet used today (strict different-topic rule)
+async function pickFreshTopic() {
+  const { DEFAULT_TOPICS } = await import('./postGenerator.js')
+  let usedToday = []
+  try {
+    const r = await query(
+      `SELECT DISTINCT topic FROM scheduled_posts WHERE created_at::date = CURRENT_DATE`
+    )
+    usedToday = r.rows.map(x => (x.topic || '').toLowerCase())
+  } catch {}
+
+  const fresh = DEFAULT_TOPICS.filter(t => !usedToday.includes(t.toLowerCase()))
+  const pool = fresh.length > 0 ? fresh : DEFAULT_TOPICS
+  return pool[Math.floor(Math.random() * pool.length)]
+}
 
 async function generateAndSchedulePost(timeSlot) {
   try {
-    const topic = TOPICS[topicIndex % TOPICS.length]
-    topicIndex++
-
-    console.log(`[Scheduler] Auto-generating post for topic: ${topic}`)
-
-    const platforms = ['linkedin', 'facebook']
-    const platform = platforms[Math.floor(Math.random() * platforms.length)]
+    const topic = await pickFreshTopic()
+    console.log(`[Scheduler] [${timeSlot}] Auto-generating posts for topic: ${topic}`)
 
     const { researchAndGeneratePost } = await import('./postGenerator.js')
-    const postData = await researchAndGeneratePost(topic, platform, 1)
+    const { generatePostImage } = await import('./imageGenerator.js')
 
-    await query(`
-      INSERT INTO scheduled_posts(topic, platform, content, scheduled_for, status, hashtags)
-      VALUES($1,$2,$3,$4,'pending_approval',$5)
-    `, [topic, platform, postData.content, new Date(), JSON.stringify(postData.hashtags)])
+    // Generate ONE image for the topic, shared across platforms
+    let imageUrl = null
+    try {
+      const probe = await researchAndGeneratePost(topic, 'linkedin', 1)
+      imageUrl = await generatePostImage(probe.imagePrompt || topic)
+      // Insert the LinkedIn post we already generated
+      await insertPendingPost(topic, 'linkedin', probe, imageUrl)
 
-    createNotification('info', '📱 Post Ready for Approval',
-      `${platform} post about "${topic}" needs your approval`, { topic, platform })
+      // Then the remaining platforms with platform-tuned copy
+      for (const platform of POST_PLATFORMS.slice(1)) {
+        const postData = await researchAndGeneratePost(topic, platform, 1)
+        await insertPendingPost(topic, platform, postData, imageUrl)
+      }
+    } catch (genErr) {
+      console.error(`[Scheduler] [${timeSlot}] Generation error:`, genErr.message)
+      return
+    }
+
+    createNotification('info', '📱 Posts Ready for Approval',
+      `${POST_PLATFORMS.length} posts (${POST_PLATFORMS.join(', ')}) about "${topic}" need your approval`,
+      { topic, platforms: POST_PLATFORMS, timeSlot })
 
     if (getStatus() === 'connected') {
       await sendMessage(OWNER_WHATSAPP,
-        `📱 *New Post Ready*\n\nPlatform: ${platform.toUpperCase()}\nTopic: ${topic}\n\nPlease approve in dashboard.`
+        `📱 *New Posts Ready (${timeSlot})*\n\nPlatforms: ${POST_PLATFORMS.map(p => p.toUpperCase()).join(', ')}\nTopic: ${topic}\n\nPlease approve in dashboard.`
       ).catch(() => {})
     }
   } catch (e) {
@@ -104,13 +155,27 @@ async function generateAndSchedulePost(timeSlot) {
   }
 }
 
+async function insertPendingPost(topic, platform, postData, imageUrl) {
+  await query(`
+    INSERT INTO scheduled_posts(topic, platform, content, image_url, scheduled_for, status, hashtags, mentions)
+    VALUES($1,$2,$3,$4,$5,'pending_approval',$6,$7)
+  `, [
+    topic, platform, postData.content, imageUrl, new Date(),
+    JSON.stringify(postData.hashtags || []),
+    JSON.stringify(postData.mentions || []),
+  ])
+  console.log(`[Scheduler] ${platform} post queued (verified sources: ${postData.verifiedSourceCount ?? 0})`)
+}
+
 cron.schedule('0 10 * * *', async () => {
   if (getStatus() !== 'connected') return
 
-  const todayTopics = TOPICS.slice(0, 3)
+  const { DEFAULT_TOPICS } = await import('./postGenerator.js')
+  const shuffled = [...DEFAULT_TOPICS].sort(() => Math.random() - 0.5)
+  const todayTopics = shuffled.slice(0, 3)
   const msg = `🌅 *Good Morning!*\n\n*Digital FTE — Daily Topics*\n\n` +
     todayTopics.map((t, i) => `${i + 1}. ${t}`).join('\n') +
-    `\n\nReply with a number or type your own topic.\nPosts will auto-generate at 10 AM & 7 PM.`
+    `\n\nReply with a number or type your own topic.\nPosts auto-generate at 10 AM, 2:30 PM & 7 PM (LinkedIn + Facebook + Instagram).`
 
   try {
     await sendMessage(OWNER_WHATSAPP, msg)

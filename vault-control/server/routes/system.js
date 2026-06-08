@@ -10,6 +10,7 @@ import {
   getRecentActivity,
   getPendingApprovals,
   refreshAndBroadcast,
+  getVmInfo,
 } from '../system-status.js'
 import { readVaultFiles, searchVaultFiles } from '../vault-reader.js'
 import fs from 'fs'
@@ -42,6 +43,16 @@ router.get('/services', async (req, res) => {
 router.get('/metrics', (req, res) => {
   const metrics = getSystemMetrics()
   res.json(metrics)
+})
+
+// GET VM info — Oracle Cloud VM identity + live RAM/CPU/disk metrics
+router.get('/vm-info', async (req, res) => {
+  try {
+    const info = await getVmInfo()
+    res.json(info)
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get VM info', message: err.message })
+  }
 })
 
 // GET vault counts
