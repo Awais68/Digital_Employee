@@ -1,13 +1,16 @@
 {
-  "timestamp": "2026-06-08T22:10:01.652045",
+  "timestamp": "2026-06-10T00:35:01.600384",
   "status": {
     "odoo_local": true,
     "dashboard": true,
-    "gmail_watcher": true,
-    "whatsapp_watcher": true,
+    "gmail_watcher": false,
+    "whatsapp_watcher": false,
     "disk_usage_pct": 82,
     "needs_action_backlog": 0
   },
-  "alerts": [],
-  "overall": "HEALTHY"
+  "alerts": [
+    "ALERT: gmail_watcher not running!",
+    "ALERT: whatsapp_watcher not running!"
+  ],
+  "overall": "DEGRADED"
 }
