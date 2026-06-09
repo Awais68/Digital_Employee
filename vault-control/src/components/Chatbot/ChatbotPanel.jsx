@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 
 const INITIAL_MESSAGE = {
   role: 'assistant',
-  content: 'Assalam-o-Alaikum! Main aapka AI assistant hun. Koi bhi kaam batao — posts, emails, todos, WhatsApp — sab handle kar sakta hun. Kisi bhi language mein baat kar saktay hain.',
+  content: 'Hey! I\'m your FTE assistant. Batao kya karna hai — posts, emails, todos, WhatsApp — main sab kar sakta hoon.',
 };
 
 function MessageBubble({ msg, isStreaming }) {
@@ -11,7 +11,7 @@ function MessageBubble({ msg, isStreaming }) {
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
       {!isUser && (
         <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold mr-2 mt-1 shrink-0">
-          AI
+          FTE
         </div>
       )}
       <div
@@ -148,13 +148,6 @@ export default function ChatbotPanel({ isOpen, onClose }) {
     }
   }, [input, isLoading, messages]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
   const clearChat = () => {
     setMessages([INITIAL_MESSAGE]);
     setLastAction(null);
@@ -169,12 +162,14 @@ export default function ChatbotPanel({ isOpen, onClose }) {
       <div className="flex items-center justify-between px-4 py-3 bg-indigo-600 text-white shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">
-            AI
+            FTE
           </div>
           <div>
             <p className="text-sm font-semibold leading-none">FTE Assistant</p>
-            <p className="text-xs text-indigo-200 mt-0.5">
-              {isLoading ? 'Typing...' : 'Online'}
+            <p className="text-xs text-indigo-200 mt-0.5 flex items-center gap-1">
+              {isLoading ? (
+                <><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></>
+              ) : 'Online'}
             </p>
           </div>
         </div>
@@ -218,7 +213,6 @@ export default function ChatbotPanel({ isOpen, onClose }) {
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
             placeholder="Kuch bhi poochein ya kaam batayein..."
             rows={1}
             className="flex-1 bg-transparent resize-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 max-h-24 overflow-y-auto"
@@ -239,7 +233,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
           </button>
         </div>
         <p className="text-center text-xs text-gray-400 mt-1.5">
-          Enter = send · Shift+Enter = new line
+          Click send to chat
         </p>
       </div>
     </div>
