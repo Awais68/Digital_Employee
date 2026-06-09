@@ -94,6 +94,7 @@ jobs:
             vault-control/package.json \
             vault-control/package-lock.json \
             vault-control/nginx.conf \
+            server \
             $(ls *.py 2>/dev/null) \
             deploy/remote_deploy.sh
           du -h /tmp/digitalfte_deploy.tar.gz
