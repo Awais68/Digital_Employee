@@ -15,14 +15,15 @@ BACKUP_ROOT="$HOME/deploy_backups"
 TS=$(date +%Y%m%d_%H%M%S)
 BACKUP_DIR="$BACKUP_ROOT/$TS"
 SERVICE="digitalfte-server"
-# Read actual port from .env (server reads PORT from dotenv)
-ACTUAL_PORT=$(grep -oP '^PORT=\K\d+' "$VC_DIR/.env" 2>/dev/null || echo "3000")
-HEALTH_URL="http://localhost:$ACTUAL_PORT/api/health"
-log "Target health endpoint: $HEALTH_URL"
 
 log() { echo "[deploy $(date +%H:%M:%S)] $*"; }
 
 [ -f "$TARBALL" ] || { echo "ERROR: $TARBALL not found"; exit 1; }
+
+# Read actual port from .env (server reads PORT from dotenv)
+ACTUAL_PORT=$(grep -oP '^PORT=\K\d+' "$VC_DIR/.env" 2>/dev/null || echo "3000")
+HEALTH_URL="http://localhost:$ACTUAL_PORT/api/health"
+log "Target health endpoint: $HEALTH_URL"
 
 # ─── 1. Backup current code (code only, not vault data) ───
 log "Backing up current code to $BACKUP_DIR"
