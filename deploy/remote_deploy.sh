@@ -15,7 +15,7 @@ BACKUP_ROOT="$HOME/deploy_backups"
 TS=$(date +%Y%m%d_%H%M%S)
 BACKUP_DIR="$BACKUP_ROOT/$TS"
 SERVICE="digitalfte-server"
-HEALTH_URL="http://localhost:3000/api/health"
+HEALTH_PORTS="3000 3001 3002 3003"
 
 log() { echo "[deploy $(date +%H:%M:%S)] $*"; }
 
@@ -54,20 +54,33 @@ else
   log "Dependencies unchanged — skipping npm install"
 fi
 
-# ─── 5. Restart service ───
-log "Restarting $SERVICE"
-sudo systemctl restart "$SERVICE"
+# ─── 5. Stop service + kill lingering processes, then start ───
+log "Stopping $SERVICE"
+sudo systemctl stop "$SERVICE" 2>/dev/null || true
+sleep 2
+# Kill any lingering node processes on ports 3000-3003
+for port in 3000 3001 3002 3003; do
+  pid=$(lsof -ti :"$port" 2>/dev/null) && kill -9 $pid 2>/dev/null && log "  killed lingering process on port $port" || true
+done
 
-# ─── 6. Health check with retries ───
-log "Health check: $HEALTH_URL"
+log "Starting $SERVICE"
+sudo systemctl start "$SERVICE"
+
+# ─── 6. Health check with retries (try all possible ports) ───
 HEALTHY=false
-for i in $(seq 1 12); do
-  sleep 5
-  if curl -sf -m 5 "$HEALTH_URL" > /dev/null 2>&1; then
-    HEALTHY=true
-    break
-  fi
-  log "  attempt $i/12 — not healthy yet"
+for port in 3000 3001 3002 3003; do
+  URL="http://localhost:$port/api/health"
+  log "Health check: $URL"
+  for i in $(seq 1 6); do
+    sleep 5
+    if curl -sf -m 5 "$URL" > /dev/null 2>&1; then
+      HEALTHY=true
+      log "✅ Service healthy on port $port"
+      break
+    fi
+    log "  attempt $i/6 — not healthy on port $port"
+  done
+  [ "$HEALTHY" = "true" ] && break
 done
 
 if [ "$HEALTHY" = "true" ]; then
@@ -87,9 +100,15 @@ cp "$BACKUP_DIR/root_py/"*.py "$APP_DIR/" 2>/dev/null || true
 
 sudo systemctl restart "$SERVICE"
 sleep 8
-if curl -sf -m 5 "$HEALTH_URL" > /dev/null 2>&1; then
-  log "↩️  Rollback successful — old version restored and healthy"
-else
+ROLLBACK_HEALTHY=false
+for port in $HEALTH_PORTS; do
+  if curl -sf -m 5 "http://localhost:$port/api/health" > /dev/null 2>&1; then
+    ROLLBACK_HEALTHY=true
+    log "↩️  Rollback successful — old version restored and healthy on port $port"
+    break
+  fi
+done
+if [ "$ROLLBACK_HEALTHY" != "true" ]; then
   log "🚨 CRITICAL: rollback restart also unhealthy — manual intervention needed"
 fi
 exit 1

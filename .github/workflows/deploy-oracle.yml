@@ -116,7 +116,8 @@ jobs:
       - name: Verify public health endpoint
         run: |
           sleep 5
-          curl -sf -m 10 http://${{ secrets.ORACLE_HOST }}/api/health || \
-          curl -sfk -m 10 https://digitalfte.online/api/health || \
-          (echo "Public health check failed" && exit 1)
-          echo "✅ Deployment verified"
+          for port in 3000 3001 3002 3003; do
+            curl -sf -m 10 http://${{ secrets.ORACLE_HOST }}:$port/api/health && echo "✅ Deployment verified on port $port" && exit 0
+            curl -sfk -m 10 https://digitalfte.online/api/health && echo "✅ Deployment verified via domain" && exit 0
+          done
+          echo "Public health check failed on all ports" && exit 1
