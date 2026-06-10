@@ -15,7 +15,10 @@ BACKUP_ROOT="$HOME/deploy_backups"
 TS=$(date +%Y%m%d_%H%M%S)
 BACKUP_DIR="$BACKUP_ROOT/$TS"
 SERVICE="digitalfte-server"
-HEALTH_PORTS="3000 3001 3002 3003"
+# Read actual port from .env (server reads PORT from dotenv)
+ACTUAL_PORT=$(grep -oP '^PORT=\K\d+' "$VC_DIR/.env" 2>/dev/null || echo "3000")
+HEALTH_URL="http://localhost:$ACTUAL_PORT/api/health"
+log "Target health endpoint: $HEALTH_URL"
 
 log() { echo "[deploy $(date +%H:%M:%S)] $*"; }
 
@@ -66,21 +69,16 @@ done
 log "Starting $SERVICE"
 sudo systemctl start "$SERVICE"
 
-# ─── 6. Health check with retries (try all possible ports) ───
+# ─── 6. Health check with retries ───
+log "Health check: $HEALTH_URL"
 HEALTHY=false
-for port in 3000 3001 3002 3003; do
-  URL="http://localhost:$port/api/health"
-  log "Health check: $URL"
-  for i in $(seq 1 6); do
-    sleep 5
-    if curl -sf -m 5 "$URL" > /dev/null 2>&1; then
-      HEALTHY=true
-      log "✅ Service healthy on port $port"
-      break
-    fi
-    log "  attempt $i/6 — not healthy on port $port"
-  done
-  [ "$HEALTHY" = "true" ] && break
+for i in $(seq 1 12); do
+  sleep 5
+  if curl -sf -m 5 "$HEALTH_URL" > /dev/null 2>&1; then
+    HEALTHY=true
+    break
+  fi
+  log "  attempt $i/12 — not healthy yet"
 done
 
 if [ "$HEALTHY" = "true" ]; then
@@ -100,15 +98,9 @@ cp "$BACKUP_DIR/root_py/"*.py "$APP_DIR/" 2>/dev/null || true
 
 sudo systemctl restart "$SERVICE"
 sleep 8
-ROLLBACK_HEALTHY=false
-for port in $HEALTH_PORTS; do
-  if curl -sf -m 5 "http://localhost:$port/api/health" > /dev/null 2>&1; then
-    ROLLBACK_HEALTHY=true
-    log "↩️  Rollback successful — old version restored and healthy on port $port"
-    break
-  fi
-done
-if [ "$ROLLBACK_HEALTHY" != "true" ]; then
+if curl -sf -m 5 "$HEALTH_URL" > /dev/null 2>&1; then
+  log "↩️  Rollback successful — old version restored and healthy"
+else
   log "🚨 CRITICAL: rollback restart also unhealthy — manual intervention needed"
 fi
 exit 1
