@@ -48,6 +48,7 @@ if [ "$OLD_LOCK_HASH" != "$NEW_LOCK_HASH" ]; then
   log "package-lock.json changed — running npm ci (production deps)"
   cd "$VC_DIR"
   export PATH="$HOME/.nvm/versions/node/v24.16.0/bin:$PATH"
+  export PUPPETEER_SKIP_DOWNLOAD=true
   npm ci --omit=dev --no-audit --no-fund 2>&1 | tail -3
 else
   log "Dependencies unchanged — skipping npm install"
