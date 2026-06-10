@@ -86,7 +86,7 @@ export default function WhatsApp() {
     setConversationsLoading(true);
     setError(null);
     try {
-      const res = await axios.get("/api/whatsapp/live-chats");
+      const res = await axios.get("/api/whatsapp/live-chats", { timeout: 10000 });
       const list = res.data.chats || [];
       setConversations(list);
       if (list.length > 0 && !selectedConversation) {
@@ -95,7 +95,10 @@ export default function WhatsApp() {
       }
     } catch (err) {
       console.error("fetchConversations:", err);
-      setError("Failed to load conversations.");
+      // Don't show error on initial load - just show empty state
+      if (conversations.length > 0) {
+        setError("Failed to refresh conversations.");
+      }
     } finally {
       setLoading(false);
       setConversationsLoading(false);
@@ -106,7 +109,7 @@ export default function WhatsApp() {
     setMessagesLoading(true);
     try {
       const encoded = encodeURIComponent(convId);
-      const res = await axios.get(`/api/whatsapp/live-messages/${encoded}`);
+      const res = await axios.get(`/api/whatsapp/live-messages/${encoded}`, { timeout: 10000 });
       setMessages(res.data.messages || []);
     } catch (err) {
       console.error("fetchMessages:", err);
@@ -116,9 +119,12 @@ export default function WhatsApp() {
     }
   };
 
-  // Safety: force loading off after 10s no matter what
+  // Safety: force loading off after 8s no matter what
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 10000);
+    const t = setTimeout(() => {
+      setLoading(false);
+      setConversationsLoading(false);
+    }, 8000);
     return () => clearTimeout(t);
   }, []);
 

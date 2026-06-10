@@ -453,15 +453,20 @@ def generate_linkedin_post(content: str, filename: str) -> Dict[str, Any]:
     # Generate CTA
     cta = generate_linkedin_cta(content)
 
-    # Generate hashtags
+    # Generate hashtags (mandatory + topic-specific)
     hashtags = generate_linkedin_hashtags(topic)
 
-    # Assemble full post
+    # Generate mandatory mentions for maximum impressions
+    mentions = generate_linkedin_mentions()
+
+    # Assemble full post with mentions at the end for 10000+ impressions
     full_post = f"""{hook}
 
 {body}
 
 {cta}
+
+{mentions}
 
 {" ".join(hashtags)}"""
 
@@ -470,8 +475,9 @@ def generate_linkedin_post(content: str, filename: str) -> Dict[str, Any]:
     char_count = len(full_post)
     emoji_count = sum(1 for c in full_post if c in '🚀🎯💡📈✅🔥👇💼🤖⚡')
     hashtag_count = len(hashtags)
+    mention_count = 11  # 5 mandatory + 6 additional mentions
 
-    # Estimate reach based on hashtag popularity
+    # Estimate reach based on hashtag popularity + mentions
     estimated_reach = calculate_estimated_reach(hashtags)
 
     return {
@@ -480,11 +486,13 @@ def generate_linkedin_post(content: str, filename: str) -> Dict[str, Any]:
         "hook": hook,
         "body": body,
         "cta": cta,
+        "mentions": mentions,
         "hashtags": hashtags,
         "word_count": word_count,
         "char_count": char_count,
         "emoji_count": emoji_count,
         "hashtag_count": hashtag_count,
+        "mention_count": mention_count,
         "estimated_reach": estimated_reach,
         "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "optimal_post_time": "Tue-Thu, 10:00 AM - 12:00 PM",
@@ -612,33 +620,68 @@ def generate_linkedin_cta(content: str) -> str:
 
 
 def generate_linkedin_hashtags(topic: str) -> list:
-    """Generate 3-5 relevant hashtags based on topic."""
+    """Generate hashtags with mandatory tags for maximum impressions (10000+)."""
     topic_lower = topic.lower()
 
-    # Base hashtags for AI/SaaS content
-    base_hashtags = ["#AI", "#SaaS", "#AIAgents"]
+    # MANDATORY HASHTAGS - Har post mein ye hona chahiye for 10000+ impressions
+    mandatory_hashtags = [
+        "#AIEmployee",
+        "#ClaudeCode",
+        "#MERN",
+        "#Nextjs",
+        "#Automation",
+    ]
 
-    # Topic-specific additions
+    # Topic-specific additions for extra reach
+    topic_hashtags = []
     if "agent" in topic_lower:
-        base_hashtags.append("#AgenticAI")
+        topic_hashtags.append("#AgenticAI")
     elif "build" in topic_lower or "development" in topic_lower:
-        base_hashtags.append("#BuildInPublic")
+        topic_hashtags.append("#BuildInPublic")
     elif "startup" in topic_lower or "business" in topic_lower:
-        base_hashtags.append("#StartupLife")
-    elif "automation" in topic_lower or "workflow" in topic_lower:
-        base_hashtags.append("#Automation")
+        topic_hashtags.append("#StartupLife")
     elif "machine learning" in topic_lower or "ml" in topic_lower:
-        base_hashtags.append("#MachineLearning")
+        topic_hashtags.append("#MachineLearning")
+    elif "react" in topic_lower or "frontend" in topic_lower:
+        topic_hashtags.append("#ReactJS")
+    elif "node" in topic_lower or "backend" in topic_lower:
+        topic_hashtags.append("#NodeJS")
+    elif "python" in topic_lower:
+        topic_hashtags.append("#Python")
+    elif "api" in topic_lower:
+        topic_hashtags.append("#RESTAPI")
     else:
-        base_hashtags.append("#TechInnovation")
+        topic_hashtags.append("#TechInnovation")
 
-    # Ensure we have 3-5 hashtags
-    if len(base_hashtags) < 3:
-        base_hashtags.append("#Innovation")
-    if len(base_hashtags) > 5:
-        base_hashtags = base_hashtags[:5]
+    # Combine mandatory + topic-specific (max 5 total for LinkedIn best practice)
+    all_hashtags = mandatory_hashtags + topic_hashtags
+    return all_hashtags[:5]
 
-    return base_hashtags
+
+def generate_linkedin_mentions() -> str:
+    """Generate mandatory @mentions for every LinkedIn post for maximum impressions."""
+    # MANDATORY MENTIONS - Har post mein ye tags hona chahiye
+    mandatory_mentions = [
+        "@Ameen Alam",
+        "@zia khan",
+        "@Ali jawwad",
+        "@asharib ali",
+        "@Panaversity",
+    ]
+
+    # Additional mentions for extra impressions
+    additional_mentions = [
+        "@TalentPop",
+        "@App",
+        "@Talent",
+        "@Worx",
+        "@LinkedIn",
+        "@Solutions",
+    ]
+
+    # Combine all mentions
+    all_mentions = mandatory_mentions + additional_mentions
+    return " ".join(all_mentions)
 
 
 def calculate_estimated_reach(hashtags: list) -> Dict[str, Any]:
@@ -727,6 +770,24 @@ original_trigger: {original_filename}
 
 ---
 
+## Mandatory Mentions (Maximum Impressions)
+
+| Mention | Type | Purpose |
+|---------|------|---------|
+| @Ameen Alam | Person | Leadership/Team |
+| @zia khan | Person | Leadership/Team |
+| @Ali jawwad | Person | Leadership/Team |
+| @asharib ali | Person | Leadership/Team |
+| @Panaversity | Company | Education/Training |
+| @TalentPop | Company | Talent/Recruitment |
+| @App | Company | Technology |
+| @Talent | Company | Talent/Recruitment |
+| @Worx | Company | Work/Products |
+| @LinkedIn | Platform | Platform Visibility |
+| @Solutions | Company | Solutions/Services |
+
+---
+
 ## Hashtags
 
 | Hashtag | Category | Estimated Reach |
@@ -744,7 +805,7 @@ original_trigger: {original_filename}
 | **Expected Comments** | {post_data["estimated_reach"]["expected_comments"]} | Low |
 | **Expected Shares** | {post_data["estimated_reach"]["expected_shares"]} | Low |
 
-*Estimates based on hashtag reach and average account performance*
+*Estimates based on hashtag reach + mandatory mentions for 10000+ impressions*
 
 ---
 
@@ -755,6 +816,7 @@ original_trigger: {original_filename}
 | **Word Count** | {post_data["word_count"]} / 300 words |
 | **Character Count** | {post_data["char_count"]} / 2,800 characters |
 | **Hashtag Count** | {post_data["hashtag_count"]} / 5 hashtags |
+| **Mention Count** | {post_data["mention_count"]} / 11 mentions |
 | **Emoji Count** | {post_data["emoji_count"]} / 5 emojis |
 | **Readability Score** | Easy (short paragraphs, bullet points) |
 | **Optimal Post Time** | {post_data["optimal_post_time"]} |

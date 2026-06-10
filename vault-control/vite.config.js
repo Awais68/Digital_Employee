@@ -17,4 +17,11 @@ export default defineConfig({
       },
     },
   },
+  watch: {
+    ignored: [
+      "**/odoo-docker/**",
+      "**/node_modules/**",
+      "**/.git/**",
+    ],
+  },
 });

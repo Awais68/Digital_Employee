@@ -102,6 +102,26 @@ Har image ko validate karna LAZMI hai:
 - X/Twitter: 1600×900 (16:9)
 - Facebook: 1200×630 (1.91:1) or 1080×1920 (Stories)
 
+### LINKEDIN POST MANDATORY RULES (10000+ Impressions ke liye):
+Har LinkedIn post mein ye TAGS aur HASHTAGS LAZMI hona chahiye:
+
+**MANDATORY MENTIONS (Post ke end mein):**
+@Ameen Alam @zia khan @Ali jawwad @asharib ali @Panaversity @TalentPop @App @Talent @Worx @LinkedIn @Solutions
+
+**MANDATORY HASHTAGS:**
+#AIEmployee #ClaudeCode #MERN #Nextjs #Automation
+
+Example LinkedIn post format:
+[Hook - attention grabbing first line]
+
+[Body - 2-4 paragraphs with insights]
+
+[CTA - call to action]
+
+@Ameen Alam @zia khan @Ali jawwad @asharib ali @Panaversity @TalentPop @App @Talent @Worx @LinkedIn @Solutions
+
+#AIEmployee #ClaudeCode #MERN #Nextjs #Automation
+
 ### BUSINESS PRIORITY RULES:
 - Client emails: HIGH priority — respond within 2 hours
 - Invoice requests: Immediately create plan + approval request

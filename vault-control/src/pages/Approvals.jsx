@@ -36,6 +36,14 @@ export default function Approvals() {
     fetchApprovals()
   }, [activeTab])
 
+  // Safety: force loading off after 8s no matter what
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setLoading(false)
+    }, 8000)
+    return () => clearTimeout(t)
+  }, [])
+
   const [scheduledPosts, setScheduledPosts] = useState([])
 
   const fetchApprovals = useCallback(async () => {
@@ -43,8 +51,9 @@ export default function Approvals() {
     setError(null)
     try {
       if (activeTab === 'queue') {
-        const res = await axios.get('/api/posts/scheduled')
+        const res = await axios.get('/api/posts/scheduled', { timeout: 10000 })
         setScheduledPosts(res.data.posts || res.data || [])
+        setLoading(false)
         return
       }
       let url = '/api/approvals'
@@ -54,11 +63,14 @@ export default function Approvals() {
         url += '/rejected'
       }
       
-      const res = await axios.get(url)
+      const res = await axios.get(url, { timeout: 10000 })
       setApprovals(res.data)
     } catch (err) {
       console.error('Failed to fetch approvals:', err)
-      setError('Failed to load approvals. Please try again.')
+      // Don't show error on initial load - just show empty state
+      if (approvals.length > 0) {
+        setError('Failed to load approvals. Please try again.')
+      }
       setApprovals([])
     } finally {
       setLoading(false)

@@ -37,11 +37,31 @@ function ActionBadge({ action }) {
     CREATE_DRAFT: '📝 Draft created',
     SEND_WHATSAPP: '💬 WhatsApp sent',
     APPROVE_DRAFT: '🚀 Draft approved',
-    CHECK_EMAILS: '📧 Checking emails',
+    CHECK_EMAILS: '📧 Checking emails...',
   };
   return (
     <div className="mx-3 mb-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg text-xs text-green-700 dark:text-green-300">
       {labels[action.type] || `⚡ Action: ${action.type}`}
+    </div>
+  );
+}
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex justify-start mb-3">
+      <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold mr-2 mt-1 shrink-0">
+        FTE
+      </div>
+      <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl rounded-bl-sm px-4 py-3">
+        <div className="flex items-center gap-2">
+          <div className="flex space-x-1">
+            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+          <span className="text-xs text-gray-500 dark:text-gray-400">Thinking...</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -52,13 +72,14 @@ export default function ChatbotPanel({ isOpen, onClose }) {
   const [isLoading, setIsLoading] = useState(false);
   const [lastAction, setLastAction] = useState(null);
   const [streamingText, setStreamingText] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const abortRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingText]);
+  }, [messages, streamingText, isThinking]);
 
   useEffect(() => {
     if (isOpen) inputRef.current?.focus();
@@ -77,6 +98,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
+    setIsThinking(true);
     setStreamingText('');
     setLastAction(null);
 
@@ -109,13 +131,24 @@ export default function ChatbotPanel({ isOpen, onClose }) {
           if (!line.startsWith('data:')) continue;
           try {
             const parsed = JSON.parse(line.slice(5).trim());
-            if (parsed.type === 'chunk') {
+            if (parsed.type === 'thinking') {
+              // Show thinking indicator
+              setIsThinking(true);
+            } else if (parsed.type === 'chunk') {
+              setIsThinking(false);
               accumulated += parsed.text;
               // Strip <ACTION> block from display
               const displayText = accumulated.replace(/<ACTION>[\s\S]*?<\/ACTION>/g, '').trim();
               setStreamingText(displayText);
             } else if (parsed.type === 'action') {
               setLastAction(parsed.action);
+            } else if (parsed.type === 'email_status') {
+              // Handle email status response
+              if (parsed.data && parsed.data.summary) {
+                accumulated += '\n\n' + parsed.data.summary;
+                const displayText = accumulated.replace(/<ACTION>[\s\S]*?<\/ACTION>/g, '').trim();
+                setStreamingText(displayText);
+              }
             } else if (parsed.type === 'done') {
               const finalText = accumulated.replace(/<ACTION>[\s\S]*?<\/ACTION>/g, '').trim();
               setMessages((prev) => [
@@ -123,6 +156,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
                 { role: 'assistant', content: finalText },
               ]);
               setStreamingText('');
+              setIsThinking(false);
             } else if (parsed.type === 'error') {
               throw new Error(parsed.message);
             }
@@ -141,17 +175,28 @@ export default function ChatbotPanel({ isOpen, onClose }) {
           },
         ]);
         setStreamingText('');
+        setIsThinking(false);
       }
     } finally {
       setIsLoading(false);
+      setIsThinking(false);
       inputRef.current?.focus();
     }
   }, [input, isLoading, messages]);
+
+  const handleKeyDown = useCallback((e) => {
+    // Enter key se message send ho (Shift+Enter for new line)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }, [sendMessage]);
 
   const clearChat = () => {
     setMessages([INITIAL_MESSAGE]);
     setLastAction(null);
     setStreamingText('');
+    setIsThinking(false);
   };
 
   if (!isOpen) return null;
@@ -194,6 +239,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} isStreaming={false} />
         ))}
+        {isThinking && <ThinkingIndicator />}
         {streamingText && (
           <MessageBubble
             msg={{ role: 'assistant', content: streamingText }}
@@ -213,6 +259,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Kuch bhi poochein ya kaam batayein..."
             rows={1}
             className="flex-1 bg-transparent resize-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 max-h-24 overflow-y-auto"
@@ -233,7 +280,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
           </button>
         </div>
         <p className="text-center text-xs text-gray-400 mt-1.5">
-          Click send to chat
+          Press Enter to send • Shift+Enter for new line
         </p>
       </div>
     </div>

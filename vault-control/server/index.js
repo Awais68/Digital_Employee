@@ -554,6 +554,8 @@ if (vaultPath) {
       /whatsapp_session/,
       /linkedin_session/,
       /facebook_session/,
+      /odoo-docker/,
+      /venv/,
       /\.git/,
       /\.obsidian/,
       /\.claude/,
