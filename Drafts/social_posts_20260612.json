@@ -1,0 +1,129 @@
+{
+  "brand": "Digital FTE — Autonomous AI Employees",
+  "niche": "AI automation / agentic AI / digital workforce",
+  "date": "2026-06-12",
+  "status": "draft_pending_approval",
+  "notes": "Mentions use @name text tags (matches existing approved posts). API URN tagging requires LINKEDIN_URN_AMEEN / _ZIA / _JAWWAD / _ASHARIB env vars — not yet set, so mentions[] holds placeholders.",
+  "posts": [
+    {
+      "slot": "morning",
+      "platform": "linkedin",
+      "caption": "Most \"AI tools\" just add another tab to your day.\n\nWe built the opposite: an AI employee that closes tabs.\n\nThis week our Digital FTE handled the boring stuff end-to-end:\n• Triaged the inbox and drafted replies\n• Turned email requests into approval-ready plans\n• Posted to socials — on schedule, on brand\n\nNo dashboards to babysit. No prompts to copy-paste. It just works while you sleep.\n\nThe shift isn't \"AI that helps you work.\" It's AI that does the work and asks you to approve.\n\nWhat's the first task you'd hand to a digital employee? 👇\n\n@Ameen Alam @zia khan @jawwad ali @Asharib ali",
+      "hashtags": ["#AIEmployee", "#AgenticAI", "#Automation", "#FutureOfWork", "#DigitalFTE", "#Productivity", "#AIAgents"],
+      "mentions": ["urn:li:person:AMEEN_PLACEHOLDER", "urn:li:person:ZIA_PLACEHOLDER", "urn:li:person:JAWWAD_PLACEHOLDER", "urn:li:person:ASHARIB_PLACEHOLDER"],
+      "image_prompt": "A clean, modern flat-illustration of a glowing AI assistant calmly closing browser tabs and email windows on a desk at night, soft blue and teal palette, professional tech aesthetic, minimal, high contrast, no text",
+      "image_url": "https://source.unsplash.com/1200x627/?automation,artificial-intelligence,workflow",
+      "scheduled_time": "09:00"
+    },
+    {
+      "slot": "morning",
+      "platform": "facebook",
+      "caption": "What if your business had an employee that never sleeps? 🌙\n\nOur Digital FTE spent the night triaging emails, drafting replies, and prepping work for approval — so the team woke up to a clear desk instead of a full inbox.\n\nThis is what AI automation actually looks like: not flashy demos, but quiet, reliable work that gets done.\n\nWould you trust an AI to run your busywork? Tell us below 👇",
+      "hashtags": ["#AIEmployee", "#Automation", "#SmallBusiness", "#AIAgents", "#FutureOfWork", "#Productivity"],
+      "mentions": [],
+      "image_prompt": "A clean, modern flat-illustration of a glowing AI assistant working at a desk at night while a city sleeps in the background, soft blue and teal palette, professional, minimal, no text",
+      "image_url": "https://source.unsplash.com/1200x630/?ai,night,work",
+      "scheduled_time": "09:00"
+    },
+    {
+      "slot": "morning",
+      "platform": "instagram",
+      "caption": "Your inbox at 6am, handled. ☕\n\nMeet the Digital FTE — an AI employee that triages email, drafts replies, and preps work for your approval while you sleep.\n\nLess busywork. More building.\n\nSave this if your inbox runs your morning. 📌",
+      "hashtags": ["#AIEmployee", "#AgenticAI", "#Automation", "#Productivity", "#TechTrends", "#DigitalFTE", "#AIAgents", "#FutureOfWork"],
+      "mentions": [],
+      "image_prompt": "Square 1:1 vibrant illustration of a calm sunrise desk scene with a glowing AI orb organizing emails into neat stacks, warm-to-cool gradient, modern, aesthetic, no text",
+      "image_url": "https://source.unsplash.com/1080x1080/?morning,desk,technology",
+      "scheduled_time": "09:00"
+    },
+    {
+      "slot": "morning",
+      "platform": "twitter",
+      "caption": "Most AI tools add a tab to your day.\n\nWe built one that closes them.\n\nOvernight, our Digital FTE triaged the inbox, drafted replies, and queued work for approval.\n\nAI that does the work — and asks you to sign off. 👇",
+      "hashtags": ["#AIagents", "#Automation", "#AI", "#FutureOfWork", "#DigitalFTE"],
+      "mentions": [],
+      "image_prompt": "Wide 16:9 minimal illustration of an AI orb closing browser tabs, blue-teal palette, clean tech aesthetic, no text",
+      "image_url": "https://source.unsplash.com/1200x675/?automation,ai",
+      "scheduled_time": "09:00"
+    },
+    {
+      "slot": "afternoon",
+      "platform": "linkedin",
+      "caption": "We almost shipped an AI agent that emailed the wrong client. Here's the rule that saved us. 🛑\n\nThe agent was fast. Too fast. It drafted, it sent, it moved on — and one wrong draft would've gone straight to a customer.\n\nSo we added one line to the system:\n\n\"Draft only. Require human approval before anything leaves the building.\"\n\nThat single guardrail changed everything:\n• Speed of AI ✅\n• Judgment of a human ✅\n• Zero \"oh no\" moments ✅\n\nAutonomy isn't about removing humans. It's about removing the busywork *and keeping the human on the trigger.*\n\nWhere would you draw the approval line in your workflow?\n\n@Ameen Alam @zia khan @jawwad ali @Asharib ali",
+      "hashtags": ["#AIAgents", "#Automation", "#AIGovernance", "#AgenticAI", "#TechLeadership", "#FutureOfWork", "#DigitalFTE"],
+      "mentions": ["urn:li:person:AMEEN_PLACEHOLDER", "urn:li:person:ZIA_PLACEHOLDER", "urn:li:person:JAWWAD_PLACEHOLDER", "urn:li:person:ASHARIB_PLACEHOLDER"],
+      "image_prompt": "Modern flat illustration of a human hand hovering over a green 'Approve' button while an AI robot waits politely, clean blue-green palette, professional, conveys trust and control, no text",
+      "image_url": "https://source.unsplash.com/1200x627/?approval,checklist,technology",
+      "scheduled_time": "13:30"
+    },
+    {
+      "slot": "afternoon",
+      "platform": "facebook",
+      "caption": "Fast AI is easy. Trustworthy AI is the hard part. 🤝\n\nWe gave our AI employee one unbreakable rule: it can draft anything, but a human approves before it sends.\n\nThat's how you get the speed of automation without the risk of a bad email going out at 2am.\n\nWhat's one task you'd let AI draft — but always want to approve yourself?",
+      "hashtags": ["#Automation", "#AIAgents", "#SmallBusiness", "#TechTrends", "#FutureOfWork"],
+      "mentions": [],
+      "image_prompt": "Friendly flat illustration of a person approving an AI-drafted message on a phone, green checkmark, warm professional palette, no text",
+      "image_url": "https://source.unsplash.com/1200x630/?trust,approve,technology",
+      "scheduled_time": "13:30"
+    },
+    {
+      "slot": "afternoon",
+      "platform": "instagram",
+      "caption": "The 1 rule that makes AI safe to trust 👇\n\nDraft everything. Approve before it sends.\n\nThat's it. Speed of a robot, judgment of a human.\n\nAutonomy without the \"oh no.\" 🛑✅\n\nDouble-tap if your AI needs a human in the loop. ❤️",
+      "hashtags": ["#AIAgents", "#Automation", "#AgenticAI", "#TechTips", "#Productivity", "#DigitalFTE", "#FutureOfWork", "#AIEmployee"],
+      "mentions": [],
+      "image_prompt": "Bold square 1:1 graphic with a large green checkmark and a subtle robot silhouette, modern gradient background, clean and punchy, no text",
+      "image_url": "https://source.unsplash.com/1080x1080/?checkmark,robot,modern",
+      "scheduled_time": "13:30"
+    },
+    {
+      "slot": "afternoon",
+      "platform": "twitter",
+      "caption": "We almost shipped an AI agent that emailed the wrong client.\n\nThe fix was one line:\n\n\"Draft only. Human approves before it sends.\"\n\nSpeed of AI. Judgment of a human. Zero oh-no moments.\n\nWhere's your approval line? 👇",
+      "hashtags": ["#AIagents", "#Automation", "#AI", "#BuildInPublic", "#DigitalFTE"],
+      "mentions": [],
+      "image_prompt": "Wide 16:9 minimal graphic: a green approve button under a robot hand, blue-green palette, clean, no text",
+      "image_url": "https://source.unsplash.com/1200x675/?approve,automation",
+      "scheduled_time": "13:30"
+    },
+    {
+      "slot": "evening",
+      "platform": "linkedin",
+      "caption": "By 2027, \"headcount\" won't only mean humans. Here's why that's good news. 🤖\n\nFor decades, scaling a team meant hiring, onboarding, and hoping. Slow. Expensive. Risky.\n\nNow there's a second option: digital employees that handle the repeatable work — inbox triage, reporting, scheduling, content — and hand the judgment calls back to you.\n\nThe winners won't be the companies with the most people. They'll be the ones who pair a small, sharp human team with a fleet of AI teammates doing the busywork.\n\nThis isn't humans *vs* AI. It's humans *plus* AI — and the gap between the two camps is about to get very wide.\n\nIf you could add one digital teammate to your team tomorrow, what would it do all day?\n\n@Ameen Alam @zia khan @jawwad ali @Asharib ali",
+      "hashtags": ["#FutureOfWork", "#AIEmployee", "#DigitalTransformation", "#AgenticAI", "#Leadership", "#Automation", "#DigitalFTE"],
+      "mentions": ["urn:li:person:AMEEN_PLACEHOLDER", "urn:li:person:ZIA_PLACEHOLDER", "urn:li:person:JAWWAD_PLACEHOLDER", "urn:li:person:ASHARIB_PLACEHOLDER"],
+      "image_prompt": "Cinematic modern illustration of a small human team collaborating with glowing holographic AI teammates around a table, warm and hopeful lighting, blue-gold palette, professional, no text",
+      "image_url": "https://source.unsplash.com/1200x627/?team,future,technology",
+      "scheduled_time": "18:30"
+    },
+    {
+      "slot": "evening",
+      "platform": "facebook",
+      "caption": "What does your team look like in 2027? 🤔\n\nProbably a small group of humans doing the creative, high-judgment work — backed by AI teammates handling the repetitive stuff.\n\nNot humans vs AI. Humans + AI.\n\nThe companies that figure this out first will move twice as fast with half the busywork.\n\nIf you could hire one digital teammate tomorrow, what would it do? 👇",
+      "hashtags": ["#FutureOfWork", "#AIEmployee", "#SmallBusiness", "#Automation", "#TechTrends", "#DigitalTransformation"],
+      "mentions": [],
+      "image_prompt": "Warm illustration of humans and friendly AI robots working together at a shared table, hopeful lighting, blue-gold palette, no text",
+      "image_url": "https://source.unsplash.com/1200x630/?teamwork,future,ai",
+      "scheduled_time": "18:30"
+    },
+    {
+      "slot": "evening",
+      "platform": "instagram",
+      "caption": "Your 2027 team, predicted 🔮\n\n→ A few humans on the big calls\n→ A fleet of AI teammates on the busywork\n\nNot humans vs AI. Humans + AI. 🤝\n\nThe gap between teams that get this and teams that don't? About to get huge.\n\nSave this for when it happens. 📌",
+      "hashtags": ["#FutureOfWork", "#AIEmployee", "#AgenticAI", "#TechTrends", "#DigitalFTE", "#Innovation", "#Automation", "#AIAgents"],
+      "mentions": [],
+      "image_prompt": "Square 1:1 futuristic but warm illustration of a human and a glowing AI figure shaking hands, gradient blue-gold background, modern aesthetic, no text",
+      "image_url": "https://source.unsplash.com/1080x1080/?future,handshake,ai",
+      "scheduled_time": "18:30"
+    },
+    {
+      "slot": "evening",
+      "platform": "twitter",
+      "caption": "By 2027, \"headcount\" won't only mean humans.\n\nSmall sharp human teams + a fleet of AI teammates doing the busywork.\n\nNot humans vs AI. Humans + AI.\n\nThe gap between the two camps is about to get wide. 🤖\n\nWhat would your digital teammate do all day? 👇",
+      "hashtags": ["#FutureOfWork", "#AIagents", "#AI", "#DigitalFTE", "#Automation"],
+      "mentions": [],
+      "image_prompt": "Wide 16:9 illustration of a human and AI figure side by side, hopeful blue-gold palette, modern, no text",
+      "image_url": "https://source.unsplash.com/1200x675/?future,ai,team",
+      "scheduled_time": "18:30"
+    }
+  ]
+}

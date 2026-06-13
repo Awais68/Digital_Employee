@@ -25,12 +25,25 @@ function isUsefulNotification(n) {
   return false
 }
 
-export default function NotificationBell() {
+// Notification se page determine karo
+function getPageFromNotification(n) {
+  const src = n.data?.source
+  const title = n.title || ''
+  const msg = n.message || ''
+
+  if (src === 'email' || title.includes('📧') || title.includes('Email') || msg.includes('email')) return 'emails'
+  if (src === 'whatsapp' || title.includes('📱') || title.includes('WhatsApp')) return 'whatsapp'
+  if (src === 'todo' || title.includes('📝') || title.includes('Todo') || title.includes('Task') || title.includes('Reminder')) return 'todos'
+  if (src === 'social' || title.includes('Post') || title.includes('Draft')) return 'social'
+  if (n.type === 'error' || n.type === 'warning') return 'logs'
+  return null // null = navigate nahi karo
+}
+
+export default function NotificationBell({ setCurrentPage }) {
   const [notifications, setNotifications] = useState([])
   const [unread, setUnread] = useState(0)
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
-
   const filteredNotifications = notifications.filter(isUsefulNotification)
 
   const loadNotifications = async () => {
@@ -44,7 +57,6 @@ export default function NotificationBell() {
 
   useEffect(() => {
     loadNotifications()
-
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${proto}//${window.location.host}/ws`)
     ws.onmessage = (event) => {
@@ -64,11 +76,9 @@ export default function NotificationBell() {
         }
       } catch {}
     }
-
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission()
     }
-
     return () => ws.close()
   }, [])
 
@@ -89,6 +99,14 @@ export default function NotificationBell() {
       setUnread(0)
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
     }
+  }
+
+  const handleNotificationClick = (n) => {
+    const page = getPageFromNotification(n)
+    if (page && setCurrentPage) {
+      setCurrentPage(page)
+    }
+    setOpen(false)
   }
 
   return (
@@ -121,28 +139,37 @@ export default function NotificationBell() {
               No important notifications
             </div>
           ) : (
-            filteredNotifications.map(n => (
-              <div
-                key={n.id}
-                className={`p-3 border-b dark:border-[#1A1A24] transition-colors ${
-                  n.read ? '' : 'dark:bg-[#1A1A24]/40 bg-blue-50/30'
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${TYPE_COLORS[n.type] || 'bg-gray-500'}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold dark:text-[#E0E0E6] truncate">{n.title}</p>
-                    <p className="text-[10px] dark:text-[#7A7A85] mt-0.5 line-clamp-2">{n.message}</p>
-                    <small className="text-[9px] dark:text-[#7A7A85] mt-1 block opacity-60">
-                      {n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
-                    </small>
+            filteredNotifications.map(n => {
+              const targetPage = getPageFromNotification(n)
+              return (
+                <div
+                  key={n.id}
+                  onClick={() => handleNotificationClick(n)}
+                  className={`p-3 border-b dark:border-[#1A1A24] transition-colors ${
+                    n.read ? '' : 'dark:bg-[#1A1A24]/40 bg-blue-50/30'
+                  } ${targetPage ? 'cursor-pointer hover:dark:bg-[#1A1A24] hover:bg-gray-50' : ''}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${TYPE_COLORS[n.type] || 'bg-gray-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs font-bold dark:text-[#E0E0E6] truncate">{n.title}</p>
+                        {targetPage && (
+                          <span className="text-[8px] dark:text-[#00FF88] text-blue-500 shrink-0">→ {targetPage}</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] dark:text-[#7A7A85] mt-0.5 line-clamp-2">{n.message}</p>
+                      <small className="text-[9px] dark:text-[#7A7A85] mt-1 block opacity-60">
+                        {n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
+                      </small>
+                    </div>
+                    {!n.read && (
+                      <Check size={12} className="dark:text-[#00FF88] mt-1 flex-shrink-0" />
+                    )}
                   </div>
-                  {!n.read && (
-                    <Check size={12} className="dark:text-[#00FF88] mt-1 flex-shrink-0" />
-                  )}
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       )}

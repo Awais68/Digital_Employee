@@ -21,6 +21,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.101.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "axios": "^1.17.0",
     "compression": "^1.8.1",
     "googleapis": "^171.4.0",
     "mime-types": "^2.1.35"

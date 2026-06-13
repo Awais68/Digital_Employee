@@ -28,7 +28,7 @@ const folderIcons = {
   Drafts: FolderOpen,
 }
 
-export default function TopBar({ isDark, setIsDark, currentPage, setCurrentPage }) {
+export default function TopBar({ isDark, setIsDark, currentPage, setCurrentPage })  {
   const [searchFocus, setSearchFocus] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -149,7 +149,7 @@ export default function TopBar({ isDark, setIsDark, currentPage, setCurrentPage 
        {/* Right: Actions */}
        <div className="flex items-center gap-3">
          {/* Notifications */}
-         <NotificationBell />
+         <NotificationBell setCurrentPage={setCurrentPage} />
 
         {/* Theme Toggle */}
         <button
