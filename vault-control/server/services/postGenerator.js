@@ -5,6 +5,55 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+// STRICT PLATFORM RULES
+const STRICT_PLATFORM_RULES = {
+  linkedin: {
+    minWords: 80, maxWords: 300,
+    minHashtags: 3, maxHashtags: 5,
+    requireEmojis: true, requireLineBreaks: true,
+    tone: 'professional, insightful, thought-leadership',
+    structure: 'HOOK → BODY (2-4 paragraphs with emojis) → HASHTAGS → CTA'
+  },
+  facebook: {
+    minWords: 50, maxWords: 250,
+    minHashtags: 2, maxHashtags: 5,
+    requireEmojis: true,
+    tone: 'friendly, conversational, relatable',
+    structure: 'HOOK → BODY (conversational) → HASHTAGS'
+  },
+  instagram: {
+    minWords: 30, maxWords: 150,
+    minHashtags: 10, maxHashtags: 15,
+    requireEmojis: true, requireLineBreaks: true,
+    tone: 'casual, inspiring, motivational',
+    structure: 'HOOK → BODY (short sentences, emojis) → HASHTAGS (10-15)'
+  },
+  twitter: {
+    minWords: 10, maxWords: 50,
+    minHashtags: 1, maxHashtags: 3,
+    requireEmojis: true,
+    tone: 'punchy, concise, impactful',
+    structure: 'Tweet (280 chars max) → HASHTAGS'
+  }
+};
+
+function getStrictPlatformRules(platform) {
+  const rules = STRICT_PLATFORM_RULES[platform] || STRICT_PLATFORM_RULES.linkedin;
+  return `Platform: ${platform}
+- Word count: ${rules.minWords}-${rules.maxWords} words (STRICT)
+- Hashtags: ${rules.minHashtags}-${rules.maxHashtags} at the END (STRICT)
+- Emojis: REQUIRED - use at least 3-5 as bullet points
+- Line breaks: ${rules.requireLineBreaks ? 'REQUIRED between paragraphs' : 'Optional'}
+- Tone: ${rules.tone}
+- Structure: ${rules.structure}
+- FORBIDDEN: buy now, click here, limited time, act fast, 100% free`;
+}
+
+function getPlatformHashtagCount(platform) {
+  const rules = STRICT_PLATFORM_RULES[platform] || STRICT_PLATFORM_RULES.linkedin;
+  return `${rules.minHashtags}-${rules.maxHashtags}`;
+}
+
 export const DEFAULT_TOPICS = [
   'Software Engineering best practices',
   'Web Development trends',
@@ -227,8 +276,8 @@ ACCOUNTS TO MENTION: ${research.relevant_accounts?.slice(0, 2).join(' ')}
 WEB RESEARCH DATA:
 ${webData.substring(0, 1000)}
 
-PLATFORM RULES:
-${platformRules[platform] || platformRules.linkedin}
+STRICT PLATFORM RULES (MUST FOLLOW ALL):
+${getStrictPlatformRules(platform)}
 
 MARKETING PSYCHOLOGY FRAMEWORK — Use ONE of these:
 1. AIDA: Attention → Interest → Desire → Action
@@ -236,7 +285,7 @@ MARKETING PSYCHOLOGY FRAMEWORK — Use ONE of these:
 3. Hook-Story-Offer: Hook → Relatable story → Value proposition
 4. Before-After-Bridge: Where they are → Where they could be → How to get there
 
-CONTENT REQUIREMENTS:
+CONTENT REQUIREMENTS (STRICT - VIOLATION = REJECTION):
 - Lead with a STRONG HOOK (question, bold statement, surprising stat, or relatable pain point)
 - Use specific numbers, data points, and real examples (from web research)
 - Address a real pain point your audience faces
@@ -245,6 +294,10 @@ CONTENT REQUIREMENTS:
 - End with a CTA that drives engagement (question, poll, discussion starter)
 - Sound human, not corporate. Like an expert sharing genuine insight.
 - NO fluff, NO generic advice, NO ChatGPT-sounding sentences
+- MUST have ${getPlatformHashtagCount(platform)} hashtags at the end
+- MUST have at least 3-5 emojis
+- MUST have line breaks between paragraphs
+- NO forbidden words: buy now, click here, limited time, act fast, 100% free
 
 Return ONLY the post text. No explanations, no intro, no markdown formatting around the text.`;
 

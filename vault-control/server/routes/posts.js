@@ -23,8 +23,122 @@ const memoryUpload = multer({
 
 const router = express.Router()
 
+// STRICT SOCIAL MEDIA RULES
+const STRICT_RULES = {
+  requireImage: true,
+  requireHashtags: true,
+  requireEmojis: true,
+  requireMentions: true,
+  minHashtags: 3,
+  maxHashtags: 5,
+  blockWithoutImage: true,
+  mandatoryMentions: ['@ameenalam', '@ziakhan', '@asharibali'],
+  spamKeywords: ['buy now', 'click here', 'limited time', 'act fast', '100% free', 'act now', 'free money'],
+  platforms: {
+    linkedin: { minWords: 150, maxWords: 300, minHashtags: 3, maxHashtags: 5 },
+    facebook: { minWords: 150, maxWords: 250, minHashtags: 2, maxHashtags: 5 },
+    instagram: { minWords: 150, maxWords: 200, minHashtags: 10, maxHashtags: 15 },
+    twitter: { minWords: 10, maxWords: 50, minHashtags: 1, maxHashtags: 3, disabled: true },
+  }
+}
+
+// STRICT VALIDATION FUNCTION
+function validatePostStrict(content, platforms, hasImage) {
+  const errors = []
+  
+  // Image validation (MANDATORY)
+  if (STRICT_RULES.blockWithoutImage && !hasImage) {
+    errors.push('BLOCKED: Image is MANDATORY - every post must have an image')
+  }
+  
+  // Content validation
+  if (!content || content.trim().length === 0) {
+    errors.push('Content cannot be empty')
+    return errors
+  }
+  
+  const words = content.split(/\s+/).filter(w => w.length > 0)
+  
+  // Global minimum word count
+  if (words.length < 150) {
+    errors.push(`Minimum 150 words required (current: ${words.length})`)
+  }
+  
+  // Word count per platform
+  platforms.forEach(platformId => {
+    const platformRules = STRICT_RULES.platforms[platformId]
+    if (platformRules) {
+      if (words.length < platformRules.minWords) {
+        errors.push(`${platformId}: Too few words (${words.length}/${platformRules.minWords} minimum)`)
+      }
+      if (words.length > platformRules.maxWords) {
+        errors.push(`${platformId}: Too many words (${words.length}/${platformRules.maxWords} maximum)`)
+      }
+    }
+  })
+  
+  // Hashtag validation
+  if (STRICT_RULES.requireHashtags) {
+    const hashtags = content.match(/#\w+/g) || []
+    if (hashtags.length < STRICT_RULES.minHashtags) {
+      errors.push(`Too few hashtags (${hashtags.length}/${STRICT_RULES.minHashtags} minimum)`)
+    }
+  }
+  
+  // Mandatory mentions validation
+  if (STRICT_RULES.requireMentions) {
+    const contentLower = content.toLowerCase()
+    const missingMentions = STRICT_RULES.mandatoryMentions.filter(m => !contentLower.includes(m.toLowerCase()))
+    if (missingMentions.length > 0) {
+      errors.push(`Missing mandatory mentions: ${missingMentions.join(', ')} - Required for maximum reach`)
+    }
+  }
+  
+  // Emoji validation
+  if (STRICT_RULES.requireEmojis) {
+    const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{24C2}-\u{1F251}]/gu
+    const emojis = content.match(emojiRegex) || []
+    if (emojis.length < 2) {
+      errors.push(`Too few emojis (${emojis.length}/2 minimum)`)
+    }
+  }
+  
+  // Spam detection
+  const lowerContent = content.toLowerCase()
+  STRICT_RULES.spamKeywords.forEach(spam => {
+    if (lowerContent.includes(spam.toLowerCase())) {
+      errors.push(`Spam keyword detected: "${spam}"`)
+    }
+  })
+  
+  return errors
+}
+
 router.get('/topics', (req, res) => {
   res.json({ topics: DEFAULT_TOPICS })
+})
+
+// POST /generate-image - Auto-generate image for post
+router.post('/generate-image', async (req, res) => {
+  try {
+    const { topic, style } = req.body
+    
+    if (!topic) {
+      return res.status(400).json({ error: 'Topic is required for image generation' })
+    }
+    
+    console.log('[ImageGen] Generating image for topic:', topic)
+    
+    const { generatePostImage } = await import('../services/imageGenerator.js')
+    const imageUrl = await generatePostImage(topic, style || 'professional')
+    
+    console.log('[ImageGen] Generated image URL:', imageUrl)
+    
+    res.json({ success: true, imageUrl })
+  } catch (e) {
+    console.error('[ImageGen] Failed:', e.message)
+    res.status(500).json({ error: 'Image generation failed: ' + e.message })
+  }
 })
 
 router.post('/generate', async (req, res) => {
@@ -236,6 +350,18 @@ router.post('/publish-now', memoryUpload.single('image'), async (req, res) => {
 
     console.log('[PublishNow] Platforms:', platformList)
     console.log('[PublishNow] Has image:', !!imageBuffer, imageBuffer ? req.file.size + ' bytes' : '')
+
+    // STRICT VALIDATION
+    const validationErrors = validatePostStrict(content, platformList, !!imageBuffer)
+    if (validationErrors.length > 0) {
+      console.log('[PublishNow] BLOCKED:', validationErrors)
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        validationErrors,
+        results: platformList.map(p => ({ platform: p, success: false, error: 'Validation failed: ' + validationErrors[0] }))
+      })
+    }
 
     const { postToFacebook, postToLinkedIn, postToInstagram, postToTwitter } =
       await import('../services/socialMediaService.js')

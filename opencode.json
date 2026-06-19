@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "canva": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-remote@latest", "https://mcp.canva.com/mcp"],
+      "timeout": 30000
+    }
+  }
+}

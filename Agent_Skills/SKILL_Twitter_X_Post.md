@@ -1,9 +1,13 @@
-# 🔵 SKILL: Twitter/X Posting via Playwright MCP
+# SKILL: Twitter/X Posting via Playwright MCP
+
+> **STATUS: DISABLED** - Twitter integration is currently silent/disabled.
+> Do NOT process Twitter tasks. Skip any TWITTER_* files in Needs_Action/.
 
 **Version:** 1.0.0 (Silver Tier)
 **Tier:** Silver - Human-in-the-Loop
 **Type:** Action Skill
 **Last Updated:** 2026-04-10
+**Disabled:** 2026-06-19
 
 ---
 

@@ -1,16 +1,16 @@
 {
-  "timestamp": "2026-06-13T10:50:01.635545",
+  "timestamp": "2026-06-20T02:00:02.058728",
   "status": {
     "odoo_local": true,
-    "dashboard": false,
+    "dashboard": true,
     "gmail_watcher": false,
     "whatsapp_watcher": true,
-    "disk_usage_pct": 82,
+    "disk_usage_pct": 89,
     "needs_action_backlog": 0
   },
   "alerts": [
-    "ALERT: Dashboard port 3000 not responding",
-    "ALERT: gmail_watcher not running!"
+    "ALERT: gmail_watcher not running!",
+    "ALERT: Disk usage at 89%"
   ],
   "overall": "DEGRADED"
 }

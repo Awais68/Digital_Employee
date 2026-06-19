@@ -3,6 +3,9 @@
 SKILL_Twitter_X_Post.py — Playwright MCP for Twitter/X
 =======================================================
 
+STATUS: DISABLED - Twitter integration is currently silent/disabled.
+Do NOT process Twitter tasks. Skip any TWITTER_* files in Needs_Action/.
+
 Gold Tier v5.0 — Human-in-the-Loop Social Media Posting
 
 Features:

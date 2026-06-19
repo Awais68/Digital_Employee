@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="hsl(207, 80%, 35%)" />
+      <stop offset="100%" stop-color="#0a0a1a" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="hsl(167, 70%, 55%)" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="hsl(347, 80%, 60%)" stop-opacity="0.1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+  </defs>
+  <rect width="1080" height="1350" fill="url(#bg)" />
+  <circle cx="162" cy="405" r="378" fill="url(#accent)" />
+  <circle cx="918" cy="944.9999999999999" r="270" fill="url(#accent)" />
+  <g stroke="hsl(167, 70%, 55%)" stroke-opacity="0.08" stroke-width="1">
+    <line x1="0" y1="337.5" x2="1080" y2="337.5" /><line x1="0" y1="675" x2="1080" y2="675" /><line x1="0" y1="1012.5" x2="1080" y2="1012.5" /><line x1="0" y1="1350" x2="1080" y2="1350" />
+    <line x1="270" y1="0" x2="270" y2="1350" /><line x1="540" y1="0" x2="540" y2="1350" /><line x1="810" y1="0" x2="810" y2="1350" /><line x1="1080" y1="0" x2="1080" y2="1350" />
+  </g>
+  <rect x="80" y="160" width="120" height="6" rx="3" fill="hsl(167, 70%, 55%)" />
+  <rect x="80" y="176" width="80" height="4" rx="2" fill="hsl(347, 80%, 60%)" />
+  <g filter="url(#glow)">
+    <text x="80" y="480" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="29" font-weight="700" letter-spacing="-0.5">How Agentic AI is Transforming</text><text x="80" y="517.7" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="29" font-weight="700" letter-spacing="-0.5">Business Automation in 2026</text>
+  </g>
+  <circle cx="960" cy="1230" r="3" fill="hsl(347, 80%, 60%)" opacity="0.6" /><circle cx="980" cy="1230" r="2" fill="hsl(347, 80%, 60%)" opacity="0.8" /><circle cx="1000" cy="1230" r="1" fill="hsl(347, 80%, 60%)" opacity="1" />
+  <text x="80" y="1270" fill="hsl(167, 70%, 55%)" font-family="system-ui, sans-serif" font-size="18" opacity="0.7" letter-spacing="2">DIGITAL FTE</text>
+</svg>

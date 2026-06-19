@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D1B2A" />
+      <stop offset="50%" stop-color="#0F2540" />
+      <stop offset="100%" stop-color="#061220" />
+    </linearGradient>
+    <radialGradient id="tealGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00C9A7" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#00C9A7" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="blueAccent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0A66C2" stop-opacity="0" />
+      <stop offset="50%" stop-color="#0A66C2" stop-opacity="1" />
+      <stop offset="100%" stop-color="#0A66C2" stop-opacity="0" />
+    </linearGradient>
+    <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#00C9A7" stroke-width="0.3" stroke-opacity="0.08"/>
+    </pattern>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1080" height="1350" fill="url(#bg)" />
+  <rect width="1080" height="1350" fill="url(#grid)" />
+
+  <circle cx="216" cy="472.49999999999994" r="320" fill="url(#tealGlow)" />
+  <circle cx="864" cy="877.5" r="250" fill="url(#tealGlow)" />
+
+  <rect x="360" y="100" width="360" height="3" rx="1.5" fill="url(#blueAccent)" />
+  <circle cx="340" cy="101" r="3" fill="#00C9A7" opacity="0.6" />
+  <circle cx="740" cy="101" r="3" fill="#00C9A7" opacity="0.6" />
+
+  <g filter="url(#glow)">
+    <text x="540" y="578.2" fill="#FFFFFF" font-family="'Poppins', 'Inter', system-ui, sans-serif" font-size="53" font-weight="700" letter-spacing="-0.5" text-anchor="middle">Agentic AI</text>
+    <text x="540" y="641.8000000000001" fill="#FFFFFF" font-family="'Poppins', 'Inter', system-ui, sans-serif" font-size="53" font-weight="700" letter-spacing="-0.5" text-anchor="middle">Transforming</text>
+  </g>
+
+  <rect x="500" y="715.4000000000001" width="80" height="2" rx="1" fill="#00C9A7" opacity="0.8" />
+
+  <g filter="url(#softGlow)">
+    <text x="540" y="755.4000000000001" fill="#FFFFFF" font-family="'Inter', 'Poppins', system-ui, sans-serif" font-size="26" font-weight="400" letter-spacing="0.3" text-anchor="middle" opacity="0.9">Business Automation 2026</text>
+  </g>
+
+  <rect x="360" y="1210" width="360" height="3" rx="1.5" fill="url(#blueAccent)" />
+  <text x="540" y="1260" fill="rgba(255,255,255,0.4)" font-family="'Inter', 'Poppins', system-ui, sans-serif" font-size="13" font-weight="300" letter-spacing="4" text-anchor="middle">DIGITAL FTE</text>
+
+  <path d="M 80 80 L 80 120 M 80 80 L 120 80" stroke="#00C9A7" stroke-width="1.5" fill="none" opacity="0.4" />
+  <path d="M 1000 80 L 1000 120 M 1000 80 L 960 80" stroke="#00C9A7" stroke-width="1.5" fill="none" opacity="0.4" />
+  <path d="M 80 1270 L 80 1230 M 80 1270 L 120 1270" stroke="#00C9A7" stroke-width="1.5" fill="none" opacity="0.4" />
+  <path d="M 1000 1270 L 1000 1230 M 1000 1270 L 960 1270" stroke="#00C9A7" stroke-width="1.5" fill="none" opacity="0.4" />
+</svg>

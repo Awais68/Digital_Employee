@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-publish_post.py - Universal post publisher for Digital Employee
-Reads a post from vault, publishes to platforms, moves to Done.
+publish_post.py - STRICT Universal post publisher for Digital Employee
+
+STRICTLY enforces:
+- Every post MUST have an image
+- Content validation before publishing
+- Image validation before publishing
+- No posts without images
 
 Usage:
     python3 publish_post.py <post_file_path> <platform> [platform2 ...]
@@ -19,6 +24,14 @@ from datetime import datetime
 
 BASE_DIR = Path(__file__).resolve().parent
 VAULT_PATH = BASE_DIR
+RULES_FILE = BASE_DIR / "config" / "social_media_rules.json"
+
+def load_rules():
+    """Load strict social media rules."""
+    if RULES_FILE.exists():
+        with open(RULES_FILE, 'r') as f:
+            return json.load(f)
+    return {}
 
 def parse_frontmatter(content):
     """Parse YAML frontmatter from markdown file."""
@@ -78,6 +91,73 @@ def resolve_image(image_url, debug=True):
         return None
     return None
 
+def validate_image_strict(image_path):
+    """
+    STRICT image validation.
+    Returns (is_valid, errors)
+    """
+    errors = []
+    
+    if not image_path:
+        return False, ["BLOCKED: No image provided"]
+    
+    path = Path(image_path)
+    if not path.exists():
+        return False, [f"BLOCKED: Image file not found: {image_path}"]
+    
+    # Check file size
+    size_mb = path.stat().st_size / (1024 * 1024)
+    if size_mb > 10:
+        return False, [f"BLOCKED: Image too large: {size_mb:.1f}MB (max: 10MB)"]
+    
+    # Check extension
+    valid_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+    if path.suffix.lower() not in valid_extensions:
+        return False, [f"BLOCKED: Invalid format: {path.suffix} (allowed: {valid_extensions})"]
+    
+    return True, []
+
+def validate_content_strict(content, platform):
+    """
+    STRICT content validation.
+    Returns (is_valid, errors)
+    """
+    errors = []
+    rules = load_rules()
+    platform_rules = rules.get("platforms", {}).get(platform, {}).get("rules", {})
+    content_rules = rules.get("content_validation", {})
+    
+    if not content or len(content.strip()) == 0:
+        return False, ["Content is empty"]
+    
+    # Word count validation
+    words = content.split()
+    min_words = platform_rules.get('min_words', 50)
+    max_words = platform_rules.get('max_words', 300)
+    
+    if len(words) < min_words:
+        errors.append(f"Too few words: {len(words)} (min: {min_words})")
+    if len(words) > max_words:
+        errors.append(f"Too many words: {len(words)} (max: {max_words})")
+    
+    # Hashtag validation
+    hashtags = re.findall(r'#\w+', content)
+    min_hashtags = platform_rules.get('min_hashtags', 3)
+    max_hashtags = platform_rules.get('max_hashtags', 5)
+    
+    if len(hashtags) < min_hashtags:
+        errors.append(f"Too few hashtags: {len(hashtags)} (min: {min_hashtags})")
+    
+    # Spam detection
+    spam_keywords = content_rules.get('spam_keywords', [])
+    content_lower = content.lower()
+    for spam in spam_keywords:
+        if spam.lower() in content_lower:
+            errors.append(f"Spam keyword detected: '{spam}'")
+    
+    is_valid = len(errors) == 0
+    return is_valid, errors
+
 def post_to_linkedin(content, image_path=None):
     """Post content to LinkedIn."""
     try:
@@ -106,8 +186,8 @@ def post_to_instagram(content, image_path=None):
         return {"success": False, "message": f"Instagram error: {str(e)}"}
 
 def post_to_twitter(content):
-    """Post content to Twitter/X - placeholder."""
-    return {"success": False, "message": "Twitter posting not implemented yet"}
+    """Post content to Twitter/X - DISABLED."""
+    return {"success": False, "message": "Twitter posting is DISABLED. Skipping."}
 
 def main():
     if len(sys.argv) < 3:
@@ -153,6 +233,33 @@ def main():
     if page_name:
         print(f"Facebook Page: {page_name}")
     
+    # STRICT VALIDATION
+    all_errors = []
+    
+    # Validate content for each platform
+    for platform in platforms:
+        is_valid, errors = validate_content_strict(content, platform)
+        if not is_valid:
+            all_errors.extend([f"[{platform.upper()}] {e}" for e in errors])
+    
+    # STRICT: Validate image (MANDATORY)
+    if not resolved_image:
+        all_errors.append("BLOCKED: No image provided - every post MUST have an image")
+    else:
+        is_valid, errors = validate_image_strict(resolved_image)
+        if not is_valid:
+            all_errors.extend(errors)
+    
+    # BLOCK if validation fails
+    if all_errors:
+        print("\n❌ BLOCKED: Validation failed")
+        for e in all_errors:
+            print(f"  - {e}")
+        print(json.dumps({"success": False, "message": "Validation failed", "errors": all_errors}))
+        sys.exit(1)
+    
+    print("\n✅ Validation passed. Publishing...")
+    
     results = {}
     
     for platform in platforms:
@@ -187,6 +294,7 @@ def main():
         "success": all_success,
         "results": results,
         "platforms": platforms,
+        "image": resolved_image,
         "timestamp": datetime.now().isoformat()
     }
     
