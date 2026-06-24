@@ -38,8 +38,9 @@ export function AppProvider({ children }) {
   const connectWS = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
+    const envUrl = import.meta.env.VITE_WS_URL;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${location.host}/ws`);
+    const ws = new WebSocket(envUrl || `${protocol}//${location.host}/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {

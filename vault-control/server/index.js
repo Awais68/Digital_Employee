@@ -78,7 +78,13 @@ async function initDatabase() {
   const connected = await testConnection()
   dbConnected = connected
   if (connected) {
-    await initializeSchema()
+    console.log('[Database] Connection OK — initializing schema...')
+    const schemaOk = await initializeSchema()
+    if (schemaOk) {
+      console.log('[Database] Schema ready')
+    } else {
+      console.warn('[Database] Schema init returned false — tables may be missing')
+    }
   }
   return dbConnected
 }
@@ -91,10 +97,15 @@ app.use((req, res, next) => {
   next()
 })
 
-// CORS - configurable
+// CORS - configurable (supports * or specific origin)
 app.use((req, res, next) => {
-  const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173'
-  res.header('Access-Control-Allow-Origin', allowedOrigin)
+  const allowedOrigin = process.env.CORS_ORIGIN || '*'
+  const origin = req.headers.origin
+  if (allowedOrigin === '*') {
+    res.header('Access-Control-Allow-Origin', origin || '*')
+  } else {
+    res.header('Access-Control-Allow-Origin', allowedOrigin)
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key')
   res.header('Access-Control-Allow-Credentials', 'true')
@@ -491,7 +502,7 @@ app.post('/api/notifications/subscribe', (req, res) => {
 app.use('/uploads', express.static(join(__dirname, '../public/uploads'), { maxAge: '7d' }))
 app.use('/generated', express.static(join(__dirname, '../public/generated'), { maxAge: '7d' }))
 
-// Serve React app
+// Serve React app (optional — frontend may be on Vercel)
 if (existsSync(join(distPath, 'index.html'))) {
   app.use(express.static(distPath))
   app.get('/*', (req, res) => {

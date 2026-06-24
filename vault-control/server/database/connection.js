@@ -7,17 +7,29 @@ let pool = null;
 export function getPool() {
   if (pool) return pool;
 
-  pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
-    database: process.env.DB_NAME || 'vault_control',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || '',
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-    statement_timeout: 10000,
-  });
+  const connectionString = process.env.DATABASE_URL || process.env.PG_CONNECTION_STRING;
+  if (connectionString) {
+    pool = new Pool({
+      connectionString,
+      ssl: { rejectUnauthorized: false },
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      statement_timeout: 30000,
+    });
+  } else {
+    pool = new Pool({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME || 'vault_control',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || '',
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      statement_timeout: 30000,
+    });
+  }
 
   pool.on('error', (err) => {
     console.error('[PostgreSQL] Unexpected error on idle client:', err);
@@ -44,11 +56,21 @@ export async function testConnection() {
 export async function initializeSchema() {
   try {
     const pool = getPool();
-    await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    // Drop stale tables from previous failed inits (safe for fresh DB)
+    const dropOrder = [
+      'admin_settings', 'todos', 'whatsapp_messages', 'scheduled_posts',
+      'email_templates', 'emails', 'rate_limits', 'notifications',
+      'sessions', 'approval_history', 'audit_log', 'api_keys', 'users',
+    ]
+    for (const t of dropOrder) {
+      try { await pool.query(`DROP TABLE IF EXISTS ${t} CASCADE`) } catch {}
+    }
+
+    // Use gen_random_uuid() instead of uuid-ossp extension for Neon compatibility
+    const tables = [
+      `CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         username VARCHAR(50) UNIQUE NOT NULL,
         email VARCHAR(100) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
@@ -57,12 +79,9 @@ export async function initializeSchema() {
         last_login TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS api_keys (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      )`,
+      `CREATE TABLE IF NOT EXISTS api_keys (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         key_hash VARCHAR(255) UNIQUE NOT NULL,
         name VARCHAR(100),
@@ -71,12 +90,9 @@ export async function initializeSchema() {
         expires_at TIMESTAMP,
         last_used_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS audit_log (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      )`,
+      `CREATE TABLE IF NOT EXISTS audit_log (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id) ON DELETE SET NULL,
         action VARCHAR(50) NOT NULL,
         resource_type VARCHAR(50),
@@ -86,12 +102,9 @@ export async function initializeSchema() {
         ip_address VARCHAR(45),
         user_agent TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS approval_history (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      )`,
+      `CREATE TABLE IF NOT EXISTS approval_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         file_id VARCHAR(255) NOT NULL,
         filename VARCHAR(255) NOT NULL,
         action VARCHAR(20) NOT NULL,
@@ -102,12 +115,9 @@ export async function initializeSchema() {
         undone_at TIMESTAMP,
         undone_by UUID REFERENCES users(id) ON DELETE SET NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      )`,
+      `CREATE TABLE IF NOT EXISTS sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         token_hash VARCHAR(255) UNIQUE NOT NULL,
         ip_address VARCHAR(45),
@@ -115,12 +125,9 @@ export async function initializeSchema() {
         expires_at TIMESTAMP NOT NULL,
         is_revoked BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS notifications (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      )`,
+      `CREATE TABLE IF NOT EXISTS notifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         title VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
@@ -128,73 +135,38 @@ export async function initializeSchema() {
         is_read BOOLEAN DEFAULT false,
         link VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS rate_limits (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      )`,
+      `CREATE TABLE IF NOT EXISTS rate_limits (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         identifier VARCHAR(255) NOT NULL,
         endpoint VARCHAR(255) NOT NULL,
         request_count INTEGER DEFAULT 1,
         window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(identifier, endpoint, window_start)
-      )
-    `);
+      )`,
+    ];
 
-    // Create indexes
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_approval_history_file ON approval_history(file_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_approval_history_created ON approval_history(created_at)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)`);
+    let allTablesOk = true
+    for (const sql of tables) {
+      try {
+        await pool.query(sql);
+      } catch (tableErr) {
+        allTablesOk = false
+        console.error(`[Schema] Table creation error: ${tableErr.message.substring(0, 150)}`);
+      }
+    }
+    if (!allTablesOk) return false
 
-    // Performance indexes for common queries
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_emails_received ON emails(received_at DESC)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_wa_messages_timestamp ON whatsapp_messages(timestamp DESC)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_wa_messages_from ON whatsapp_messages(from_number)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_wa_messages_direction ON whatsapp_messages(direction)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_todos_created ON todos(created_at DESC)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_posts_status ON scheduled_posts(status, scheduled_for)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC)`);
-
-    // Insert default admin user (password: admin123)
-    const adminHash = '2ba5ff8cc914a32fce0072aa46bde39d:46fa69884fe47a1a211b0d9983fa84f79cea846168b6b6d34bfc47de06142bea847bead8a0f7a5485dc46ef777d28fade6af2e16f68b38d314922c6ed607309b';
-    await pool.query(
-      `INSERT INTO users (username, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (username) DO NOTHING`,
-      ['admin', 'admin@vault-control.local', adminHash, 'admin']
-    );
-
-    // ─── Phase 1: Email columns ─────────────────────────────────────────────
-    await pool.query(`ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'unread'`);
-    await pool.query(`ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP`);
-    await pool.query(`ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS category VARCHAR(30)`);
-    await pool.query(`ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS is_ai_generated BOOLEAN DEFAULT false`);
-    await pool.query(`ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS ai_confidence FLOAT`);
-    await pool.query(`ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS category_reason TEXT`);
-
-    // ─── Phase 1: email_templates ───────────────────────────────────────────
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS email_templates (
+    // ─── Remaining tables (using SERIAL, no FK dependencies on main tables) ──
+    const extraTables = [
+      `CREATE TABLE IF NOT EXISTS email_templates (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         shortcut VARCHAR(20) UNIQUE,
         body TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // ─── Phase 2: scheduled_posts ───────────────────────────────────────────
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS scheduled_posts (
+      )`,
+      `CREATE TABLE IF NOT EXISTS scheduled_posts (
         id SERIAL PRIMARY KEY,
         topic VARCHAR(200),
         platform VARCHAR(30) NOT NULL,
@@ -208,12 +180,8 @@ export async function initializeSchema() {
         mentions JSONB,
         post_url TEXT,
         created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // ─── Phase 4: whatsapp_messages ─────────────────────────────────────────
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS whatsapp_messages (
+      )`,
+      `CREATE TABLE IF NOT EXISTS whatsapp_messages (
         id SERIAL PRIMARY KEY,
         msg_id VARCHAR(100) UNIQUE,
         from_number VARCHAR(50),
@@ -226,12 +194,8 @@ export async function initializeSchema() {
         type VARCHAR(20) DEFAULT 'incoming',
         is_read BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // ─── Phase 5: todos (DB-backed) ─────────────────────────────────────────
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS todos (
+      )`,
+      `CREATE TABLE IF NOT EXISTS todos (
         id SERIAL PRIMARY KEY,
         title VARCHAR(300) NOT NULL,
         description TEXT,
@@ -246,23 +210,15 @@ export async function initializeSchema() {
         notification_sent BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // ─── Phase 7: admin_settings ────────────────────────────────────────────
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS admin_settings (
+      )`,
+      `CREATE TABLE IF NOT EXISTS admin_settings (
         id SERIAL PRIMARY KEY,
         key VARCHAR(100) UNIQUE NOT NULL,
         value TEXT NOT NULL,
         encrypted BOOLEAN DEFAULT false,
         last_updated TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create table for emails (if not exists)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS emails (
+      )`,
+      `CREATE TABLE IF NOT EXISTS emails (
         id SERIAL PRIMARY KEY,
         msg_id VARCHAR(255) UNIQUE,
         from_address VARCHAR(255),
@@ -278,14 +234,63 @@ export async function initializeSchema() {
         ai_confidence FLOAT,
         category_reason TEXT,
         created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
+      )`,
+    ];
+    for (const sql of extraTables) {
+      try { await pool.query(sql); } catch (e) {
+        console.error(`[Schema] Extra table error: ${e.message.substring(0, 150)}`);
+      }
+    }
 
-    // Add thread_id column if missing (migration for existing schemas)
-    try { await pool.query(`ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id VARCHAR(255)`); } catch {}
-    try { await pool.query(`ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_name VARCHAR(255)`); } catch {}
-    // Create index on msg_id for fast dedup lookups
-    try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_emails_msg_id ON emails(msg_id)`); } catch {}
+    // ─── Email column migrations ──────────────────────────────────────────
+    for (const col of [
+      `ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'unread'`,
+      `ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP`,
+      `ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS category VARCHAR(30)`,
+      `ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS is_ai_generated BOOLEAN DEFAULT false`,
+      `ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS ai_confidence FLOAT`,
+      `ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS category_reason TEXT`,
+      `ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id VARCHAR(255)`,
+      `ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_name VARCHAR(255)`,
+    ]) { try { await pool.query(col); } catch {} }
+
+    // ─── Create indexes (NOW all tables exist) ────────────────────────────
+    const indexes = [
+      `CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_approval_history_file ON approval_history(file_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_approval_history_created ON approval_history(created_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)`,
+      `CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read)`,
+      `CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)`,
+      `CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status)`,
+      `CREATE INDEX IF NOT EXISTS idx_emails_received ON emails(received_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_emails_msg_id ON emails(msg_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_wa_messages_timestamp ON whatsapp_messages(timestamp DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_wa_messages_from ON whatsapp_messages(from_number)`,
+      `CREATE INDEX IF NOT EXISTS idx_wa_messages_direction ON whatsapp_messages(direction)`,
+      `CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status)`,
+      `CREATE INDEX IF NOT EXISTS idx_todos_created ON todos(created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_posts_status ON scheduled_posts(status, scheduled_for)`,
+      `CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC)`,
+    ];
+    for (const idx of indexes) {
+      try { await pool.query(idx); } catch (e) {
+        console.warn(`[Schema] Index error: ${e.message.substring(0, 100)}`);
+      }
+    }
+
+    // Insert default admin user (password: admin123)
+    await pool.query(
+      `INSERT INTO users (username, email, password_hash, role)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (username) DO NOTHING`,
+      ['admin', 'admin@vault-control.local',
+       '2ba5ff8cc914a32fce0072aa46bde39d:46fa69884fe47a1a211b0d9983fa84f79cea846168b6b6d34bfc47de06142bea847bead8a0f7a5485dc46ef777d28fade6af2e16f68b38d314922c6ed607309b',
+       'admin']
+    );
 
     console.log('[PostgreSQL] Schema initialized successfully');
     return true;

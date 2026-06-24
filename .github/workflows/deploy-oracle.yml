@@ -54,7 +54,7 @@ jobs:
           done
           echo "All server files pass syntax check"
 
-      - name: Build frontend
+      - name: Build frontend (validation only — deployed via Vercel)
         working-directory: vault-control
         run: npx vite build
 
@@ -71,25 +71,12 @@ jobs:
           done
           echo "MCP servers checked"
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: vault-control/dist
-          retention-days: 1
-
   deploy:
     needs: test
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: vault-control/dist
 
       - name: Setup SSH key
         run: |
@@ -104,6 +91,7 @@ jobs:
             --exclude='vault-control/node_modules' \
             --exclude='vault-control/.env' \
             --exclude='vault-control/server/.secrets.enc' \
+            --exclude='vault-control/dist' \
             --exclude='node_modules' \
             --exclude='.git' \
             --exclude='Ralph_State' \
@@ -111,10 +99,8 @@ jobs:
             --exclude='Logs' \
             --exclude='Metrics' \
             vault-control/server \
-            vault-control/dist \
             vault-control/package.json \
             vault-control/package-lock.json \
-            vault-control/nginx.conf \
             mcp_servers \
             Agent_Skills \
             server \

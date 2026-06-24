@@ -18,6 +18,14 @@ SERVICE="digitalfte-server"
 
 log() { echo "[deploy $(date +%H:%M:%S)] $*"; }
 
+# Ensure swap exists (run once, safe to repeat)
+if ! swapon --show | grep -q '/swapfile'; then
+  log "No swap found — creating 2G swap..."
+  sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+  grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  log "Swap created"
+fi
+
 [ -f "$TARBALL" ] || { echo "ERROR: $TARBALL not found"; exit 1; }
 
 # Read actual port from .env (server reads PORT from dotenv)
@@ -29,7 +37,6 @@ log "Target health endpoint: $HEALTH_URL"
 log "Backing up current code to $BACKUP_DIR"
 mkdir -p "$BACKUP_DIR"
 cp -r "$VC_DIR/server" "$BACKUP_DIR/server"
-[ -d "$VC_DIR/dist" ] && cp -r "$VC_DIR/dist" "$BACKUP_DIR/dist"
 cp "$VC_DIR/package.json" "$BACKUP_DIR/package.json" 2>/dev/null || true
 cp "$VC_DIR/package-lock.json" "$BACKUP_DIR/package-lock.json" 2>/dev/null || true
 mkdir -p "$BACKUP_DIR/root_py"
@@ -90,9 +97,8 @@ fi
 
 # ─── 7. ROLLBACK ───
 log "❌ Health check FAILED — rolling back to backup $TS"
-rm -rf "$VC_DIR/server" "$VC_DIR/dist"
+rm -rf "$VC_DIR/server"
 cp -r "$BACKUP_DIR/server" "$VC_DIR/server"
-[ -d "$BACKUP_DIR/dist" ] && cp -r "$BACKUP_DIR/dist" "$VC_DIR/dist"
 cp "$BACKUP_DIR/package.json" "$VC_DIR/package.json" 2>/dev/null || true
 cp "$BACKUP_DIR/package-lock.json" "$VC_DIR/package-lock.json" 2>/dev/null || true
 cp "$BACKUP_DIR/root_py/"*.py "$APP_DIR/" 2>/dev/null || true
