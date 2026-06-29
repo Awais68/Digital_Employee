@@ -16,7 +16,7 @@ export function useWebSocket(onMessage) {
   const connect = useCallback(() => {
     const envUrl = import.meta.env.VITE_WS_URL
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = envUrl || (window.location.hostname === 'localhost'
+    const wsUrl = (envUrl ? `${envUrl}/ws` : null) || (window.location.hostname === 'localhost'
       ? `${protocol}//${window.location.host}/ws`
       : `${protocol}//${window.location.host}`)
     
