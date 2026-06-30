@@ -17,7 +17,7 @@ const WhatsApp = lazy(() => import("./pages/WhatsApp"));
 const Todos = lazy(() => import("./pages/Todos"));
 const SocialMedia = lazy(() => import("./pages/SocialMedia"));
 const Accounting = lazy(() => import("./pages/Accounting"));
-const CloudStatus = lazy(() => import("./pages/CloudStatus"));
+const OracleCloud = lazy(() => import("./pages/OracleCloud"));
 const Logs = lazy(() => import("./pages/Logs"));
 const VaultEditor = lazy(() => import("./pages/VaultEditor"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
@@ -227,8 +227,8 @@ function AppContent() {
         return <ErrorBoundary fallbackTitle="Social Media Error"><SocialMedia /></ErrorBoundary>;
       case "accounting":
         return <ErrorBoundary fallbackTitle="Accounting Error"><Accounting /></ErrorBoundary>;
-      case "cloud":
-        return <ErrorBoundary fallbackTitle="Cloud Status Error"><CloudStatus /></ErrorBoundary>;
+      case "oracle":
+        return <ErrorBoundary fallbackTitle="Oracle Cloud Error"><OracleCloud /></ErrorBoundary>;
       case "logs":
         return <ErrorBoundary fallbackTitle="Logs Error"><Logs /></ErrorBoundary>;
       case "vault":

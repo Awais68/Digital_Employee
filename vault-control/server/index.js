@@ -32,6 +32,7 @@ import notificationsRouter from './routes/notifications.js'
 import templatesRouter from './routes/templates.js'
 import postsRouter from './routes/posts.js'
 import adminRouter from './routes/admin.js'
+import oracleCloudRouter from './routes/oracle-cloud.js'
 import { bus as chatbotEventBus } from './services/eventBus.js'
 
 // Chatbot router lives at repo root server/ as CommonJS — bridge via createRequire
@@ -45,6 +46,9 @@ const distPath = join(__dirname, '../dist')
 
 const PORT = process.env.PORT || 3000
 const ENABLE_AUTH = process.env.ENABLE_AUTH === 'true'
+
+let serverReady = false
+let dbConnected = false
 
 const app = express()
 app.use(compression({
@@ -71,23 +75,6 @@ global.wsBroadcast = (data) => {
   if (sent > 0) console.log(`[WS] Broadcast to ${sent} clients:`, data.type)
 }
 global.broadcast = global.wsBroadcast
-
-// Initialize database
-let dbConnected = false
-async function initDatabase() {
-  const connected = await testConnection()
-  dbConnected = connected
-  if (connected) {
-    console.log('[Database] Connection OK — initializing schema...')
-    const schemaOk = await initializeSchema()
-    if (schemaOk) {
-      console.log('[Database] Schema ready')
-    } else {
-      console.warn('[Database] Schema init returned false — tables may be missing')
-    }
-  }
-  return dbConnected
-}
 
 // Security headers
 app.use((req, res, next) => {
@@ -124,6 +111,14 @@ app.use('/api/auth',          authRouter)
 // CSRF token endpoint
 app.get('/api/csrf-token', (req, res) => {
   res.json({ csrfToken: generateCSRFToken() })
+})
+
+// Startup readiness — returns 503 until DB + schema are ready
+app.use('/api', (req, res, next) => {
+  if (serverReady) return next()
+  // Health check always works
+  if (req.path === '/health') return next()
+  res.status(503).json({ error: 'Server starting up', retryAfter: 2 })
 })
 
 // Health check (no auth required)
@@ -163,6 +158,7 @@ app.use('/api/todos', todosRouter)
 app.use('/api/email-templates', templatesRouter)
 app.use('/api/posts', postsRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/oracle', oracleCloudRouter)
 
 // Chatbot SSE — eventBus injected after import (already initialized above)
 setChatbotEventBus(chatbotEventBus)
@@ -637,93 +633,82 @@ const FALLBACK_PORTS = [3000, 3001, 3002, 3003]
 
 function checkPort(port) {
   return new Promise((resolve) => {
-    const server = net.createServer()
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        resolve(false)
-      } else {
-        resolve(false)
-      }
-      server.close()
-    })
-    server.once('listening', () => {
-      server.close()
-      resolve(true)
-    })
-    server.listen(port)
+    const s = net.createServer()
+    s.once('error', () => { s.close(); resolve(false) })
+    s.once('listening', () => { s.close(); resolve(true) })
+    s.listen(port)
   })
 }
 
 async function findFreePort(ports) {
   for (const port of ports) {
-    const isFree = await checkPort(port)
-    if (isFree) {
-      console.log(`[INFO] Port ${port} is available`)
-      return port
-    }
-    console.warn(`[WARN] Port ${port} is in use, skipping...`)
+    if (await checkPort(port)) return port
   }
   return null
 }
 
-// Start servers — CRITICAL STARTUP ORDER 🚨
-initDatabase().then(async () => {
-  // 1. Load encrypted API keys
-  const { loadApiKeysFromDb } = await import('./database/connection.js')
-  await loadApiKeysFromDb()
-
-  // 2. Load secrets
-  const { loadSecrets } = await import('./services/secretsManager.js')
-  loadSecrets()
-
-  // 3. Init notifications table (DB-backed)
-  try {
-    const { initNotificationsTable } = await import('./services/notificationService.js')
-    await initNotificationsTable()
-    console.log('[Startup] Notifications table ready')
-  } catch (e) {
-    console.warn('[Startup] Notifications table init skipped:', e.message)
-  }
-
-  // 4. Start event listeners (wires bus -> notifications, todos, etc.)
-  try {
-    const { startEventListeners } = await import('./services/eventListeners.js')
-    startEventListeners()
-    console.log('[Startup] Event listeners active')
-  } catch (e) {
-    console.warn('[Startup] Event listeners error:', e.message)
-  }
-
-  // 5. Start scheduler (cron jobs)
-  try {
-    await import('./services/scheduler.js')
-    console.log('[Startup] Scheduler started')
-  } catch (e) {
-    console.warn('[Startup] Scheduler error:', e.message)
-  }
-
+// ─── START SERVER IMMEDIATELY (serve static + 503 for API) ─────
+async function boot() {
   const startPort = parseInt(process.env.PORT || '3000')
   const portsToTry = [startPort, ...FALLBACK_PORTS.filter(p => p !== startPort)]
-  console.log(`[INFO] Trying ports: ${portsToTry.join(', ')}`)
-  
   const freePort = await findFreePort(portsToTry)
   if (!freePort) {
-    console.error('[ERROR] All ports are in use. Please free up a port.')
+    console.error('[ERROR] All ports are in use.')
     process.exit(1)
   }
 
+  // Start HTTP + WS immediately — frontend can load, API returns 503
   server.listen(freePort, () => {
-    console.log(`[HTTP] Server running on http://localhost:${freePort}`)
+    console.log(`[HTTP] Server listening on http://localhost:${freePort} (warming up...)`)
     console.log(`[WebSocket] Server running on ws://localhost:${freePort}`)
-    console.log(`[Auth] ${ENABLE_AUTH ? 'Enabled' : 'Disabled (dev mode)'}`)
-    console.log(`[Database] ${dbConnected ? 'Connected' : 'Not connected (file-based mode)'}`)
+  })
 
-    // 6. Initialize WhatsApp (after everything else is ready)
+  // ─── INIT DB + SERVICES IN BACKGROUND ────────────────────────
+  try {
+    const connected = await testConnection()
+    dbConnected = connected
+    if (connected) {
+      console.log('[Database] Connected — initializing schema...')
+      const schemaOk = await initializeSchema()
+      if (schemaOk) console.log('[Database] Schema ready')
+      else console.warn('[Database] Schema init returned false')
+    }
+
+    const { loadApiKeysFromDb } = await import('./database/connection.js')
+    await loadApiKeysFromDb()
+
+    const { loadSecrets } = await import('./services/secretsManager.js')
+    loadSecrets()
+
+    try {
+      const { initNotificationsTable } = await import('./services/notificationService.js')
+      await initNotificationsTable()
+      console.log('[Startup] Notifications table ready')
+    } catch (e) { console.warn('[Startup] Notifications table init skipped:', e.message) }
+
+    try {
+      const { startEventListeners } = await import('./services/eventListeners.js')
+      startEventListeners()
+      console.log('[Startup] Event listeners active')
+    } catch (e) { console.warn('[Startup] Event listeners error:', e.message) }
+
+    try {
+      await import('./services/scheduler.js')
+      console.log('[Startup] Scheduler started')
+    } catch (e) { console.warn('[Startup] Scheduler error:', e.message) }
+
+    // Initialize WhatsApp
     import('./services/whatsappService.js').then(ws => {
       ws.initWhatsApp()
     }).catch(err => {
       console.warn('[WhatsApp] Failed to initialize:', err.message)
     })
+
+    // ✅ Server fully ready — allow API requests
+    serverReady = true
+    console.log(`[HTTP] Server ready on http://localhost:${freePort}`)
+    console.log(`[Auth] ${ENABLE_AUTH ? 'Enabled' : 'Disabled (dev mode)'}`)
+    console.log(`[Database] ${dbConnected ? 'Connected' : 'Not connected (file-based mode)'}`)
 
     // Scheduled post checker — runs every 30 seconds
     setInterval(async () => {
@@ -746,5 +731,12 @@ initDatabase().then(async () => {
         }
       } catch {}
     }, 30000)
-  })
-})
+
+  } catch (err) {
+    console.error('[Startup] Critical error:', err.message)
+    // Still mark ready so at least static files work
+    serverReady = true
+  }
+}
+
+boot()

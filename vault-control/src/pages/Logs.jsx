@@ -38,8 +38,8 @@ export default function Logs() {
         offset: page * limit,
       })
       const res = await axios.get(`/api/logs?${query}`)
-      setLogs(res.data.logs)
-      setTotalLogs(res.data.total)
+      setLogs(Array.isArray(res.data) ? res.data : (res.data?.logs || []))
+      setTotalLogs(res.data?.total ?? (Array.isArray(res.data) ? res.data.length : 0))
     } catch (err) {
       console.error('Failed to fetch logs:', err)
       setError('Failed to load logs. Please try again.')

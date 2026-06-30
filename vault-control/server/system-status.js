@@ -116,11 +116,11 @@ function getCpuUsagePercent() {
   return Math.max(0, Math.min(100, percent));
 }
 
-// Real disk usage for the root filesystem (Linux `df`)
-function getDiskMetrics() {
+// Real disk usage for the root filesystem (Linux `df`) — async to avoid blocking event loop
+async function getDiskMetrics() {
   try {
-    // POSIX output: Filesystem 1K-blocks Used Available Use% Mounted
-    const out = execSync("df -kP /", { timeout: 5000 }).toString().trim().split("\n").pop();
+    const { stdout } = await execAsync("df -kP /", { timeout: 5000 });
+    const out = stdout.trim().split("\n").pop();
     const parts = out.split(/\s+/);
     const totalKb = parseInt(parts[1], 10);
     const usedKb = parseInt(parts[2], 10);
@@ -136,11 +136,13 @@ function getDiskMetrics() {
   }
 }
 
-export function getSystemMetrics() {
+export async function getSystemMetrics() {
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
   const usedMem = totalMem - freeMem;
   const cpus = os.cpus();
+
+  const disk = await getDiskMetrics();
 
   return {
     cpu: {
@@ -155,7 +157,7 @@ export function getSystemMetrics() {
       free: Math.round(freeMem / 1024 / 1024 / 1024),
       percent: Math.round((usedMem / totalMem) * 100),
     },
-    disk: getDiskMetrics(),
+    disk,
     uptime: os.uptime(),
   };
 }

@@ -40,7 +40,7 @@ export default function AdminPanel() {
       const res = await axios.get('/api/admin/keys', {
         headers: { Authorization: `Bearer ${token}` }
       })
-      setKeys(res.data)
+      setKeys(Array.isArray(res.data) ? res.data : (res.data?.keys || res.data?.data || []))
     } catch {
       setError('Failed to load API keys')
     } finally {

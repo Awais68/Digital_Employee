@@ -1,5 +1,5 @@
 import express from 'express'
-import { execSync, exec } from 'child_process'
+import { exec } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
 import {
@@ -40,8 +40,8 @@ router.get('/services', async (req, res) => {
 })
 
 // GET system metrics
-router.get('/metrics', (req, res) => {
-  const metrics = getSystemMetrics()
+router.get('/metrics', async (req, res) => {
+  const metrics = await getSystemMetrics()
   res.json(metrics)
 })
 
@@ -164,28 +164,28 @@ router.get('/workers', async (req, res) => {
 })
 
 // POST start workers
-router.post('/workers/start', (req, res) => {
+router.post('/workers/start', async (req, res) => {
   try {
     const VAULT_PARENT = path.resolve(process.cwd(), '..')
     const cmd = `cd "${VAULT_PARENT}" && python3 workers.py start`
-    const output = execSync(cmd, { timeout: 10000 }).toString()
+    const { stdout } = await execAsync(cmd, { timeout: 10000 })
     
     refreshAndBroadcast()
-    res.json({ success: true, message: 'Workers started', output })
+    res.json({ success: true, message: 'Workers started', output: stdout })
   } catch (err) {
     res.status(500).json({ error: 'Failed to start workers', message: err.message })
   }
 })
 
 // POST stop workers
-router.post('/workers/stop', (req, res) => {
+router.post('/workers/stop', async (req, res) => {
   try {
     const VAULT_PARENT = path.resolve(process.cwd(), '..')
     const cmd = `cd "${VAULT_PARENT}" && python3 workers.py stop`
-    const output = execSync(cmd, { timeout: 10000 }).toString()
+    const { stdout } = await execAsync(cmd, { timeout: 10000 })
     
     refreshAndBroadcast()
-    res.json({ success: true, message: 'Workers stopped', output })
+    res.json({ success: true, message: 'Workers stopped', output: stdout })
   } catch (err) {
     res.status(500).json({ error: 'Failed to stop workers', message: err.message })
   }

@@ -8,14 +8,14 @@ import axios from 'axios'
 import { useToast } from '../context/ToastContext'
 
 const platforms = [
-  { id: 'linkedin', name: 'LinkedIn', limit: 3000, color: '#0A66C2', icon: Linkedin, hashtagMax: 5, minWords: 150, maxWords: 300, requireImage: true },
-  { id: 'facebook', name: 'Facebook', limit: 63206, color: '#1877F2', icon: Facebook, hashtagMax: 10, minWords: 150, maxWords: 250, requireImage: true },
-  { id: 'instagram', name: 'Instagram', limit: 2200, color: '#E4405F', icon: Instagram, hashtagMax: 30, minWords: 150, maxWords: 200, requireImage: true },
-  { id: 'twitter', name: 'Twitter', limit: 280, color: '#1DA1F2', icon: Twitter, hashtagMax: 3, minWords: 10, maxWords: 50, requireImage: false, disabled: true },
+  { id: 'linkedin', name: 'LinkedIn', limit: 3000, color: '#0A66C2', icon: Linkedin, hashtagMax: 5, minWords: 50, maxWords: 500, requireImage: true },
+  { id: 'facebook', name: 'Facebook', limit: 63206, color: '#1877F2', icon: Facebook, hashtagMax: 10, minWords: 50, maxWords: 500, requireImage: true },
+  { id: 'instagram', name: 'Instagram', limit: 2200, color: '#E4405F', icon: Instagram, hashtagMax: 30, minWords: 50, maxWords: 500, requireImage: true },
+  { id: 'twitter', name: 'Twitter', limit: 280, color: '#1DA1F2', icon: Twitter, hashtagMax: 3, minWords: 5, maxWords: 50, requireImage: false, disabled: true },
 ]
 
 // MANDATORY MENTIONS - Maximum audience reach
-const MANDATORY_MENTIONS = ['@ameenalam', '@ziakhan', '@asharibali']
+const MANDATORY_MENTIONS = ['Ameen Alam', 'Zia Khan', 'Asharib Ali']
 
 // STRICT RULES - Every post MUST follow these
 const STRICT_RULES = {
@@ -23,11 +23,11 @@ const STRICT_RULES = {
   requireHashtags: true,
   requireEmojis: true,
   requireMentions: true,
-  minHashtags: 3,
+  minHashtags: 1,
   maxHashtags: 5,
   blockWithoutImage: true,
   spamKeywords: ['buy now', 'click here', 'limited time', 'act fast', '100% free', 'act now', 'free money'],
-  minWords: 150,
+  minWords: 50,
 }
 
 export default function SocialMedia() {
@@ -116,8 +116,8 @@ export default function SocialMedia() {
     if (STRICT_RULES.requireEmojis) {
       const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{24C2}-\u{1F251}]/gu
       const emojis = text.match(emojiRegex) || []
-      if (emojis.length < 2) {
-        errors.push(`Too few emojis (${emojis.length}/2 minimum)`)
+      if (emojis.length < 1) {
+        errors.push(`No emojis found - add at least 1 for engagement`)
       }
     }
     
@@ -143,9 +143,9 @@ export default function SocialMedia() {
         axios.get('/api/posts/pending-approval'),
         axios.get('/api/social/history'),
       ])
-      setQueue(queueRes.data)
-      setPendingApproval(pendingRes.data)
-      setHistory(historyRes.data)
+      setQueue(Array.isArray(queueRes.data) ? queueRes.data : (queueRes.data?.queue || queueRes.data?.data || []))
+      setPendingApproval(Array.isArray(pendingRes.data) ? pendingRes.data : (pendingRes.data?.approvals || pendingRes.data?.data || []))
+      setHistory(Array.isArray(historyRes.data) ? historyRes.data : (historyRes.data?.history || historyRes.data?.data || []))
     } catch (err) {
       console.error('Failed to fetch social data:', err)
       setError('Failed to load social media data.')
@@ -234,11 +234,11 @@ export default function SocialMedia() {
   const handlePost = async () => {
     // Add mandatory mentions if not present
     let finalContent = content
-    MANDATORY_MENTIONS.forEach(mention => {
-      if (!finalContent.toLowerCase().includes(mention.toLowerCase())) {
-        finalContent = `${finalContent}\n\n${MANDATORY_MENTIONS.join(' ')}`
-      }
-    })
+    const contentLower = finalContent.toLowerCase()
+    const hasMentions = MANDATORY_MENTIONS.some(m => contentLower.includes(m.toLowerCase()))
+    if (!hasMentions) {
+      finalContent = `${finalContent.trimEnd()}\n\n${MANDATORY_MENTIONS.join(' ')}`
+    }
     
     // STRICT VALIDATION - check both imageFile and imagePreview
     const hasImage = !!(imageFile || imagePreview)

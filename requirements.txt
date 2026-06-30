@@ -55,7 +55,7 @@ schedule>=1.2.0
 # =============================================================================
 
 # YAML parsing for enhanced config
-# pyyaml>=6.0
+pyyaml>=6.0
 
 # Rich terminal output
 # rich>=13.0.0

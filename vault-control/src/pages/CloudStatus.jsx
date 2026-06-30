@@ -27,7 +27,7 @@ export default function CloudStatus() {
         axios.get('/api/system/vm-info'),
         axios.get('/api/system/stats').catch(() => null),
       ])
-      setVmInfo(vmRes.data)
+      setVmInfo(vmRes.data && typeof vmRes.data === 'object' ? vmRes.data : {})
       if (statsRes?.data?.services) setServices(statsRes.data.services)
       setLastUpdated(new Date())
       setError(null)

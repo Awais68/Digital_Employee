@@ -662,11 +662,9 @@ def generate_linkedin_mentions() -> str:
     """Generate mandatory @mentions for every LinkedIn post for maximum impressions."""
     # MANDATORY MENTIONS - Har post mein ye tags hona chahiye
     mandatory_mentions = [
-        "@Ameen Alam",
-        "@zia khan",
-        "@Ali jawwad",
-        "@asharib ali",
-        "@Panaversity",
+        "Ameen Alam",
+        "Zia Khan",
+        "Asharib Ali",
     ]
 
     # Additional mentions for extra impressions
@@ -774,10 +772,9 @@ original_trigger: {original_filename}
 
 | Mention | Type | Purpose |
 |---------|------|---------|
-| @Ameen Alam | Person | Leadership/Team |
-| @zia khan | Person | Leadership/Team |
-| @Ali jawwad | Person | Leadership/Team |
-| @asharib ali | Person | Leadership/Team |
+| Ameen Alam | Person | Leadership/Team |
+| Zia Khan | Person | Leadership/Team |
+| Asharib Ali | Person | Leadership/Team |
 | @Panaversity | Company | Education/Training |
 | @TalentPop | Company | Talent/Recruitment |
 | @App | Company | Technology |

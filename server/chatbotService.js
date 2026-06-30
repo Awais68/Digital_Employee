@@ -106,7 +106,7 @@
 // // Har LinkedIn post mein ye TAGS aur HASHTAGS LAZMI hona chahiye:
 
 // // **MANDATORY MENTIONS (Post ke end mein):**
-// // @Ameen Alam @zia khan @Ali jawwad @asharib ali @Panaversity @TalentPop @App @Talent @Worx @LinkedIn @Solutions
+// // Ameen Alam, Zia Khan, Asharib Ali
 
 // // **MANDATORY HASHTAGS:**
 // // #AIEmployee #ClaudeCode #MERN #Nextjs #Automation
@@ -118,7 +118,7 @@
 
 // // [CTA - call to action]
 
-// // @Ameen Alam @zia khan @Ali jawwad @asharib ali @Panaversity @TalentPop @App @Talent @Worx @LinkedIn @Solutions
+// // Ameen Alam, Zia Khan, Asharib Ali
 
 // // #AIEmployee #ClaudeCode #MERN #Nextjs #Automation
 
@@ -281,7 +281,7 @@
 // STEP 5: Draft → Hook → Benefit → CTA → Hashtags → Human approval
 
 // LINKEDIN MANDATORY:
-// @Ameen Alam @zia khan @Ali jawwad @asharib ali @Panaversity @TalentPop @App @Talent @Worx @LinkedIn @Solutions
+// Ameen Alam, Zia Khan, Asharib Ali
 // #AIEmployee #ClaudeCode #MERN #Nextjs #Automation
 
 // ========== BUSINESS RULES ==========
@@ -448,7 +448,7 @@ SOCIAL MEDIA POST WORKFLOW:
 5. Draft → Hook → Benefit → CTA → Hashtags → Human approval
 
 LINKEDIN MANDATORY TAGS:
-@Ameen Alam @zia khan @Ali jawwad @asharib ali @Panaversity
+Ameen Alam, Zia Khan, Asharib Ali
 #AIEmployee #ClaudeCode #MERN #Nextjs #Automation
 
 BUSINESS RULES:

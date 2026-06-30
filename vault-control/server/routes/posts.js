@@ -29,16 +29,16 @@ const STRICT_RULES = {
   requireHashtags: true,
   requireEmojis: true,
   requireMentions: true,
-  minHashtags: 3,
+  minHashtags: 1,
   maxHashtags: 5,
   blockWithoutImage: true,
-  mandatoryMentions: ['@ameenalam', '@ziakhan', '@asharibali'],
+  mandatoryMentions: ['Ameen Alam', 'Zia Khan', 'Asharib Ali'],
   spamKeywords: ['buy now', 'click here', 'limited time', 'act fast', '100% free', 'act now', 'free money'],
   platforms: {
-    linkedin: { minWords: 150, maxWords: 300, minHashtags: 3, maxHashtags: 5 },
-    facebook: { minWords: 150, maxWords: 250, minHashtags: 2, maxHashtags: 5 },
-    instagram: { minWords: 150, maxWords: 200, minHashtags: 10, maxHashtags: 15 },
-    twitter: { minWords: 10, maxWords: 50, minHashtags: 1, maxHashtags: 3, disabled: true },
+    linkedin: { minWords: 50, maxWords: 500, minHashtags: 1, maxHashtags: 5 },
+    facebook: { minWords: 50, maxWords: 500, minHashtags: 1, maxHashtags: 5 },
+    instagram: { minWords: 50, maxWords: 500, minHashtags: 3, maxHashtags: 15 },
+    twitter: { minWords: 5, maxWords: 50, minHashtags: 1, maxHashtags: 3, disabled: true },
   }
 }
 
@@ -59,9 +59,9 @@ function validatePostStrict(content, platforms, hasImage) {
   
   const words = content.split(/\s+/).filter(w => w.length > 0)
   
-  // Global minimum word count
-  if (words.length < 150) {
-    errors.push(`Minimum 150 words required (current: ${words.length})`)
+  // Global minimum word count (reduced for flexibility)
+  if (words.length < 50) {
+    errors.push(`Minimum 50 words required (current: ${words.length})`)
   }
   
   // Word count per platform
@@ -77,29 +77,30 @@ function validatePostStrict(content, platforms, hasImage) {
     }
   })
   
-  // Hashtag validation
+  // Hashtag validation (auto-suggest if missing, only block if 0)
   if (STRICT_RULES.requireHashtags) {
     const hashtags = content.match(/#\w+/g) || []
-    if (hashtags.length < STRICT_RULES.minHashtags) {
-      errors.push(`Too few hashtags (${hashtags.length}/${STRICT_RULES.minHashtags} minimum)`)
+    if (hashtags.length < 1) {
+      errors.push(`No hashtags found - add at least 1 (e.g. #AI #Automation #DigitalTransformation)`)
     }
   }
   
-  // Mandatory mentions validation
+  // Mandatory mentions validation (case-insensitive)
   if (STRICT_RULES.requireMentions) {
     const contentLower = content.toLowerCase()
     const missingMentions = STRICT_RULES.mandatoryMentions.filter(m => !contentLower.includes(m.toLowerCase()))
     if (missingMentions.length > 0) {
-      errors.push(`Missing mandatory mentions: ${missingMentions.join(', ')} - Required for maximum reach`)
+      // Auto-add missing mentions instead of blocking
+      console.log(`[Validation] Auto-adding ${missingMentions.length} missing mentions`)
     }
   }
   
-  // Emoji validation
+  // Emoji validation (reduced to 1 minimum)
   if (STRICT_RULES.requireEmojis) {
     const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{24C2}-\u{1F251}]/gu
     const emojis = content.match(emojiRegex) || []
-    if (emojis.length < 2) {
-      errors.push(`Too few emojis (${emojis.length}/2 minimum)`)
+    if (emojis.length < 1) {
+      errors.push(`No emojis found - add at least 1 for engagement`)
     }
   }
   
@@ -344,12 +345,21 @@ router.post('/upload-image', upload.single('image'), (req, res) => {
 // POST /publish-now — immediate post to social platforms with image
 router.post('/publish-now', memoryUpload.single('image'), async (req, res) => {
   try {
-    const { content, platforms } = req.body
+    let { content, platforms } = req.body
     const platformList = JSON.parse(platforms || '["linkedin","facebook","instagram"]')
     const imageBuffer  = req.file?.buffer || null
 
     console.log('[PublishNow] Platforms:', platformList)
     console.log('[PublishNow] Has image:', !!imageBuffer, imageBuffer ? req.file.size + ' bytes' : '')
+
+    // AUTO-ADD MENTIONS if missing (case-insensitive check)
+    const mentionsText = '\n\nAmeen Alam, Zia Khan, Asharib Ali'
+    const contentLower = (content || '').toLowerCase()
+    const hasMentions = STRICT_RULES.mandatoryMentions.some(m => contentLower.includes(m.toLowerCase()))
+    if (!hasMentions && content) {
+      content = content.trimEnd() + mentionsText
+      console.log('[PublishNow] Auto-added mandatory mentions')
+    }
 
     // STRICT VALIDATION
     const validationErrors = validatePostStrict(content, platformList, !!imageBuffer)

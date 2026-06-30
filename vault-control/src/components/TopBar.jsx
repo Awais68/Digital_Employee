@@ -11,7 +11,7 @@ const pageNames = {
   whatsapp: 'WhatsApp',
   social: 'Social Media',
   accounting: 'Accounting',
-  cloud: 'Cloud Status',
+  oracle: 'Oracle Cloud',
   logs: 'Logs',
   vault: 'Vault Editor',
 }

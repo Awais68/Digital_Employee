@@ -21,7 +21,7 @@ export default function Accounting() {
         axios.get('/api/odoo/transactions?limit=20')
       ])
       
-      setSummary(summaryRes.data)
+      setSummary(summaryRes.data && typeof summaryRes.data === 'object' ? summaryRes.data : {})
       setTransactions(transRes.data.transactions || [])
     } catch (err) {
       console.error('Failed to fetch Odoo data:', err)

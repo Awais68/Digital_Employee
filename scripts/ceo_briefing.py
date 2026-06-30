@@ -1146,7 +1146,7 @@ def main():
         and datetime.strptime(str(t["due_date"]), "%Y-%m-%d").date() < today.date()
     ])
 
-    {
+    log_entry = {
         "timestamp": today.strftime("%Y-%m-%dT%H:%M:%S"),
         "event": "briefing_generated",
         "status": "success",
@@ -1172,6 +1172,9 @@ def main():
         "error_code": None,
         "error_message": None,
     }
+    log_path = LOGS_DIR / "ceo_briefing_events.jsonl"
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(log_entry) + "\n")
 
     print("\n📊 BRIEFING SUMMARY:")
     print(f"   Revenue This Week: ${this_rev:,.2f} ({'↑' if calculate_growth(this_rev, last_rev) >= 0 else '↓'}{abs(calculate_growth(this_rev, last_rev))}% WoW)")

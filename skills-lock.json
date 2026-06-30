@@ -25,6 +25,18 @@
       "skillPath": "gpt-image-2/SKILL.md",
       "computedHash": "d47ab3bd8e415520a06902cce5e2e2314263f7843b309cffa3e6115cf6adaf8d"
     },
+    "neon": {
+      "source": "neondatabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neon/SKILL.md",
+      "computedHash": "3e0830ae6f39544bcabf932ba555dc71db19d3a997cbed972290924868f13626"
+    },
+    "neon-postgres": {
+      "source": "neondatabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neon-postgres/SKILL.md",
+      "computedHash": "7da7d922a0a8043a6ba896b81727182b88ff9ff62757643bdd942063774d105b"
+    },
     "oracle-cloud": {
       "source": "dauquangthanh/hanoi-rainbow",
       "sourceType": "github",

@@ -75,7 +75,7 @@ STEP 4: Validate → check.js → resize.js
 STEP 5: Draft → Hook → Benefit → CTA → Hashtags → Human approval
 
 LINKEDIN MANDATORY:
-@Ameen Alam @zia khan @Ali jawwad @asharib ali @Panaversity @TalentPop @App @Talent @Worx @LinkedIn @Solutions
+Ameen Alam, Zia Khan, Asharib Ali
 #AIEmployee #ClaudeCode #MERN #Nextjs #Automation
 
 ========== BUSINESS RULES ==========

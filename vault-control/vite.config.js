@@ -17,6 +17,19 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'mui': ['@mui/material', '@emotion/react', '@emotion/styled'],
+          'charts': ['recharts', '@mui/x-charts'],
+          'vendor': ['react', 'react-dom', 'axios'],
+          'icons': ['lucide-react'],
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000,
+  },
   watch: {
     ignored: [
       "**/odoo-docker/**",

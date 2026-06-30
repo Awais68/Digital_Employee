@@ -59,7 +59,7 @@ export default function VaultEditor() {
     setError(null)
     try {
       const res = await axios.get(`/api/vault/${folder}`)
-      setFiles(res.data)
+      setFiles(Array.isArray(res.data) ? res.data : (res.data?.files || res.data?.data || []))
       setSelectedFile(null)
       setEditMode(false)
     } catch (err) {

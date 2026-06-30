@@ -2,7 +2,9 @@ import express from 'express'
 import { readVaultFiles, getVaultPath, writeFile } from '../vault-reader.js'
 import fs from 'fs'
 import path from 'path'
-import { spawnSync } from 'child_process'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+const execFileAsync = promisify(execFile)
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { createNotification } from '../services/notificationService.js'
@@ -267,7 +269,7 @@ router.delete('/draft/:id', (req, res) => {
 })
 
 // PUBLISH draft now - ACTUALLY POSTS TO PLATFORMS
-router.post('/draft/:id/publish', (req, res) => {
+router.post('/draft/:id/publish', async (req, res) => {
   try {
     const { id } = req.params
     const folders = ['Approved', 'Pending_Approval']
@@ -348,72 +350,42 @@ router.post('/draft/:id/publish', (req, res) => {
     const results = {}
     let allSucceeded = true
 
-    // Post to each platform using the unified publish script
-    for (const platform of platforms) {
+    // Post to each platform using the unified publish script (async, parallel)
+    const publishPromises = platforms.map(async (platform) => {
       try {
         console.log(`[Publish] Running ${platform} post...`)
 
-        const result = spawnSync('python3', ['publish_post.py', sourcePath, platform], {
+        const { stdout, stderr } = await execFileAsync('python3', ['publish_post.py', sourcePath, platform], {
           cwd: VAULT_PARENT,
-          encoding: 'utf8',
-          timeout: 120000,
           maxBuffer: 10 * 1024 * 1024,
+          timeout: 120000,
         })
 
-        if (result.error) {
-          console.error(`[Publish] spawn error for ${platform}:`, result.error.message)
-          results[platform] = { success: false, message: result.error.message, stderr: '' }
-          allSucceeded = false
-          continue
-        }
-
-        // Capture stderr for diagnostics
-        const stderr = (result.stderr || '').trim()
         if (stderr) {
           console.error(`[Publish] ${platform} stderr:`, stderr)
         }
 
         // Find JSON output in stdout
-        const stdout = (result.stdout || '').trim()
-        const lines = stdout.split('\n')
+        const lines = (stdout || '').trim().split('\n')
         let lastJson = null
         for (let i = lines.length - 1; i >= 0; i--) {
           try {
-            const parsed = JSON.parse(lines[i])
-            lastJson = parsed
+            lastJson = JSON.parse(lines[i])
             break
           } catch {}
         }
 
-        const exitCode = result.status
-
-        if (lastJson && lastJson.results && lastJson.results[platform]) {
-          results[platform] = { ...lastJson.results[platform] }
-          // Enrich with stderr for debugging
-          if (stderr) {
-            results[platform].stderr = stderr
-          }
-        } else {
-          results[platform] = {
-            success: false,
-            message: exitCode !== 0
-              ? `Script exited with code ${exitCode}. ${stderr || stdout}`
-              : 'No valid response from publish script',
-            stderr,
-          }
-        }
-
-        if (!results[platform].success) {
-          allSucceeded = false
-        }
-
-        console.log(`[Publish] ${platform} result:`, results[platform])
-
+        return { platform, success: true, details: lastJson?.results || {}, stderr: stderr?.trim() || null }
       } catch (err) {
-        console.error(`[Publish] Error posting to ${platform}:`, err.message)
-        results[platform] = { success: false, message: err.message }
-        allSucceeded = false
+        console.error(`[Publish] error for ${platform}:`, err.message)
+        return { platform, success: false, message: err.message, stderr: err.stderr?.trim() || '' }
       }
+    })
+
+    const publishResults = await Promise.all(publishPromises)
+    for (const r of publishResults) {
+      results[r.platform] = r
+      if (!r.success) allSucceeded = false
     }
 
     // Move to Done folder ONLY if ALL platforms succeeded
@@ -462,7 +434,7 @@ router.post('/draft/:id/publish', (req, res) => {
 })
 
 // AUTO-APPROVE AND PUBLISH ALL pending posts
-router.post('/auto-publish', (req, res) => {
+router.post('/auto-publish', async (req, res) => {
   try {
     const files = readVaultFiles('Pending_Approval')
     const socialPosts = files.filter(f => 
@@ -496,31 +468,26 @@ router.post('/auto-publish', (req, res) => {
         
         const VAULT_PARENT = path.resolve(__dirname, '../../..')
 
-        const result = spawnSync('python3', ['publish_post.py', postPath, ...platforms], {
+        const { stdout, stderr } = await execFileAsync('python3', ['publish_post.py', postPath, ...platforms], {
           cwd: VAULT_PARENT,
-          encoding: 'utf8',
-          timeout: 120000,
           maxBuffer: 10 * 1024 * 1024,
+          timeout: 120000,
         })
 
-        const stderr = (result.stderr || '').trim()
         if (stderr) {
           console.error(`[Auto-Publish] ${post.filename} stderr:`, stderr)
         }
 
-        const stdout = (result.stdout || '').trim()
-        const lines = stdout.split('\n')
+        const lines = (stdout || '').trim().split('\n')
         let lastJson = null
         for (let i = lines.length - 1; i >= 0; i--) {
           try {
-            const parsed = JSON.parse(lines[i])
-            lastJson = parsed
+            lastJson = JSON.parse(lines[i])
             break
           } catch {}
         }
 
-        const exitCode = result.status
-        const allSucceeded = exitCode === 0 && lastJson && lastJson.success
+        const allSucceeded = lastJson && lastJson.success
 
         if (allSucceeded) {
           const donePath = getVaultPath('Done')
@@ -535,8 +502,7 @@ router.post('/auto-publish', (req, res) => {
           platforms,
           success: allSucceeded,
           details: lastJson?.results || {},
-          stderr: stderr || null,
-          exitCode,
+          stderr: stderr?.trim() || null,
         })
         
       } catch (err) {

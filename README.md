@@ -1,609 +1,384 @@
-# AI Employee Vault
+# AI Employee Vault — Digital FTE 24/7
 
-> **Personal AI Employee Hackathon 2026** — A file-based task orchestration system that automates workflow processing using markdown files.
+> **Personal AI Employee Hackathon 2026** — A full-stack AI employee system with file-based orchestration, real-time web dashboard, multi-platform social media management, ERP integration, and autonomous task completion.
 
-## 🏆 Tier Progress
+## Tier Progress
 
 | Tier | Status | Completion Date | Features |
 |------|--------|-----------------|----------|
 | **Bronze** | ✅ Complete | 2026-04-02 | Basic orchestration, Dashboard, Plans |
-| **Silver** | ✅ **100% Complete** | 2026-04-03 | Email MCP, LinkedIn MCP, Gmail/WhatsApp Watchers, Approval Workflow, Cron, LLM Router |
-| **Gold** | ✅ **100% COMPLETE** | 2026-04-10 | Odoo ERP (7 tools), Facebook/Instagram/Twitter Skills, CEO Briefing, Ralph Wiggum Loop, Audit Logging, Error Recovery |
-| **Platinum** | ⏳ Pending | — | Full autonomy, Learning, Self-improvement |
+| **Silver** | ✅ Complete | 2026-04-03 | Email MCP, LinkedIn MCP, Gmail/WhatsApp Watchers, Approval Workflow, Cron, LLM Router |
+| **Gold** | ✅ Complete | 2026-04-10 | Odoo ERP (7 tools), Facebook/Instagram/Twitter Skills, CEO Briefing, Ralph Wiggum Loop, Audit Logging, Error Recovery |
+| **Platinum** | ✅ **100% COMPLETE** | 2026-06-30 | Full Web Dashboard, Real-time WebSocket, Social Media Management, AI Email Processing, WhatsApp Chat, Multi-Provider AI, OAuth Auth, Admin Panel, Notifications, Oracle Cloud Monitoring, Chatbot, Docker Deployment, MCP Servers, Automated Daily Posting, Image Generation |
 
 ---
 
-## 🥈 Silver Tier - Complete Feature List
+## Platinum Tier — The Complete Digital Employee
 
-| Feature | Status | Description |
-|---------|--------|-------------|
-| ✅ **Email MCP Integration** | Complete | `email_mcp.py` with SMTP/Gmail support |
-| ✅ **LinkedIn MCP Integration** | Complete | `linkedin_mcp.py` with LinkedIn API + **Session Persistence** |
-| ✅ **Gmail Watcher** | Complete | `gmail_watcher.py` with 30s interval monitoring |
-| ✅ **Approval Workflow** | Complete | Pending → Approved → Sent pipeline |
-| ✅ **Human-in-the-Loop** | Complete | Review before any email/post |
-| ✅ **Auto Dashboard Updates** | Complete | Colorful priority-based status |
-| ✅ **LinkedIn Post Generation** | Complete | Auto-draft posts with hashtags + auto-publish |
-| ✅ **Rejection Handling** | Complete | Archive rejected drafts |
-| ✅ **Dry-Run Mode** | Complete | Test without sending |
-| ✅ **Gmail Watcher** | Complete | 30s interval monitoring |
-| ✅ **Logging & Metrics** | Complete | Full audit trail |
-| ✅ **Cron Scheduling** | Complete | `setup_cron.py` utility for automation |
-| ✅ **Production Email Send** | Complete | Gmail App Password support |
+> **Version 6.0.0** — From file-based orchestrator to full-stack AI employee with web dashboard, real-time updates, and autonomous operations.
 
----
+### What Platinum Tier Delivers
 
-## 🥇 Gold Tier - The Business Operator ✅ COMPLETE
-
-> **Version 5.0.0** — Transforming from communication assistant to full business operator
-
-### Overview
-
-Gold Tier elevates your Digital Employee from a task executor to a **business operator** that can:
-- 🏢 **Run Odoo ERP operations** — Invoices, orders, inventory, financial reports via natural language
-- 📱 **Publish to all social platforms** — LinkedIn, Facebook, Instagram, Twitter/X (all Human-in-the-Loop)
-- 📊 **Generate CEO Briefings** — Weekly Monday morning executive summaries with revenue, bottlenecks, suggestions
-- 🤖 **Autonomous task completion** — Ralph Wiggum Loop keeps iterating until TASK_COMPLETE
-- 🛡️ **Full audit logging** — Immutable JSON audit trails with error recovery and retry policies
-- 🔒 **Secure by design** — All credentials from .env, never hardcoded
-
-### Gold Tier Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        GOLD TIER STACK                              │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  Layer 7: Business Intelligence (NEW)                               │
-│  ├── Daily health summaries                                         │
-│  ├── Anomaly detection                                              │
-│  ├── Revenue trend tracking                                         │
-│  └── Proactive suggestions                                          │
-│                                                                     │
-│  Layer 6: Enhanced Approvals (NEW)                                  │
-│  ├── Financial transaction approvals                                │
-│  ├── Configurable thresholds ($500 auto-approve)                    │
-│  ├── Bulk approval commands                                         │
-│  └── WhatsApp + Email approval                                      │
-│                                                                     │
-│  Layer 5: Advanced LLM (EXTENDED)                                   │
-│  ├── Multi-provider failover (existing)                             │
-│  ├── Context window management                                      │
-│  ├── Cost optimization routing                                      │
-│  └── Usage tracking & cost reporting                                │
-│                                                                     │
-│  Layer 4: Multi-Step Workflows (NEW)                                │
-│  ├── Sales pipeline: Quote → Order → Invoice → Email                │
-│  ├── Lead generation: Email → Odoo CRM → Notify                     │
-│  ├── Inventory alerts: Low stock → PO → Email vendor                │
-│  ├── Monthly report generation                                      │
-│  └── Collections: Overdue invoice → Follow-up sequence              │
-│                                                                     │
-│  Layer 3: NLU Engine (NEW)                                          │
-│  ├── Intent parsing (regex + LLM)                                   │
-│  ├── Entity extraction (dates, amounts, names)                      │
-│  ├── Multi-intent detection (chained operations)                    │
-│  └── Confidence scoring & clarification                             │
-│                                                                     │
-│  Layer 2: Odoo ERP Deep Integration (EXTENDED)                      │
-│  ├── Customer management (existing)                                 │
-│  ├── Invoice lifecycle (existing → extended: validate, pay)         │
-│  ├── Sales orders (existing → extended: list, detail)               │
-│  ├── Purchase orders (NEW)                                          │
-│  ├── Product catalog (NEW)                                          │
-│  ├── Inventory management (NEW)                                     │
-│  ├── Financial reports (NEW: P&L, Balance Sheet)                    │
-│  └── Connection health check & retry (NEW)                          │
-│                                                                     │
-│  Layer 1: Silver Tier Foundation (existing)                         │
-│  ├── Email MCP, LinkedIn MCP, Gmail/WhatsApp watchers               │
-│  ├── Approval workflow, Cron scheduling, LLM Router                 │
-│  └── Dashboard, logging, metrics                                    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Gold Tier Features (Detailed)
-
-| Feature | Status | Description |
-|---------|--------|-------------|
-| ✅ **Odoo MCP Server** | Complete | `odoo_mcp.py` with JSON-RPC, 7 tools, secure .env |
-| ✅ **Customer Creation** | Complete | `create_customer` via natural language |
-| ✅ **Invoice Creation** | Complete | `create_invoice` with line items |
-| ✅ **Sale Orders** | Complete | `create_sale_order` tool |
-| ✅ **Accounting Summary** | Complete | `get_accounting_summary` |
-| ✅ **Bank Balance** | Complete | `get_bank_balance` |
-| ✅ **Recent Transactions** | Complete | `get_recent_transactions` |
-| ✅ **Journal Entries** | Complete | `create_journal_entry` |
-| ✅ **Facebook/Instagram Skill** | Complete | `SKILL_Facebook_Instagram_Post.md` with Playwright |
-| ✅ **Twitter/X Skill** | Complete | `SKILL_Twitter_X_Post.md` with Playwright |
-| ✅ **CEO Briefing System** | Complete | Weekly Monday reports from Odoo + Obsidian |
-| ✅ **Ralph Wiggum Loop** | Complete | Autonomous loop with TASK_COMPLETE detection |
-| ✅ **Audit Logging** | Complete | `audit_log.py` with JSON trails + recovery |
-| ✅ **Error Recovery** | Complete | Retry policies with exponential backoff |
-| ✅ **Enhanced Orchestrator** | Complete | Cross-domain, all skills, Ralph integration |
-| ✅ **Dashboard Updates** | Complete | CEO Briefing section, real-time status |
-
-### Gold Tier Usage Examples
-
-#### Natural Language Commands
-
-```bash
-# Create an invoice
-"Create an invoice for Acme Corp, $2,500 for web development services, due in 30 days"
-
-# Check business health
-"Show me today's business summary"
-
-# Check inventory
-"What products are running low on stock?"
-
-# Financial overview
-"What's our current cash flow situation?"
-
-# Chain operations
-"Create an invoice for John Doe $500 and email it to him"
-```
-
-#### Automated Workflows
-
-| Workflow | Trigger | Actions |
-|----------|---------|---------|
-| **Sales Pipeline** | New email inquiry | Create lead → Draft response → Notify → Follow-up |
-| **Invoice Lifecycle** | Invoice created | Validate → Email → Track → Follow-up if overdue |
-| **Inventory Alert** | Low stock detected | Calculate reorder → Draft PO → Email vendor |
-| **Monthly Report** | Scheduled (1st of month) | Gather data → Generate report → Email stakeholders |
-| **Collections** | Invoice overdue | Send reminder → Escalate → Final notice |
-
-### Gold Tier New Dependencies
-
-```bash
-# Install additional Python packages
-pip install numpy pandas dateparser jsonschema psutil tabulate
-
-# Optional: Advanced anomaly detection
-pip install scikit-learn
-
-# Optional: Fuzzy name matching
-pip install python-Levenshtein
-```
-
-### Gold Tier Configuration (.env additions)
-
-```bash
-# Approval Thresholds
-APPROVAL_THRESHOLD_INVOICE=500       # Auto-approve invoices under $500
-APPROVAL_THRESHOLD_PO=1000           # Auto-approve POs under $1000
-
-# Daily Summary Schedule
-DAILY_SUMMARY_TIME=18:00             # 6 PM daily business summary
-
-# LLM Cost Limits
-LLM_COST_LIMIT_DAILY=5.00            # Max $5/day LLM spend
-
-# NLU Settings
-NLU_CONFIDENCE_THRESHOLD=0.7         # Minimum confidence to act without clarification
-```
-
-### Gold Tier Quick Start
-
-```bash
-# 1. Ensure Odoo is running
-docker-compose -f odoo-docker/docker-compose.yml up -d
-
-# 2. Test Odoo MCP connection
-python3 odoo_mcp.py
-
-# 3. Test NLU engine (once implemented)
-python3 src/nlu_engine.py --test
-
-# 4. Run a workflow
-python3 src/workflow_engine.py --workflow sales_pipeline
-
-# 5. Generate daily business summary
-python3 src/business_summary.py
-
-# 6. Run full Gold Tier test suite
-python3 run_gold_test.py
-
-# 7. Check system health
-python3 src/health_check.py
-```
-
-### Gold Tier Documentation
-
-| Document | Location |
-|----------|----------|
-| Complete Gold Tier Plan | [Plans/PLAN_GOLD_TIER.md](Plans/PLAN_GOLD_TIER.md) |
-| Odoo MCP Guide | [ODOO_MCP_GUIDE.md](ODOO_MCP_GUIDE.md) |
-| LLM Router Guide | [LLM_ROUTER_GUIDE.md](LLM_ROUTER_GUIDE.md) |
-| Silver Tier Completion | [SILVER_TIER_COMPLETE.md](SILVER_TIER_COMPLETE.md) |
+- **Full Web Dashboard** — 11-page React SPA with dark/light theme, lazy loading, error boundaries
+- **Real-time WebSocket** — Live updates for vault changes, notifications, WhatsApp, social posts
+- **Social Media Empire** — Compose, AI-generate, approve, schedule, auto-post to LinkedIn/Facebook/Instagram
+- **AI Email Processing** — Dual-layer dedup, AI analysis, auto-draft replies, priority detection
+- **WhatsApp Integration** — Full chat interface, QR auth, real-time messaging, morning briefings
+- **Multi-Provider AI** — Claude → GPT-4o → OpenRouter → Gemini failover chain with smart mock fallback
+- **OAuth + JWT Auth** — Register/login, role-based access, CSRF protection, session management
+- **Admin Panel** — API key management for 11 services, encrypted storage
+- **Oracle Cloud Monitoring** — SSH-based VM stats, CPU/RAM/disk/network, top processes, auto-refresh
+- **Chatbot** — SSE streaming, action parsing (ADD_TODO, CREATE_DRAFT, SEND_WHATSAPP), dashboard context
+- **Docker Deployment** — Full compose stack: PostgreSQL, backend, frontend, orchestrator, email MCP, watchers
+- **6 MCP Servers** — Email, LinkedIn, Odoo, Facebook, Instagram, Canva
+- **Automated Daily Posting** — 3 slots/day, multi-platform, AI-generated content + images
+- **Image Generation** — Wikipedia, Canva SVG, Pollinations AI, GPT Image, platform-specific resizing
+- **Keyboard Shortcuts** — Ctrl+K search, Alt+1-9 navigation, Ctrl+S save, Ctrl+Enter approve
+- **Security** — Rate limiting, security headers, CORS, audit logging, approval history with undo
 
 ---
 
-## 📁 Folder Structure
+## Quick Start
+
+### Option 1: Docker (Recommended)
+
+```bash
+cd vault-control
+
+# Start everything
+docker-compose -f docker-compose.prod.yml up -d
+
+# Access dashboard
+open http://localhost
+```
+
+### Option 2: Development
+
+```bash
+# Backend
+cd vault-control/server
+npm install
+npm run dev
+
+# Frontend
+cd vault-control
+npm install
+npm run dev
+
+# Access at http://localhost:5173
+```
+
+### Option 3: File-based Orchestrator (Original)
+
+```bash
+pip install -r requirements.txt
+python3 orchestrator.py
+```
+
+---
+
+## Project Structure
 
 ```
 Digital_Employee/
-├── Needs_Action/          # Incoming tasks requiring processing
-├── Plans/                 # Generated action plans for each task
-├── Pending_Approval/      # 🟠 Drafts awaiting human review
-├── Approved/              # ✅ Ready for execution (auto-process)
-├── Rejected/              # ❌ Rejected drafts (temp holding)
-├── Done/                  # 🟢 Completed/archived tasks
-├── Inbox/                 # Raw incoming items (pre-processing)
-├── Logs/                  # System logs and history
-├── Metrics/               # Performance metrics (JSON)
-├── Agent_Skills/          # AI skill definitions
-├── Skills/                # Custom skill modules
-├── .obsidian/             # Obsidian vault configuration
-├── Dashboard.md           # 🎛️ Central status & activity dashboard
-├── Company_Handbook.md    # Rules, guidelines, and operating procedures
-├── EMAIL_APPROVAL_WORKFLOW.md  # Email workflow documentation
-├── SETUP_GUIDE.md         # 📖 Complete setup instructions
-├── email_mcp.py           # 📧 Email sending MCP
-├── linkedin_mcp.py        # 📱 LinkedIn publishing MCP
-├── orchestrator.py        # 🧠 Silver Tier orchestrator (main brain)
-├── gmail_watcher.py       # 👁️ Gmail monitor (30s interval)
-├── filesystem_watcher.py  # 📂 File system monitor
-├── setup_cron.py          # ⏰ Cron setup utility
-└── run_silver_test.py     # 🧪 Test script for Silver Tier
+├── vault-control/              # Full-stack web application
+│   ├── src/                    # React frontend (11 pages)
+│   │   ├── pages/              # Dashboard, Approvals, Emails, WhatsApp, Todos,
+│   │   │                       # SocialMedia, Accounting, OracleCloud, Logs,
+│   │   │                       # VaultEditor, AdminPanel
+│   │   ├── components/         # Sidebar, TopBar, Chatbot, NotificationBell
+│   │   ├── hooks/              # useWebSocket, useKeyboardShortcuts
+│   │   └── context/            # AuthContext, ToastContext, AppContext
+│   ├── server/                 # Express.js backend
+│   │   ├── routes/             # approvals, emails, drafts, social, system, logs,
+│   │   │                       # odoo, whatsapp, vault, export, auth, todos,
+│   │   │                       # notifications, templates, posts, admin, oracle-cloud
+│   │   ├── services/           # aiProvider, whatsappService, socialMediaService,
+│   │   │                       # postGenerator, imageGenerator, imageHosting,
+│   │   │                       # emailClassifier, notificationService, cache,
+│   │   │                       # eventBus, eventListeners, scheduler, secretsManager, mcpClient
+│   │   ├── database/           # connection.js (PostgreSQL), auth.js, csrf.js,
+│   │   │                       # rateLimiter.js, errorHandler.js, audit.js
+│   │   ├── oracle-ssh.js       # Oracle Cloud VM monitoring via SSH
+│   │   └── index.js            # Main server (HTTP + WebSocket + file watcher)
+│   ├── docker-compose.yml      # Dev stack
+│   ├── docker-compose.prod.yml # Production stack
+│   └── package.json
+├── server/                     # Chatbot backend (Node.js CommonJS)
+│   ├── chatbotRouter.js        # SSE streaming + action parsing
+│   ├── chatbotService.js       # AI prompt templates
+│   └── chatbotContext.js       # Dashboard context for chatbot
+├── mcp_servers/                # MCP server implementations
+│   ├── facebook-mcp/           # Meta Graph API
+│   ├── instagram-mcp/          # Meta Graph API
+│   └── linkedin-mcp/           # LinkedIn automation
+├── .mcp.json                   # MCP server definitions (6 servers)
+├── orchestrator.py             # Python orchestrator (Silver/Gold tier)
+├── email_mcp.py                # Email MCP (Python)
+├── odoo_mcp.py                 # Odoo ERP MCP
+├── gmail_watcher.py            # Gmail polling
+├── whatsapp_watcher.py         # WhatsApp polling
+├── ralph_wiggum.py             # Autonomous task loop
+├── provider_config.py          # AI provider auto-detection
+├── smart_run.py                # Universal launcher
+├── docker-compose.yml          # Root Docker stack
+├── Needs_Action/               # Incoming tasks
+├── Plans/                      # Generated action plans
+├── Pending_Approval/           # Awaiting human review
+├── Approved/                   # Ready to execute
+├── Done/                       # Completed tasks
+├── Rejected/                   # Rejected drafts
+├── Logs/                       # System logs
+└── Agent_Skills/               # Skill definitions
 ```
 
 ---
 
-## 🚀 Quick Start - Run Complete System
-
-### Option 1: Manual Run (Testing)
-
-```bash
-cd /path/to/Digital_Employee
-
-# 1. Test connections (optional)
-python3 email_mcp.py test
-python3 linkedin_mcp.py test
-
-# 2. Run orchestrator (processes all pending items)
-python3 orchestrator.py
-
-# 3. View updated Dashboard
-cat Dashboard.md
-```
-
-### Option 2: Full Automated Setup (Production) - RECOMMENDED
-
-```bash
-# Step 1: Install dependencies
-pip install -r requirements.txt
-
-# Step 2: Configure .env file with your credentials
-# Edit .env and add: Gmail App Password, Twilio, LinkedIn tokens
-
-# Step 3: Setup cron jobs and watchers (one command)
-python3 setup_cron.py
-
-# Step 4: Start background watchers
-python3 setup_cron.py --start-tmux
-
-# Step 5: Verify everything is running
-python3 setup_cron.py --status
-```
-
-### Option 3: Hybrid Setup (Manual + Automated)
-
-```bash
-# Start watchers in tmux (continuous monitoring)
-tmux new -d -s gmail_watcher "python3 gmail_watcher.py --continuous"
-
-# Setup cron for orchestrator (every 5 minutes)
-python3 setup_cron.py
-
-# Verify tmux is running
-tmux list-sessions
-```
-
-### Option 4: Run Test Suite
-
-```bash
-# Run complete Silver Tier test
-python3 run_silver_test.py
-```
-
-📖 **For detailed setup instructions, see:** [SETUP_GUIDE.md](SETUP_GUIDE.md)
-
----
-
-## 📧 How to Approve/Reject Emails & LinkedIn Posts
-
-### Approval Workflow
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    APPROVAL WORKFLOW                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. Draft created → /Pending_Approval/                       │
-│                                                              │
-│  2. Human reviews file                                       │
-│     ├── ✅ Approve: mv file Approved/ → Auto-send           │
-│     ├── 🔄 Regenerate: mv file Needs_Action/ + notes        │
-│     ├── ❌ Reject: mv file Rejected/ → Archive              │
-│     └── ⏳ Pending: Keep in place → Review later            │
-│                                                              │
-│  3. After approval:                                          │
-│     ├── email_mcp sends email                               │
-│     ├── File moved to Done/                                 │
-│     ├── "✅ Email Sent" note added                          │
-│     └── Dashboard updated                                   │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Quick Commands
-
-```bash
-# Approve an email/post (send it)
-mv Pending_Approval/REPLY_*.md Approved/
-
-# Approve a LinkedIn post
-mv Pending_Approval/LINKEDIN_POST_*.md Approved/
-
-# Reject a draft
-mv Pending_Approval/<file>.md Rejected/
-
-# Request regeneration (add notes first)
-mv Pending_Approval/<file>.md Needs_Action/
-
-# Run orchestrator to process approvals
-python3 orchestrator.py
-```
-
-### Visual Status Guide
-
-| Status | Color | Meaning |
-|--------|-------|---------|
-| 🔴 | Red | Needs immediate action |
-| 🟠 | Orange | Awaiting your review |
-| 🟡 | Yellow | Processing/Today's work |
-| 🟢 | Green | Complete/All clear |
-| ⚪ | Gray | No activity |
-
----
-
-## 🛠️ Troubleshooting
-
-### Email Not Sending
-
-**Problem:** Emails logged but not sent
-
-**Solutions:**
-1. Check `DRY_RUN` in `.env` - set to `false` for production
-2. Verify Gmail App Password (not regular password)
-3. Test connection: `python3 email_mcp.py test`
-4. Check logs: `cat Logs/email_log_*.md`
-
-```bash
-# .env configuration
-SENDER_EMAIL=your-email@gmail.com
-EMAIL_PASSWORD=your-16-char-app-password
-DRY_RUN=false  # Set to true for testing only
-```
-
-### Approval File Not Processing
-
-**Problem:** File in Approved/ but not processed
-
-**Solutions:**
-1. Run orchestrator: `python3 orchestrator.py`
-2. Check file has `.md` extension
-3. Verify file content has email data (To, Subject, Body)
-4. Check logs: `tail Logs/orchestrator.log`
-
-### Dashboard Not Updating
-
-**Problem:** Dashboard.md shows old data
-
-**Solutions:**
-1. Run orchestrator manually
-2. Check no Python errors in output
-3. Verify Dashboard.md is writable
-4. Check logs for errors
-
-### Gmail Watcher Not Working
-
-**Problem:** New emails not creating tasks
-
-**Solutions:**
-1. Check tmux session: `tmux list-sessions`
-2. Attach to view logs: `tmux attach -t gmail_watcher`
-3. Verify Gmail API credentials in `.env`
-4. Restart watcher: `python3 gmail_watcher.py --start`
-
----
-
-## 📊 Dashboard Status Indicators
-
-The Dashboard uses color-coded status for instant visibility:
-
-### Quick Status Overview (Top of Dashboard)
-
-| 🔴 Needs Action | 🟠 Pending Approval | 🟡 Sent Today | 🟢 Completed Today |
-|:---------------:|:-------------------:|:-------------:|:------------------:|
-| **0** | **2** | **0** | **5** |
-
-**At a glance:**
-- 🔴 **0** = No urgent tasks
-- 🟠 **2** = Two items need your review
-- 🟡 **0** = No emails sent yet today
-- 🟢 **5** = Five tasks completed today
-
-### Section Colors
-
-- **🔴 High Priority** - Urgent tasks in Needs_Action
-- **🟠 Pending Approvals** - Files awaiting your decision
-- **🟡 Today's Completed** - What was done today
-
----
-
-## 🧪 Testing
-
-### Run Full Test Suite
-
-```bash
-python3 run_silver_test.py
-```
-
-This will:
-1. Create test email task
-2. Create test LinkedIn request
-3. Run orchestrator
-4. Show Dashboard summary
-5. Verify all files created
-
-### Manual Test Flow
-
-```bash
-# 1. Create test email task
-cat > Needs_Action/test_email.md << 'EOF'
----
-type: email
-from: test@example.com
-subject: Test Email
-priority: high
----
-
-This is a test email for Silver Tier validation.
-EOF
-
-# 2. Run orchestrator
-python3 orchestrator.py
-
-# 3. Check Pending_Approval folder
-ls Pending_Approval/
-
-# 4. Approve the draft
-mv Pending_Approval/REPLY_test_email.md Approved/
-
-# 5. Run orchestrator again (sends email in dry-run mode)
-python3 orchestrator.py
-
-# 6. Check Done folder and logs
-ls Done/
-cat Logs/email_log_$(date +%Y%m%d).md
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        PLATINUM TIER ARCHITECTURE                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                    REACT FRONTEND (Vite)                        │    │
+│  │  Dashboard │ Approvals │ Emails │ WhatsApp │ Todos │ Social     │    │
+│  │  Accounting │ Oracle Cloud │ Logs │ Vault Editor │ Admin Panel   │    │
+│  │  Chatbot Panel │ Notification Bell │ Theme Toggle │ Search       │    │
+│  └──────────────────────────┬──────────────────────────────────────┘    │
+│                             │ HTTP + WebSocket                          │
+│  ┌──────────────────────────┴──────────────────────────────────────┐    │
+│  │                 EXPRESS.JS BACKEND (Node.js)                     │    │
+│  │                                                                  │    │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │    │
+│  │  │ Auth     │ │ Posts    │ │ Emails   │ │ Social Media     │   │    │
+│  │  │ JWT+RBAC │ │ Compose  │ │ AI+Dedup │ │ LinkedIn/FB/IG   │   │    │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────────────┘   │    │
+│  │                                                                  │    │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │    │
+│  │  │ WhatsApp │ │ Odoo ERP │ │ Oracle   │ │ Notifications    │   │    │
+│  │  │ Web.js   │ │ JSON-RPC │ │ SSH Mon  │ │ WS + DB + Push   │   │    │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────────────┘   │    │
+│  │                                                                  │    │
+│  │  ┌──────────────────────────────────────────────────────────┐   │    │
+│  │  │  AI Provider: Claude → GPT-4o → OpenRouter → Gemini      │   │    │
+│  │  │  Image Gen: Wikipedia → Canva SVG → Pollinations → GPT   │   │    │
+│  │  │  Scheduler: 3 daily slots, catch-up, morning briefing    │   │    │
+│  │  └──────────────────────────────────────────────────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                             │                                           │
+│  ┌──────────────────────────┴──────────────────────────────────────┐    │
+│  │                    PostgreSQL 16                                 │    │
+│  │  users │ api_keys │ audit_log │ sessions │ notifications        │    │
+│  │  todos │ scheduled_posts │ emails │ whatsapp_messages            │    │
+│  │  approval_history │ rate_limits │ admin_settings                 │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                    MCP SERVERS (6)                               │    │
+│  │  email_mcp │ linkedin-playwright │ odoo-gold-tier               │    │
+│  │  facebook-mcp │ instagram-mcp │ canva-mcp                      │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                    FILE-BASED STATE                              │    │
+│  │  Needs_Action/ → Plans/ → Pending_Approval/ → Approved/ → Done/ │    │
+│  │  Vault Editor browses/edits all markdown files in real-time     │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📋 Environment Configuration
+## Features by Tier
 
-### Required (.env)
+### Silver Tier — Communication Assistant
+
+| Feature | File | Description |
+|---------|------|-------------|
+| Email MCP | `email_mcp.py` | SMTP/Gmail email sending |
+| LinkedIn MCP | `linkedin_mcp.py` | LinkedIn API + session persistence |
+| Gmail Watcher | `gmail_watcher.py` | 30s interval email monitoring |
+| WhatsApp Watcher | `whatsapp_watcher.py` | Twilio WhatsApp polling |
+| Approval Workflow | `orchestrator.py` | Pending → Approved → Sent pipeline |
+| Cron Scheduling | `setup_cron.py` | Background task automation |
+| LLM Router | `provider_config.py` | Multi-provider AI failover |
+| Dry-Run Mode | `.env` | Test without sending |
+
+### Gold Tier — Business Operator
+
+| Feature | File | Description |
+|---------|------|-------------|
+| Odoo MCP | `odoo_mcp.py` | 7 tools: invoices, orders, accounting, bank |
+| Facebook/Instagram Skill | `Agent_Skills/` | Playwright-based social posting |
+| Twitter/X Skill | `Agent_Skills/` | Playwright-based tweeting |
+| CEO Briefing | `scripts/ceo_briefing.py` | Weekly Monday executive summary |
+| Ralph Wiggum Loop | `ralph_wiggum.py` | Autonomous task completion |
+| Audit Logging | `audit_log.py` | JSON trails + error recovery |
+| Enhanced Orchestrator | `orchestrator.py` | Cross-domain, all skills |
+
+### Platinum Tier — Full Digital Employee
+
+| Feature | Location | Description |
+|---------|----------|-------------|
+| **Web Dashboard** | `vault-control/src/pages/` | 11 React pages, dark/light theme, lazy loading |
+| **Real-time WebSocket** | `vault-control/server/index.js` | Live updates, file watcher, auto-reconnect |
+| **Social Media Management** | `vault-control/src/pages/SocialMedia.jsx` | Compose, AI-generate, approve, schedule, publish |
+| **AI Email Processing** | `vault-control/server/index.js` | Dedup, AI analysis, auto-draft, priority detection |
+| **WhatsApp Chat** | `vault-control/src/pages/WhatsApp.jsx` | Full chat UI, QR auth, real-time messaging |
+| **Multi-Provider AI** | `vault-control/server/services/aiProvider.js` | Claude → GPT-4o → OpenRouter → Gemini |
+| **OAuth + JWT Auth** | `vault-control/server/routes/auth.js` | Register, login, roles, CSRF, sessions |
+| **Admin Panel** | `vault-control/src/pages/AdminPanel.jsx` | API key management for 11 services |
+| **Oracle Cloud Monitoring** | `vault-control/server/oracle-ssh.js` | SSH-based VM stats, auto-refresh |
+| **Chatbot** | `vault-control/src/components/Chatbot/` | SSE streaming, action parsing, dashboard context |
+| **Docker Deployment** | `vault-control/docker-compose.prod.yml` | Full stack: PostgreSQL, backend, frontend, services |
+| **6 MCP Servers** | `.mcp.json` | Email, LinkedIn, Odoo, Facebook, Instagram, Canva |
+| **Automated Daily Posting** | `vault-control/server/services/scheduler.js` | 3 slots/day, multi-platform, AI content |
+| **Image Generation** | `vault-control/server/services/imageGenerator.js` | Multi-source, platform-specific resizing |
+| **Keyboard Shortcuts** | `vault-control/src/hooks/useKeyboardShortcuts.js` | Ctrl+K, Alt+1-9, Ctrl+S, Ctrl+Enter |
+| **Notification System** | `vault-control/server/services/notificationService.js` | WS + DB + browser push, smart routing |
+| **Vault Editor** | `vault-control/src/pages/VaultEditor.jsx` | Browse, edit, create, delete markdown files |
+| **Search** | `vault-control/src/components/TopBar.jsx` | Global vault search with folder navigation |
+| **Audit Logging** | `vault-control/server/database/audit.js` | PostgreSQL audit trail with undo support |
+| **Rate Limiting** | `vault-control/server/database/rateLimiter.js` | Global + auth-specific rate limits |
+| **Security Headers** | `vault-control/server/index.js` | X-Content-Type, X-Frame-Options, XSS-Protection |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | React 18, Vite, Tailwind CSS, Recharts, Lucide Icons |
+| **Backend** | Express.js, Node.js, WebSocket (ws) |
+| **Database** | PostgreSQL 16 (UUID PKs, JSONB, indexes) |
+| **Auth** | JWT + bcryptjs + CSRF tokens |
+| **AI Providers** | Anthropic Claude, OpenAI GPT-4o, OpenRouter, Google Gemini |
+| **Social APIs** | Meta Graph API (Facebook/Instagram), LinkedIn, Twitter |
+| **ERP** | Odoo JSON-RPC |
+| **WhatsApp** | whatsapp-web.js (Web) + Twilio (Python) |
+| **Image Gen** | Wikipedia, Canva SVG, Pollinations AI, GPT Image, Sharp |
+| **MCP** | @modelcontextprotocol/sdk (6 servers) |
+| **Deploy** | Docker Compose, Nginx, PostgreSQL Alpine |
+| **Monitoring** | Oracle Cloud SSH, Chokidar file watcher |
+| **State** | File-based (markdown + YAML frontmatter) + PostgreSQL |
+
+---
+
+## Environment Variables
 
 ```bash
-# Email Configuration
-SENDER_EMAIL=your-email@gmail.com
-EMAIL_PASSWORD=your-gmail-app-password
-SENDER_NAME=Your Name
+# AI Providers (at least one required)
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+OPENROUTER_API_KEY=sk-or-...
+GEMINI_API_KEY=AIza...
 
-# Dry-Run Mode (true = log only, false = actually send)
+# Email
+SENDER_EMAIL=your@gmail.com
+EMAIL_PASSWORD=your-app-password
 DRY_RUN=true
 
-# Optional: SMTP Settings (defaults to Gmail)
-SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
+# Social Media
+META_SYSTEM_USER_TOKEN=...
+INSTAGRAM_ACCESS_TOKEN=...
+LINKEDIN_ACCESS_TOKEN=...
 
-# Gmail Watcher (if using)
-GMAIL_WATCHER_ENABLED=false
-```
+# Odoo ERP
+ODOO_URL=http://localhost:8069
+ODOO_DB=odoo_db
+ODOO_USER=admin
+ODOO_PASSWORD=admin
 
-### Get Gmail App Password
+# Oracle Cloud
+ORACLE_SSH_HOST=140.245.241.95
+ORACLE_SSH_USER=opc
+ORACLE_SSH_KEY path or password
 
-1. Go to https://myaccount.google.com/apppasswords
-2. Select "Mail" and your device
-3. Generate 16-character password
-4. Copy to `.env` as `EMAIL_PASSWORD`
+# WhatsApp
+WHATSAPP_API_KEY=...
 
----
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/vault_control
 
-## 📈 Metrics & Monitoring
+# Auth
+ENABLE_AUTH=false
+JWT_SECRET=your-secret
+ENCRYPTION_KEY=hex-64-chars
 
-### View Logs
-
-```bash
-# Orchestrator logs
-tail -f Logs/orchestrator.log
-
-# Email logs (today)
-cat Logs/email_log_$(date +%Y%m%d).md
-
-# Metrics JSON
-cat Metrics/orchestrator_metrics.json
-```
-
-### Key Metrics
-
-- Files processed per session
-- Emails sent (success/failure)
-- Approval workflow stats
-- Processing times
-- Error tracking
-
----
-
-## 🎯 Daily Operations Checklist
-
-### Morning Setup
-
-```bash
-# 1. Start Gmail watcher (if not running)
-tmux new -d -s gmail_watcher "python3 gmail_watcher.py --start"
-
-# 2. Run initial orchestrator
-python3 orchestrator.py
-
-# 3. Check Dashboard for pending approvals
-cat Dashboard.md
-```
-
-### During Day
-
-```bash
-# Review pending approvals (as needed)
-ls Pending_Approval/
-
-# Approve items
-mv Pending_Approval/<file>.md Approved/
-
-# Re-run orchestrator
-python3 orchestrator.py
-```
-
-### Evening Check
-
-```bash
-# 1. Run final orchestrator
-python3 orchestrator.py
-
-# 2. Review Dashboard
-cat Dashboard.md
-
-# 3. Check logs for errors
-tail Logs/orchestrator.log
+# Server
+PORT=3000
+VAULT_PATH=/path/to/Digital_Employee
 ```
 
 ---
 
-## 🔗 Documentation
+## Docker Commands
 
-| Document | Purpose |
-|----------|---------|
-| `Company_Handbook.md` | Rules and operating procedures |
-| `EMAIL_APPROVAL_WORKFLOW.md` | Complete email workflow guide |
-| `GMAIL_WATCHER_GUIDE.md` | Gmail watcher setup and usage |
-| `Dashboard.md` | Live status dashboard |
+```bash
+# Development
+cd vault-control && docker-compose up -d
+
+# Production
+cd vault-control && docker-compose -f docker-compose.prod.yml up -d
+
+# Full stack (with orchestrator + watchers)
+docker-compose -f docker-compose.prod.yml --profile full up -d
+
+# View logs
+docker-compose logs -f backend
+
+# Stop all
+docker-compose -f docker-compose.prod.yml down
+```
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/auth/login` | POST | Login (JWT) |
+| `/api/auth/register` | POST | Register |
+| `/api/posts/generate` | POST | AI-generate posts |
+| `/api/posts/compose` | POST | Create post |
+| `/api/posts/publish-now` | POST | Publish to platforms |
+| `/api/posts/pending-approval` | GET | Pending posts |
+| `/api/posts/:id/approve-publish` | POST | Approve & publish |
+| `/api/social/drafts` | GET | Draft posts |
+| `/api/emails/*` | GET/POST | Email operations |
+| `/api/whatsapp/*` | GET/POST | WhatsApp operations |
+| `/api/oracle/stats` | GET | Oracle Cloud VM stats |
+| `/api/system/vm-info` | GET | System VM info |
+| `/api/odoo/*` | GET | Odoo ERP data |
+| `/api/todos/*` | GET/POST/PUT/DELETE | Todo CRUD |
+| `/api/notifications/*` | GET/POST | Notifications |
+| `/api/admin/*` | GET/PUT | Admin API keys |
+| `/api/chat/stream` | GET | Chatbot SSE stream |
+| `/ws` | WebSocket | Real-time updates |
+
+---
+
+## Documentation
+
+| Document | Location |
+|----------|----------|
+| Company Handbook | `Company_Handbook.md` |
+| Business Rules | `Business_Rules.md` |
+| Business Goals | `Business_Goals.md` |
+| Oracle Cloud Skill | `oracle-cloud/SKILL.md` |
+| Odoo MCP Guide | `ODOO_MCP_GUIDE.md` |
+| LLM Router Guide | `LLM_ROUTER_GUIDE.md` |
+| LinkedIn Setup | `LINKEDIN_SETUP_GUIDE.md` |
+| Email MCP Guide | `EMAIL_MCP_QUICK_REFERENCE.md` |
+| Instagram Setup | `INSTAGRAM_GRAPH_API_SETUP.md` |
 
 ---
 
 **Hackathon:** Personal AI Employee Hackathon 2026
-**Current Tier:** Silver ✅ Complete | Gold ✅ **COMPLETE**
-**Version:** 5.0.0 (Gold Tier — Complete)
-**Last Updated:** 2026-04-10
+**All Tiers:** Bronze ✅ | Silver ✅ | Gold ✅ | **Platinum ✅**
+**Version:** 6.0.0 (Platinum Tier — Complete)
+**Last Updated:** 2026-06-30

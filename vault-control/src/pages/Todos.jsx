@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Plus, Trash2, CheckCircle2, Circle, Edit2, Search, Filter,
-  Calendar, GripVertical, Loader2, AlertCircle, Save, X, ChevronUp, ChevronDown,
+  GripVertical, Loader2, AlertCircle, Save, X, ChevronUp, ChevronDown,
   Square, CheckSquare,
 } from 'lucide-react'
 import axios from 'axios'
@@ -30,7 +30,6 @@ export default function Todos() {
   const [todos, setTodos] = useState([])
   const [newTodo, setNewTodo] = useState('')
   const [newPriority, setNewPriority] = useState('medium')
-  const [newDueDate, setNewDueDate] = useState('')
   const [newReminderAt, setNewReminderAt] = useState('')
   const [filter, setFilter] = useState('all')
   const [priorityFilter, setPriorityFilter] = useState('all')
@@ -38,12 +37,11 @@ export default function Todos() {
   const [editingId, setEditingId] = useState(null)
   const [editValue, setEditValue] = useState('')
   const [editPriority, setEditPriority] = useState('')
-  const [editDueDate, setEditDueDate] = useState('')
   const [editReminderAt, setEditReminderAt] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dragId, setDragId] = useState(null)
-  const [sortBy, setSortBy] = useState('priority') // 'priority', 'date', 'dueDate', 'title'
+  const [sortBy, setSortBy] = useState('priority') // 'priority', 'date', 'title'
   const [selectedForBulk, setSelectedForBulk] = useState(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
   const [showBulkPriority, setShowBulkPriority] = useState(false)
@@ -74,13 +72,11 @@ export default function Todos() {
       const res = await axios.post('/api/todos', {
         title: newTodo,
         priority: newPriority,
-        dueDate: newDueDate || null,
         reminderAt: newReminderAt || null,
       })
       setTodos([res.data, ...todos])
       setNewTodo('')
       setNewPriority('medium')
-      setNewDueDate('')
       setNewReminderAt('')
       success('Task added')
     } catch (err) {
@@ -91,7 +87,6 @@ export default function Todos() {
         title: newTodo,
         completed: false,
         priority: newPriority,
-        dueDate: newDueDate || null,
         reminderAt: newReminderAt || null,
         date: new Date().toISOString().split('T')[0],
         order: 0,
@@ -99,7 +94,6 @@ export default function Todos() {
       setTodos([todo, ...todos])
       setNewTodo('')
       setNewPriority('medium')
-      setNewDueDate('')
       setNewReminderAt('')
     } finally {
       setSaving(false)
@@ -139,7 +133,6 @@ export default function Todos() {
     setEditingId(todo.id)
     setEditValue(todo.title)
     setEditPriority(todo.priority)
-    setEditDueDate(todo.dueDate || '')
     setEditReminderAt(todo.reminderAt || '')
   }
 
@@ -151,11 +144,10 @@ export default function Todos() {
       await axios.put(`/api/todos/${id}`, {
         title: editValue,
         priority: editPriority,
-        dueDate: editDueDate || null,
         reminderAt: editReminderAt || null,
       })
       setTodos(prev => prev.map(t =>
-        t.id === id ? { ...t, title: editValue, priority: editPriority, dueDate: editDueDate, reminderAt: editReminderAt } : t
+        t.id === id ? { ...t, title: editValue, priority: editPriority, reminderAt: editReminderAt } : t
       ))
       setEditingId(null)
       success('Task updated')
@@ -306,10 +298,6 @@ export default function Todos() {
       switch (sortBy) {
         case 'priority':
           return getPriorityWeight(b.priority) - getPriorityWeight(a.priority)
-        case 'dueDate':
-          if (!a.dueDate) return 1
-          if (!b.dueDate) return -1
-          return new Date(a.dueDate) - new Date(b.dueDate)
         case 'date':
           return new Date(b.date || 0) - new Date(a.date || 0)
         case 'title':
@@ -325,80 +313,70 @@ export default function Todos() {
     return { filteredTodos: filtered, completedCount, pendingCount }
   }, [todos, filter, priorityFilter, searchQuery, sortBy])
 
-  const isOverdue = (dueDate) => {
-    if (!dueDate) return false
-    return new Date(dueDate) < new Date(new Date().toISOString().split('T')[0])
-  }
-
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         {[
-          { label: 'TOTAL TASKS', value: todos.length, color: 'dark:text-[#00FF88] text-blue-600' },
-          { label: 'COMPLETED', value: completedCount, color: 'dark:text-[#10B981] text-green-600' },
+          { label: 'TOTAL', value: todos.length, color: 'dark:text-[#00FF88] text-blue-600' },
+          { label: 'DONE', value: completedCount, color: 'dark:text-[#10B981] text-green-600' },
           { label: 'PENDING', value: pendingCount, color: 'dark:text-[#FFB800] text-orange-600' },
-          { label: 'OVERDUE', value: todos.filter(t => isOverdue(t.dueDate) && !t.completed).length, color: 'dark:text-[#EF4444] text-red-600' },
         ].map(stat => (
-          <div key={stat.label} className="card p-4">
-            <p className="text-xs dark:text-[#7A7A85] text-gray-500 font-mono">{stat.label}</p>
-            <p className={`text-3xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
+          <div key={stat.label} className="card p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs dark:text-[#7A7A85] text-gray-500 font-mono">{stat.label}</p>
+            <p className={`text-2xl sm:text-3xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
           </div>
         ))}
       </div>
 
       {/* Add New Todo */}
-      <div className="card p-6">
-        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-4 font-mono">
+      <div className="card p-4 sm:p-6">
+        <h2 className="text-base sm:text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-3 sm:mb-4 font-mono">
           ADD NEW TASK
         </h2>
-        <div className="flex flex-col md:flex-row gap-3 mb-3">
+        <div className="flex flex-col gap-3 mb-3">
           <input
             type="text"
             value={newTodo}
             onChange={(e) => setNewTodo(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addTodo()}
             placeholder="What needs to be done?"
-            className="flex-1 px-4 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-gray-900"
+            className="w-full px-4 py-2.5 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-gray-900"
           />
-          <select
-            value={newPriority}
-            onChange={(e) => setNewPriority(e.target.value)}
-            className="px-4 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50"
-          >
-            <option value="high">🔴 High</option>
-            <option value="medium">🟡 Medium</option>
-            <option value="low">🟢 Low</option>
-          </select>
-          <input
-            type="date"
-            value={newDueDate}
-            onChange={(e) => setNewDueDate(e.target.value)}
-            className="px-4 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50"
-          />
-          <input
-            type="datetime-local"
-            value={newReminderAt}
-            onChange={(e) => setNewReminderAt(e.target.value)}
-            className="px-4 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-xs"
-            title="Reminder at"
-          />
-          <button
-            onClick={addTodo}
-            disabled={saving || !newTodo.trim()}
-            className="flex items-center justify-center gap-2 px-6 py-2 rounded-lg font-medium dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-            Add
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <select
+              value={newPriority}
+              onChange={(e) => setNewPriority(e.target.value)}
+              className="flex-1 px-4 py-2.5 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50"
+            >
+              <option value="high">🔴 High</option>
+              <option value="medium">🟡 Medium</option>
+              <option value="low">🟢 Low</option>
+            </select>
+            <input
+              type="datetime-local"
+              value={newReminderAt}
+              onChange={(e) => setNewReminderAt(e.target.value)}
+              className="flex-1 px-4 py-2.5 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-sm"
+              title="Reminder at"
+            />
+            <button
+              onClick={addTodo}
+              disabled={saving || !newTodo.trim()}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg font-medium dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white disabled:opacity-50 sm:w-auto"
+            >
+              {saving ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+              Add
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="card p-4">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="card p-3 sm:p-4">
+        <div className="flex flex-col gap-3">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative w-full">
             <Search size={16} className="absolute left-3 top-2.5 dark:text-[#7A7A85] text-gray-400" />
             <input
               type="text"
@@ -409,51 +387,52 @@ export default function Todos() {
             />
           </div>
 
-          {/* Status Filter */}
-          <div className="flex gap-1">
-            {['all', 'pending', 'completed'].map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                  filter === f
-                    ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
-                    : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] bg-gray-100 text-gray-600'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            {/* Status Filter */}
+            <div className="flex gap-1">
+              {['all', 'pending', 'completed'].map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                    filter === f
+                      ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
+                      : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
 
-          {/* Priority Filter */}
-          <div className="flex gap-1">
-            {['all', 'high', 'medium', 'low'].map(p => (
-              <button
-                key={p}
-                onClick={() => setPriorityFilter(p)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                  priorityFilter === p
-                    ? getPriorityColor(p)
-                    : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] bg-gray-100 text-gray-600'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+            {/* Priority Filter */}
+            <div className="flex gap-1">
+              {['all', 'high', 'medium', 'low'].map(p => (
+                <button
+                  key={p}
+                  onClick={() => setPriorityFilter(p)}
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                    priorityFilter === p
+                      ? getPriorityColor(p)
+                      : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
 
-          {/* Sort */}
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="px-3 py-1.5 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
-          >
-            <option value="priority">Sort: Priority</option>
-            <option value="dueDate">Sort: Due Date</option>
-            <option value="date">Sort: Created</option>
-            <option value="title">Sort: Title</option>
-          </select>
+            {/* Sort */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-1.5 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
+            >
+              <option value="priority">Sort: Priority</option>
+              <option value="date">Sort: Created</option>
+              <option value="title">Sort: Title</option>
+            </select>
+          </div>
         </div>
 
         <div className="text-xs dark:text-[#7A7A85] text-gray-500 mt-2">
@@ -480,7 +459,7 @@ export default function Todos() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium dark:bg-green-500/20 dark:text-green-400 disabled:opacity-50 transition-colors"
             >
               <CheckCircle2 size={14} />
-              Complete
+              <span className="hidden sm:inline">Complete</span>
             </button>
             <button
               onClick={handleBulkDelete}
@@ -488,7 +467,7 @@ export default function Todos() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium dark:bg-red-500/20 dark:text-red-400 disabled:opacity-50 transition-colors"
             >
               <Trash2 size={14} />
-              Delete
+              <span className="hidden sm:inline">Delete</span>
             </button>
             <div className="relative">
               <button
@@ -519,12 +498,12 @@ export default function Todos() {
 
       {/* Todo List - content-visibility for rendering performance (rendering-content-visibility) */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-12">
+        <div className="flex flex-col items-center justify-center py-8 sm:py-12">
           <Loader2 className="animate-spin text-[#00FF88]" size={24} />
           <p className="text-xs dark:text-[#7A7A85] mt-2">Loading tasks...</p>
         </div>
       ) : filteredTodos.length === 0 ? (
-        <div className="card p-12 text-center">
+        <div className="card p-8 sm:p-12 text-center">
           <p className="dark:text-[#7A7A85] text-gray-500 font-mono">No tasks found</p>
           {searchQuery && (
             <p className="text-xs dark:text-[#7A7A85] mt-2">Try adjusting your search</p>
@@ -533,7 +512,7 @@ export default function Todos() {
       ) : (
         <>
           {/* Select All */}
-          <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2">
             <button
               onClick={selectAllTodos}
               className="flex items-center gap-2 text-xs dark:text-[#7A7A85] hover:dark:text-[#E0E0E6] transition-colors"
@@ -547,7 +526,7 @@ export default function Todos() {
             </button>
           </div>
 
-          <div className="space-y-2 content-visibility-auto" style={{ containIntrinsicSize: '0 3000px' }}>
+          <div className="space-y-2 content-visibility-auto px-1 sm:px-0" style={{ containIntrinsicSize: '0 3000px' }}>
           {filteredTodos.map((todo, index) => (
             <div
               key={todo.id}
@@ -555,14 +534,14 @@ export default function Todos() {
               onDragStart={() => handleDragStart(todo.id)}
               onDragOver={(e) => handleDragOver(e, todo.id)}
               onDragEnd={handleDragEnd}
-              className={`card p-4 flex items-center gap-3 transition-all ${
+              className={`card p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all ${
                 dragId === todo.id ? 'dark:bg-[#00FF88]/5 border-[#00FF88] opacity-50' : 'hover:dark:bg-[#1A1A24]/50'
-              } ${todo.completed ? 'opacity-60' : ''} ${isOverdue(todo.dueDate) && !todo.completed ? 'dark:border-red-500/30' : ''} ${selectedForBulk.has(todo.id) ? 'dark:bg-[#00FF88]/5' : ''}`}
+              } ${todo.completed ? 'opacity-60' : ''} ${selectedForBulk.has(todo.id) ? 'dark:bg-[#00FF88]/5' : ''}`}
             >
               {/* Bulk Select Checkbox */}
               <button
                 onClick={() => toggleBulkSelect(todo.id)}
-                className="flex-shrink-0"
+                className="flex-shrink-0 hidden sm:block"
               >
                 {selectedForBulk.has(todo.id) ? (
                   <CheckSquare size={16} className="dark:text-[#00FF88]" />
@@ -571,7 +550,7 @@ export default function Todos() {
                 )}
               </button>
               {/* Drag Handle */}
-              <button className="flex-shrink-0 dark:text-[#7A7A85] text-gray-400 cursor-grab active:cursor-grabbing">
+              <button className="flex-shrink-0 dark:text-[#7A7A85] text-gray-400 cursor-grab active:cursor-grabbing hidden sm:block">
                 <GripVertical size={16} />
               </button>
 
@@ -593,27 +572,21 @@ export default function Todos() {
                       onChange={(e) => setEditValue(e.target.value)}
                       className="w-full px-2 py-1 rounded dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-sm"
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                       <select
                         value={editPriority}
                         onChange={(e) => setEditPriority(e.target.value)}
-                        className="px-2 py-1 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
+                        className="w-full sm:w-auto px-2 py-1 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
                       >
                         <option value="high">High</option>
                         <option value="medium">Medium</option>
                         <option value="low">Low</option>
                       </select>
                       <input
-                        type="date"
-                        value={editDueDate}
-                        onChange={(e) => setEditDueDate(e.target.value)}
-                        className="px-2 py-1 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
-                      />
-                      <input
                         type="datetime-local"
                         value={editReminderAt}
                         onChange={(e) => setEditReminderAt(e.target.value)}
-                        className="px-2 py-1 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
+                        className="w-full sm:w-auto px-2 py-1 rounded text-xs dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100"
                         title="Reminder at"
                       />
                     </div>
@@ -627,12 +600,6 @@ export default function Todos() {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold capitalize ${getPriorityColor(editingId === todo.id ? editPriority : todo.priority)}`}>
                     {editingId === todo.id ? editPriority : todo.priority}
                   </span>
-                  {todo.dueDate ? (
-                    <span className={`text-[10px] flex items-center gap-1 ${isOverdue(todo.dueDate) && !todo.completed ? 'text-red-500 font-bold' : 'dark:text-[#7A7A85] text-gray-500'}`}>
-                      <Calendar size={10} />
-                      {isOverdue(todo.dueDate) && !todo.completed ? 'OVERDUE: ' : ''}{todo.dueDate}
-                    </span>
-                  ) : null}
                   {todo.reminderAt && (
                     <span className="text-[10px] dark:text-[#FFB800] text-orange-600 flex items-center gap-1">
                       ⏰ {new Date(todo.reminderAt).toLocaleString()}

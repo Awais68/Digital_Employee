@@ -61,7 +61,7 @@ export function useKeyboardShortcuts(handlers = {}) {
     // Alt+1-9 - Navigate pages
     if (e.altKey && e.key >= '1' && e.key <= '9') {
       e.preventDefault()
-      const pages = ['dashboard', 'approvals', 'emails', 'whatsapp', 'todos', 'social', 'accounting', 'cloud', 'logs']
+      const pages = ['dashboard', 'approvals', 'emails', 'whatsapp', 'todos', 'social', 'accounting', 'oracle', 'logs']
       const index = parseInt(e.key) - 1
       if (pages[index]) {
         onNavigate?.(pages[index])
