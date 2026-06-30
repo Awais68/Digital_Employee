@@ -14108,3 +14108,169 @@ We're diving deep into b...
 [2026-06-30 22:12:05] [INFO    ]    🐛 Errors: 12
 [2026-06-30 22:12:05] [INFO    ] 📈 Metrics saved
 [2026-06-30 22:12:05] [INFO    ] ✨ Orchestrator run complete.
+[2026-06-30 22:15:01] [INFO    ] 🚀 Orchestrator starting...
+[2026-06-30 22:15:01] [INFO    ] ✅ Loaded .env file successfully
+[2026-06-30 22:15:01] [INFO    ] 📂 Directory ready: needs_action
+[2026-06-30 22:15:01] [INFO    ] 📂 Directory ready: done
+[2026-06-30 22:15:01] [INFO    ] 📂 Directory ready: rejected
+[2026-06-30 22:15:01] [INFO    ] 📂 Directory ready: plans
+[2026-06-30 22:15:01] [INFO    ] 📂 Directory ready: pending_approval
+[2026-06-30 22:15:01] [INFO    ] 📂 Directory ready: approved
+[2026-06-30 22:15:01] [INFO    ] 📂 Directory ready: logs
+[2026-06-30 22:15:01] [INFO    ] 📂 Directory ready: metrics
+[2026-06-30 22:15:01] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-06-30 22:15:01] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-06-30 22:15:01] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-06-30 22:15:01] [INFO    ] ✅ Processing approval workflow...
+[2026-06-30 22:15:01] [INFO    ] ✅ Found 12 approved file(s) to process
+[2026-06-30 22:15:01] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:01] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260404_234638.md
+[2026-06-30 22:15:01] [INFO    ] 📱 Publishing LinkedIn post:
+[2026-06-30 22:15:01] [INFO    ]    Content preview: Unpopular opinion about AI development...
+
+Today's focus: Create and prepare one professional Linked...
+[2026-06-30 22:15:02] [INFO    ]    🎭 Attempt 1: Using Playwright MCP (saved session)...
+[2026-06-30 22:15:02] [WARNING ] ⚠️  Playwright MCP failed: No saved LinkedIn session found. Please login first using test_linkedin_session.py
+[2026-06-30 22:15:02] [INFO    ]    🔌 Attempt 2: Using LinkedIn API MCP...
+[2026-06-30 22:15:02] [ERROR   ] ❌ LinkedIn API MCP failed: LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:15:02] [ERROR   ] ❌ LinkedIn post publish failed: LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:15:02] [ERROR   ] ❌ Failed to publish LinkedIn post: LINKEDIN_POST_20260404_234638.md - LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:15:02] [INFO    ] 📊 Dashboard updated: LinkedIn post failure - LINKEDIN_POST_20260404_234638.md
+[2026-06-30 22:15:02] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:02] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260612_164100.md
+[2026-06-30 22:15:02] [INFO    ] 📱 Publishing LinkedIn post:
+[2026-06-30 22:15:02] [INFO    ]    Content preview: 🚀 Excited to share what we've been building...
+
+Today's focus: type: email
+
+We're diving deep into b...
+[2026-06-30 22:15:02] [INFO    ]    🎭 Attempt 1: Using Playwright MCP (saved session)...
+[2026-06-30 22:15:02] [WARNING ] ⚠️  Playwright MCP failed: No saved LinkedIn session found. Please login first using test_linkedin_session.py
+[2026-06-30 22:15:02] [INFO    ]    🔌 Attempt 2: Using LinkedIn API MCP...
+[2026-06-30 22:15:03] [ERROR   ] ❌ LinkedIn API MCP failed: LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:15:03] [ERROR   ] ❌ LinkedIn post publish failed: LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:15:03] [ERROR   ] ❌ Failed to publish LinkedIn post: LINKEDIN_POST_20260612_164100.md - LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:15:03] [INFO    ] 📊 Dashboard updated: LinkedIn post failure - LINKEDIN_POST_20260612_164100.md
+[2026-06-30 22:15:03] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:03] [SUCCESS ] 🎉 Processing Approved: REPLY_1779730970586.md
+[2026-06-30 22:15:03] [ERROR   ] ❌ Failed to process: REPLY_1779730970586.md - Could not extract email data from approval file
+[2026-06-30 22:15:03] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:03] [SUCCESS ] 🎉 Processing Approved: REPLY_1779737489447.md
+[2026-06-30 22:15:03] [ERROR   ] ❌ Failed to process: REPLY_1779737489447.md - Could not extract email data from approval file
+[2026-06-30 22:15:03] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:03] [SUCCESS ] 🎉 Processing Approved: SOCIAL_MEDIA_CAMPAIGN_20260414.md
+[2026-06-30 22:15:04] [ERROR   ] ❌ Failed to process: SOCIAL_MEDIA_CAMPAIGN_20260414.md - Could not extract email data from approval file
+[2026-06-30 22:15:04] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:04] [SUCCESS ] 🎉 Processing Approved: FACEBOOK_POST_20260419_164500.md
+[2026-06-30 22:15:04] [ERROR   ] ❌ Failed to process: FACEBOOK_POST_20260419_164500.md - Could not extract email data from approval file
+[2026-06-30 22:15:04] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:04] [SUCCESS ] 🎉 Processing Approved: POST_2026-05-24T110727020Z_FACEBOOK.md
+[2026-06-30 22:15:04] [ERROR   ] ❌ Failed to process: POST_2026-05-24T110727020Z_FACEBOOK.md - Could not extract email data from approval file
+[2026-06-30 22:15:04] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:04] [SUCCESS ] 🎉 Processing Approved: 20260407_184004_email_code_the_agents_your_performance_report_for_march.md
+[2026-06-30 22:15:04] [ERROR   ] ❌ Failed to process: 20260407_184004_email_code_the_agents_your_performance_report_for_march.md - Could not extract email data from approval file
+[2026-06-30 22:15:04] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:04] [SUCCESS ] 🎉 Processing Approved: CEO_BRIEFING_TEMPLATE.md
+[2026-06-30 22:15:05] [ERROR   ] ❌ Failed to process: CEO_BRIEFING_TEMPLATE.md - Could not extract email data from approval file
+[2026-06-30 22:15:05] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:05] [SUCCESS ] 🎉 Processing Approved: REPORT_2026-05-17.md
+[2026-06-30 22:15:05] [ERROR   ] ❌ Failed to process: REPORT_2026-05-17.md - Could not extract email data from approval file
+[2026-06-30 22:15:05] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:05] [SUCCESS ] 🎉 Processing Approved: 20260525_224006_email_urgent_meeting_with_sir_zia.md
+[2026-06-30 22:15:05] [ERROR   ] ❌ Failed to process: 20260525_224006_email_urgent_meeting_with_sir_zia.md - Could not extract email data from approval file
+[2026-06-30 22:15:05] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:15:05] [SUCCESS ] 🎉 Processing Approved: INSTAGRAM_POST_20260420_120000.md
+[2026-06-30 22:15:06] [ERROR   ] ❌ Failed to process: INSTAGRAM_POST_20260420_120000.md - Could not extract email data from approval file
+[2026-06-30 22:15:06] [INFO    ] 📭 No rejected files to archive
+[2026-06-30 22:15:06] [INFO    ] 📭 No pending approvals
+[2026-06-30 22:15:06] [INFO    ] 📊 Dashboard updated with priority view
+[2026-06-30 22:15:06] [INFO    ] 📊 Approval Workflow Results:
+[2026-06-30 22:15:06] [INFO    ]    ✅ Emails Sent: 0
+[2026-06-30 22:15:06] [INFO    ]    ❌ Rejected: 0
+[2026-06-30 22:15:06] [INFO    ]    ⏳ Pending: 0
+[2026-06-30 22:15:06] [INFO    ]    🐛 Errors: 12
+[2026-06-30 22:15:06] [INFO    ] 📈 Metrics saved
+[2026-06-30 22:15:06] [INFO    ] ✨ Orchestrator run complete.
+[2026-06-30 22:18:01] [INFO    ] 🚀 Orchestrator starting...
+[2026-06-30 22:18:01] [INFO    ] ✅ Loaded .env file successfully
+[2026-06-30 22:18:01] [INFO    ] 📂 Directory ready: needs_action
+[2026-06-30 22:18:01] [INFO    ] 📂 Directory ready: done
+[2026-06-30 22:18:01] [INFO    ] 📂 Directory ready: rejected
+[2026-06-30 22:18:01] [INFO    ] 📂 Directory ready: plans
+[2026-06-30 22:18:01] [INFO    ] 📂 Directory ready: pending_approval
+[2026-06-30 22:18:01] [INFO    ] 📂 Directory ready: approved
+[2026-06-30 22:18:01] [INFO    ] 📂 Directory ready: logs
+[2026-06-30 22:18:01] [INFO    ] 📂 Directory ready: metrics
+[2026-06-30 22:18:01] [INFO    ] 📥 Scanning Needs_Action folder...
+[2026-06-30 22:18:01] [INFO    ] 📭 No .md files found in Needs_Action folder
+[2026-06-30 22:18:01] [INFO    ] 📭 Nothing to process in Needs_Action folder.
+[2026-06-30 22:18:01] [INFO    ] ✅ Processing approval workflow...
+[2026-06-30 22:18:01] [INFO    ] ✅ Found 12 approved file(s) to process
+[2026-06-30 22:18:01] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:01] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260404_234638.md
+[2026-06-30 22:18:01] [INFO    ] 📱 Publishing LinkedIn post:
+[2026-06-30 22:18:01] [INFO    ]    Content preview: Unpopular opinion about AI development...
+
+Today's focus: Create and prepare one professional Linked...
+[2026-06-30 22:18:01] [INFO    ]    🎭 Attempt 1: Using Playwright MCP (saved session)...
+[2026-06-30 22:18:01] [WARNING ] ⚠️  Playwright MCP failed: No saved LinkedIn session found. Please login first using test_linkedin_session.py
+[2026-06-30 22:18:01] [INFO    ]    🔌 Attempt 2: Using LinkedIn API MCP...
+[2026-06-30 22:18:02] [ERROR   ] ❌ LinkedIn API MCP failed: LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:18:02] [ERROR   ] ❌ LinkedIn post publish failed: LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:18:02] [ERROR   ] ❌ Failed to publish LinkedIn post: LINKEDIN_POST_20260404_234638.md - LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:18:02] [INFO    ] 📊 Dashboard updated: LinkedIn post failure - LINKEDIN_POST_20260404_234638.md
+[2026-06-30 22:18:02] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:02] [SUCCESS ] 🎉 Processing Approved: LINKEDIN_POST_20260612_164100.md
+[2026-06-30 22:18:02] [INFO    ] 📱 Publishing LinkedIn post:
+[2026-06-30 22:18:02] [INFO    ]    Content preview: 🚀 Excited to share what we've been building...
+
+Today's focus: type: email
+
+We're diving deep into b...
+[2026-06-30 22:18:02] [INFO    ]    🎭 Attempt 1: Using Playwright MCP (saved session)...
+[2026-06-30 22:18:02] [WARNING ] ⚠️  Playwright MCP failed: No saved LinkedIn session found. Please login first using test_linkedin_session.py
+[2026-06-30 22:18:02] [INFO    ]    🔌 Attempt 2: Using LinkedIn API MCP...
+[2026-06-30 22:18:02] [ERROR   ] ❌ LinkedIn API MCP failed: LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:18:02] [ERROR   ] ❌ LinkedIn post publish failed: LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:18:02] [ERROR   ] ❌ Failed to publish LinkedIn post: LINKEDIN_POST_20260612_164100.md - LinkedIn token expired and auto-refresh failed. Please regenerate token manually.
+[2026-06-30 22:18:02] [INFO    ] 📊 Dashboard updated: LinkedIn post failure - LINKEDIN_POST_20260612_164100.md
+[2026-06-30 22:18:02] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:02] [SUCCESS ] 🎉 Processing Approved: REPLY_1779730970586.md
+[2026-06-30 22:18:03] [ERROR   ] ❌ Failed to process: REPLY_1779730970586.md - Could not extract email data from approval file
+[2026-06-30 22:18:03] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:03] [SUCCESS ] 🎉 Processing Approved: REPLY_1779737489447.md
+[2026-06-30 22:18:03] [ERROR   ] ❌ Failed to process: REPLY_1779737489447.md - Could not extract email data from approval file
+[2026-06-30 22:18:03] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:03] [SUCCESS ] 🎉 Processing Approved: SOCIAL_MEDIA_CAMPAIGN_20260414.md
+[2026-06-30 22:18:03] [ERROR   ] ❌ Failed to process: SOCIAL_MEDIA_CAMPAIGN_20260414.md - Could not extract email data from approval file
+[2026-06-30 22:18:03] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:03] [SUCCESS ] 🎉 Processing Approved: FACEBOOK_POST_20260419_164500.md
+[2026-06-30 22:18:03] [ERROR   ] ❌ Failed to process: FACEBOOK_POST_20260419_164500.md - Could not extract email data from approval file
+[2026-06-30 22:18:03] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:03] [SUCCESS ] 🎉 Processing Approved: POST_2026-05-24T110727020Z_FACEBOOK.md
+[2026-06-30 22:18:04] [ERROR   ] ❌ Failed to process: POST_2026-05-24T110727020Z_FACEBOOK.md - Could not extract email data from approval file
+[2026-06-30 22:18:04] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:04] [SUCCESS ] 🎉 Processing Approved: 20260407_184004_email_code_the_agents_your_performance_report_for_march.md
+[2026-06-30 22:18:04] [ERROR   ] ❌ Failed to process: 20260407_184004_email_code_the_agents_your_performance_report_for_march.md - Could not extract email data from approval file
+[2026-06-30 22:18:04] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:04] [SUCCESS ] 🎉 Processing Approved: CEO_BRIEFING_TEMPLATE.md
+[2026-06-30 22:18:04] [ERROR   ] ❌ Failed to process: CEO_BRIEFING_TEMPLATE.md - Could not extract email data from approval file
+[2026-06-30 22:18:04] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:04] [SUCCESS ] 🎉 Processing Approved: REPORT_2026-05-17.md
+[2026-06-30 22:18:05] [ERROR   ] ❌ Failed to process: REPORT_2026-05-17.md - Could not extract email data from approval file
+[2026-06-30 22:18:05] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:05] [SUCCESS ] 🎉 Processing Approved: 20260525_224006_email_urgent_meeting_with_sir_zia.md
+[2026-06-30 22:18:05] [ERROR   ] ❌ Failed to process: 20260525_224006_email_urgent_meeting_with_sir_zia.md - Could not extract email data from approval file
+[2026-06-30 22:18:05] [INFO    ] ────────────────────────────────────────────────────────────
+[2026-06-30 22:18:05] [SUCCESS ] 🎉 Processing Approved: INSTAGRAM_POST_20260420_120000.md
+[2026-06-30 22:18:05] [ERROR   ] ❌ Failed to process: INSTAGRAM_POST_20260420_120000.md - Could not extract email data from approval file
+[2026-06-30 22:18:05] [INFO    ] 📭 No rejected files to archive
+[2026-06-30 22:18:05] [INFO    ] 📭 No pending approvals
+[2026-06-30 22:18:05] [INFO    ] 📊 Dashboard updated with priority view
+[2026-06-30 22:18:05] [INFO    ] 📊 Approval Workflow Results:
+[2026-06-30 22:18:05] [INFO    ]    ✅ Emails Sent: 0
+[2026-06-30 22:18:05] [INFO    ]    ❌ Rejected: 0
+[2026-06-30 22:18:05] [INFO    ]    ⏳ Pending: 0
+[2026-06-30 22:18:05] [INFO    ]    🐛 Errors: 12
+[2026-06-30 22:18:05] [INFO    ] 📈 Metrics saved
+[2026-06-30 22:18:05] [INFO    ] ✨ Orchestrator run complete.
