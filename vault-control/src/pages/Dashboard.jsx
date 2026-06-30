@@ -68,10 +68,10 @@ export default function Dashboard({ setCurrentPage }) {
     try {
       setError(null)
       const res = await axios.get('/api/system/stats')
-      setVaultCounts(res.data.vaultCounts)
-      setPendingApprovals(res.data.pendingApprovals)
-      setRecentActivity(res.data.recentActivity)
-      setServices(res.data.services)
+      setVaultCounts(res.data.vaultCounts || {})
+      setPendingApprovals(res.data.pendingApprovals || [])
+      setRecentActivity(res.data.recentActivity || [])
+      setServices(res.data.services || [])
       if (res.data.workers) setWorkers(res.data.workers)
       setLastUpdate(new Date())
     } catch (err) {
