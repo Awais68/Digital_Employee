@@ -311,6 +311,7 @@ Return ONLY the post text. No explanations, no intro, no markdown formatting aro
   const imagePrompt = `Professional marketing visual for: "${topic}"
 
 Core message: "${visualHook}"
+Key data/stats to visually emphasize: "${(research.key_stats || research.statistics || []).slice(0,3).join(", ") || "N/A"}"
 
 Requirements:
 - Modern, premium, brand-worthy design
@@ -380,7 +381,7 @@ export async function generateDailyPosts(topicInput, platforms = ['linkedin', 't
       } else {
         console.warn(`[PostGen] ${platform}: Image generation failed, using fallback`);
         try {
-          imageUrl = await generatePostImage(postData.imagePrompt);
+          imageUrl = await generatePostImage(postData.imagePrompt, 'professional', '4:5', postData.content || '');
         } catch (e) {
           imageUrl = null;
         }

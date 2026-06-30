@@ -152,7 +152,7 @@ export async function generateAndValidateImages(topic, research, platform, tempD
   // Try OpenRouter image generation first (uses the gemini-2.5-flash-image model)
   try {
     console.log(`[SocialImageWorkflow] Trying OpenRouter image generation...`);
-    imageUrl = await generatePostImage(topic);
+    imageUrl = await generatePostImage(topic, 'professional', '4:5', customPrompt || '');
     console.log(`[SocialImageWorkflow] OpenRouter success: ${imageUrl.substring(0, 100)}`);
     localImagePath = path.join(tempDir, `generated_${platform}_${Date.now()}.jpg`);
     await downloadImage(imageUrl, localImagePath);
