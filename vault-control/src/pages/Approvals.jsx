@@ -64,7 +64,7 @@ export default function Approvals() {
       }
       
       const res = await axios.get(url, { timeout: 10000 })
-      setApprovals(res.data)
+      setApprovals(Array.isArray(res.data) ? res.data : (res.data?.approvals || res.data?.data || []))
     } catch (err) {
       console.error('Failed to fetch approvals:', err)
       // Don't show error on initial load - just show empty state
