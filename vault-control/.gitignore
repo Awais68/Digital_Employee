@@ -19,3 +19,6 @@ instagram_session/
 
 # Allow example env
 !.env.example
+.vercel
+.env*
+.env.local
