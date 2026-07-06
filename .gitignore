@@ -135,3 +135,5 @@ temp/
 *.tmp
 Logs/
 .secrets.enc
+.vercel
+.env*

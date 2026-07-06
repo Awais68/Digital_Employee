@@ -84,7 +84,7 @@ export function rateLimiter(options = {}) {
 export function authRateLimiter() {
   return rateLimiter({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: 30, // Increased from 10 — Neon cold-start can cause legitimate retries
     message: 'Too many login attempts, please try again later.',
   });
 }

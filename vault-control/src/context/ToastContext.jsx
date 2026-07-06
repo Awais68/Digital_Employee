@@ -5,11 +5,13 @@ const ToastContext = createContext(null);
 
 const TOAST_DURATION = 4000;
 
+let toastCounter = 0;
+
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback((message, type = 'info', duration = TOAST_DURATION) => {
-    const id = Date.now().toString();
+    const id = `toast-${++toastCounter}`;
     setToasts(prev => [...prev, { id, message, type, duration }]);
     
     if (duration > 0) {

@@ -129,7 +129,8 @@ export default function ChatbotPanel({ isOpen, onClose }) {
     try {
       const controller = new AbortController();
       abortRef.current = controller;
-      const res = await fetch("/api/chat/stream", {
+      const apiBase = import.meta.env.VITE_API_URL || "";
+      const res = await fetch(apiBase + "/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: historyForApi }),

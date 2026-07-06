@@ -6,7 +6,6 @@ export function useWebSocket(onMessage) {
   const reconnectTimeoutRef = useRef(null)
   const retryCountRef = useRef(0)
   const onMessageRef = useRef(onMessage)
-  const maxRetries = 10
   const baseDelay = 1000
 
   useEffect(() => {
@@ -16,9 +15,7 @@ export function useWebSocket(onMessage) {
   const connect = useCallback(() => {
     const envUrl = import.meta.env.VITE_WS_URL
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = (envUrl ? `${envUrl}/ws` : null) || (window.location.hostname === 'localhost'
-      ? `${protocol}//${window.location.host}/ws`
-      : `${protocol}//${window.location.host}`)
+    const wsUrl = (envUrl ? `${envUrl}/ws` : null) || `${protocol}//${window.location.host}/ws`
     
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
@@ -46,19 +43,15 @@ export function useWebSocket(onMessage) {
       console.log('[WebSocket] Disconnected')
       setIsConnected(false)
       
-      if (retryCountRef.current < maxRetries) {
-        const delay = Math.min(baseDelay * Math.pow(2, retryCountRef.current), 30000)
-        retryCountRef.current++
-        console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${retryCountRef.current}/${maxRetries})`)
-        
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (wsRef.current === ws) {
-            connect()
-          }
-        }, delay)
-      } else {
-        console.error('[WebSocket] Max reconnection attempts reached')
-      }
+      const delay = Math.min(baseDelay * Math.pow(2, retryCountRef.current), 30000)
+      retryCountRef.current++
+      console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${retryCountRef.current})`)
+      
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (wsRef.current === ws) {
+          connect()
+        }
+      }, delay)
     }
   }, [])
 

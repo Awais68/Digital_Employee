@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Bell, Check } from 'lucide-react'
-import axios from 'axios'
+import { useApp } from '../context/AppContext'
 
 const TYPE_COLORS = {
   success: 'bg-green-500',
@@ -25,7 +25,6 @@ function isUsefulNotification(n) {
   return false
 }
 
-// Notification se page determine karo
 function getPageFromNotification(n) {
   const src = n.data?.source
   const title = n.title || ''
@@ -36,53 +35,20 @@ function getPageFromNotification(n) {
   if (src === 'todo' || title.includes('📝') || title.includes('Todo') || title.includes('Task') || title.includes('Reminder')) return 'todos'
   if (src === 'social' || title.includes('Post') || title.includes('Draft')) return 'social'
   if (n.type === 'error' || n.type === 'warning') return 'logs'
-  return null // null = navigate nahi karo
+  return null
 }
 
 export default function NotificationBell({ setCurrentPage }) {
-  const [notifications, setNotifications] = useState([])
-  const [unread, setUnread] = useState(0)
+  const { notifications, unreadCount, markAllRead } = useApp()
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
   const filteredNotifications = notifications.filter(isUsefulNotification)
-
-  const loadNotifications = async () => {
-    try {
-      const res = await axios.get('/api/notifications')
-      const data = Array.isArray(res.data) ? res.data : []
-      setNotifications(data)
-      setUnread(data.filter(n => !n.read && isUsefulNotification(n)).length)
-    } catch {}
-  }
+  const unread = notifications.filter(n => !n.read && isUsefulNotification(n)).length
 
   useEffect(() => {
-    loadNotifications()
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws`)
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        if (data.type === 'notification' && data.notification) {
-          setNotifications(prev => [data.notification, ...prev].slice(0, 50))
-          if (isUsefulNotification(data.notification)) {
-            setUnread(prev => prev + 1)
-            if (Notification.permission === 'granted') {
-              new Notification(data.notification.title, {
-                body: data.notification.message,
-                icon: '/logo.png',
-              })
-            }
-          }
-        }
-      } catch {}
-    }
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission()
     }
-    return () => ws.close()
-  }, [])
-
-  useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setOpen(false)
@@ -95,9 +61,7 @@ export default function NotificationBell({ setCurrentPage }) {
   const handleToggle = () => {
     setOpen(prev => !prev)
     if (!open && unread > 0) {
-      axios.post('/api/notifications/read-all').catch(() => {})
-      setUnread(0)
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      markAllRead()
     }
   }
 

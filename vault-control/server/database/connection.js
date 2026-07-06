@@ -14,7 +14,7 @@ export function getPool() {
       ssl: { rejectUnauthorized: false },
       max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      connectionTimeoutMillis: 30000, // Neon cold-start can take 10-25s
       statement_timeout: 30000,
     });
   } else {
@@ -57,15 +57,9 @@ export async function initializeSchema() {
   try {
     const pool = getPool();
 
-    // Drop stale tables from previous failed inits (safe for fresh DB)
-    const dropOrder = [
-      'admin_settings', 'todos', 'whatsapp_messages', 'scheduled_posts',
-      'email_templates', 'emails', 'rate_limits', 'notifications',
-      'sessions', 'approval_history', 'audit_log', 'api_keys', 'users',
-    ]
-    for (const t of dropOrder) {
-      try { await pool.query(`DROP TABLE IF EXISTS ${t} CASCADE`) } catch {}
-    }
+    // NOTE: Tables are NOT dropped here — that would delete all production data on every restart.
+    // CREATE TABLE IF NOT EXISTS handles idempotent schema initialization safely.
+    // If you need to reset the database, do it manually via psql or a migration script.
 
     // Use gen_random_uuid() instead of uuid-ossp extension for Neon compatibility
     const tables = [

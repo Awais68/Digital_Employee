@@ -710,6 +710,13 @@ async function boot() {
     console.log(`[Auth] ${ENABLE_AUTH ? 'Enabled' : 'Disabled (dev mode)'}`)
     console.log(`[Database] ${dbConnected ? 'Connected' : 'Not connected (file-based mode)'}`)
 
+    // Neon keep-alive — prevents cold-start on first request after idle
+    if (dbConnected) {
+      setInterval(async () => {
+        try { await query('SELECT 1') } catch {}
+      }, 30000)
+    }
+
     // Scheduled post checker — runs every 30 seconds
     setInterval(async () => {
       try {

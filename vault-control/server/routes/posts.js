@@ -143,7 +143,7 @@ router.post('/generate-image', async (req, res) => {
 })
 
 router.post('/generate', async (req, res) => {
-  console.log('[PostGen] Request received:', JSON.stringify(req.body))
+  console.log('[PostGen] Request received:', { topic: req.body?.topic, platforms: req.body?.platforms })
   try {
     const { topic, platforms } = req.body
     console.log('[PostGen] Calling generateDailyPosts with topic:', topic, 'platforms:', platforms)
