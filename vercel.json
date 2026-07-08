@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd vault-control && npm install && npm run build",
+  "outputDirectory": "vault-control/dist",
+  "installCommand": "true",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
