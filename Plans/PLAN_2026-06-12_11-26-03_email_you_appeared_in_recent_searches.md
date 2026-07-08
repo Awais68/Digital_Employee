@@ -1,6 +1,6 @@
 ---
 type: plan
-status: pending
+status: done
 priority: medium
 task_type: email
 created: 2026-06-12 16:28:31

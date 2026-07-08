@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 import os from 'os'
+import { requireAdmin } from '../database/auth.js'
 
 const router = express.Router()
 
@@ -31,7 +32,7 @@ router.get('/folders', (req, res) => {
 })
 
 // POST export vault as zip
-router.post('/export', (req, res) => {
+router.post('/export', requireAdmin, (req, res) => {
   try {
     const { folders } = req.body || {}
     const vaultPath = getVaultPath()
@@ -70,7 +71,7 @@ router.post('/export', (req, res) => {
 })
 
 // POST import vault from zip
-router.post('/import', (req, res) => {
+router.post('/import', requireAdmin, (req, res) => {
   try {
     const { zipData, mode = 'merge' } = req.body
     if (!zipData) {

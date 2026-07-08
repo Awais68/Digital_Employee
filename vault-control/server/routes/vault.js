@@ -2,6 +2,7 @@ import express from 'express'
 import { readVaultFiles, getVaultPath, writeFile, readFile } from '../vault-reader.js'
 import fs from 'fs'
 import path from 'path'
+import { requireAdmin } from '../database/auth.js'
 
 const router = express.Router()
 
@@ -55,7 +56,7 @@ router.get('/:folder/:id', (req, res) => {
 })
 
 // CREATE new file
-router.post('/:folder', (req, res) => {
+router.post('/:folder', requireAdmin, (req, res) => {
   try {
     const { folder } = req.params
     const { id, frontmatter = {}, content = '' } = req.body
@@ -83,7 +84,7 @@ router.post('/:folder', (req, res) => {
 })
 
 // UPDATE file
-router.put('/:folder/:id', (req, res) => {
+router.put('/:folder/:id', requireAdmin, (req, res) => {
   try {
     const { folder, id } = req.params
     const { frontmatter, content } = req.body
@@ -106,7 +107,7 @@ router.put('/:folder/:id', (req, res) => {
 })
 
 // DELETE file
-router.delete('/:folder/:id', (req, res) => {
+router.delete('/:folder/:id', requireAdmin, (req, res) => {
   try {
     const { folder, id } = req.params
     const filePath = path.join(getVaultPath(folder), `${id}.md`)

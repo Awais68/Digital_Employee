@@ -428,7 +428,7 @@ export default function SocialMedia() {
         topic: topic.trim(),
         platforms: ['linkedin', 'twitter', 'facebook', 'instagram'],
         count: 2,
-      })
+      }, { timeout: 120000 })
       if (res.data.success) {
         if (res.data.posts) {
           setGeneratedPosts(res.data.posts)

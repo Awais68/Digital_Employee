@@ -17,8 +17,8 @@ export default function Accounting() {
     setError(null)
     try {
       const [summaryRes, transRes] = await Promise.all([
-        axios.get('/api/odoo/summary'),
-        axios.get('/api/odoo/transactions?limit=20')
+        axios.get('/api/odoo/summary', { timeout: 30000 }),
+        axios.get('/api/odoo/transactions?limit=20', { timeout: 30000 })
       ])
       
       setSummary(summaryRes.data && typeof summaryRes.data === 'object' ? summaryRes.data : {})

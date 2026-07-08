@@ -129,7 +129,7 @@ async function downloadImage(url, destPath) {
   return destPath;
 }
 
-export async function generateAndValidateImages(topic, research, platform, tempDir, customPrompt) {
+export async function generateAndValidateImages(topic, research, platform, tempDir, customPrompt, postContent) {
   const contentType = detectContentType(topic, research);
   const modelInfo = CONTENT_TYPE_MODEL_MAP[contentType] || CONTENT_TYPE_MODEL_MAP.default;
 
@@ -152,7 +152,7 @@ export async function generateAndValidateImages(topic, research, platform, tempD
   // Try OpenRouter image generation first (uses the gemini-2.5-flash-image model)
   try {
     console.log(`[SocialImageWorkflow] Trying OpenRouter image generation...`);
-    imageUrl = await generatePostImage(topic, 'professional', '4:5', customPrompt || '');
+    imageUrl = await generatePostImage(topic, 'professional', '4:5', postContent || '');
     console.log(`[SocialImageWorkflow] OpenRouter success: ${imageUrl.substring(0, 100)}`);
     localImagePath = path.join(tempDir, `generated_${platform}_${Date.now()}.jpg`);
     await downloadImage(imageUrl, localImagePath);
@@ -223,12 +223,12 @@ export async function generateAndValidateImages(topic, research, platform, tempD
   };
 }
 
-export async function generateAllPlatformImages(topic, research, platforms, tempDir, customPrompt) {
+export async function generateAllPlatformImages(topic, research, platforms, tempDir, customPrompt, postContent) {
   const results = {};
 
   for (const platform of platforms) {
     try {
-      results[platform] = await generateAndValidateImages(topic, research, platform, tempDir, customPrompt);
+      results[platform] = await generateAndValidateImages(topic, research, platform, tempDir, customPrompt, postContent);
     } catch (err) {
       console.error(`[SocialImageWorkflow] Failed for ${platform}:`, err.message);
       results[platform] = { error: err.message };

@@ -14,6 +14,7 @@ import {
 } from '../system-status.js'
 import { readVaultFiles, searchVaultFiles } from '../vault-reader.js'
 import fs from 'fs'
+import { requireAdmin } from '../database/auth.js'
 
 const execAsync = promisify(exec)
 
@@ -110,7 +111,7 @@ router.get('/stats', async (req, res) => {
 })
 
 // POST refresh - trigger manual refresh and broadcast
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', requireAdmin, async (req, res) => {
   try {
     const mod = await import('../services/cache.js')
     mod.cacheDel('system_stats')
@@ -164,7 +165,7 @@ router.get('/workers', async (req, res) => {
 })
 
 // POST start workers
-router.post('/workers/start', async (req, res) => {
+router.post('/workers/start', requireAdmin, async (req, res) => {
   try {
     const VAULT_PARENT = path.resolve(process.cwd(), '..')
     const cmd = `cd "${VAULT_PARENT}" && python3 workers.py start`
@@ -178,7 +179,7 @@ router.post('/workers/start', async (req, res) => {
 })
 
 // POST stop workers
-router.post('/workers/stop', async (req, res) => {
+router.post('/workers/stop', requireAdmin, async (req, res) => {
   try {
     const VAULT_PARENT = path.resolve(process.cwd(), '..')
     const cmd = `cd "${VAULT_PARENT}" && python3 workers.py stop`

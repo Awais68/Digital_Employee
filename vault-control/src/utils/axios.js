@@ -2,6 +2,7 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 axios.defaults.baseURL = API_URL
+axios.defaults.timeout = 30000
 
 const TOKEN_KEYS = ['token', 'auth_token', 'jwt', 'admin_token']
 

@@ -148,4 +148,15 @@ export function optionalAuth(req, res, next) {
   }
 }
 
+// Require admin role middleware
+export function requireAdmin(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Read-only access. Contact admin.' })
+  }
+  next()
+}
+
 export { JWT_SECRET };

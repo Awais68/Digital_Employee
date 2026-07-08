@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile)
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { createNotification } from '../services/notificationService.js'
+import { requireAdmin } from '../database/auth.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -105,7 +106,7 @@ router.get('/history', (req, res) => {
 })
 
 // CREATE new post (creates approval files)
-router.post('/post', (req, res) => {
+router.post('/post', requireAdmin, (req, res) => {
   try {
     const { content, platforms, scheduleTime, draftId, imageUrl, pageName } = req.body
     
@@ -180,7 +181,7 @@ router.post('/post', (req, res) => {
 })
 
 // SAVE draft
-router.post('/draft', (req, res) => {
+router.post('/draft', requireAdmin, (req, res) => {
   try {
     const { content, platforms, scheduleTime, pageName } = req.body
     
@@ -215,7 +216,7 @@ router.post('/draft', (req, res) => {
 })
 
 // DELETE draft
-router.delete('/draft/:id', (req, res) => {
+router.delete('/draft/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
     const folders = ['Pending_Approval', 'Approved', 'Done']
@@ -269,7 +270,7 @@ router.delete('/draft/:id', (req, res) => {
 })
 
 // PUBLISH draft now - ACTUALLY POSTS TO PLATFORMS
-router.post('/draft/:id/publish', async (req, res) => {
+router.post('/draft/:id/publish', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params
     const folders = ['Approved', 'Pending_Approval']
@@ -434,7 +435,7 @@ router.post('/draft/:id/publish', async (req, res) => {
 })
 
 // AUTO-APPROVE AND PUBLISH ALL pending posts
-router.post('/auto-publish', async (req, res) => {
+router.post('/auto-publish', requireAdmin, async (req, res) => {
   try {
     const files = readVaultFiles('Pending_Approval')
     const socialPosts = files.filter(f => 

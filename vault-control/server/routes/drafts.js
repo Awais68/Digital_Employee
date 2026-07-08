@@ -1,5 +1,6 @@
 import express from 'express'
 import { readVaultFiles, getVaultPath, writeFile, deleteFile } from '../vault-reader.js'
+import { requireAdmin } from '../database/auth.js'
 
 const router = express.Router()
 
@@ -57,7 +58,7 @@ router.get('/:id', (req, res) => {
 })
 
 // CREATE new draft
-router.post('/', (req, res) => {
+router.post('/', requireAdmin, (req, res) => {
   try {
     const { type, title, content, ...meta } = req.body
     const timestamp = new Date().toISOString().replace(/[:.]/g, '')
@@ -84,7 +85,7 @@ router.post('/', (req, res) => {
 })
 
 // UPDATE draft
-router.put('/:id', (req, res) => {
+router.put('/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
     const { title, content, ...meta } = req.body
@@ -109,7 +110,7 @@ router.put('/:id', (req, res) => {
 })
 
 // DELETE draft
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
     const filePath = getVaultPath('Pending_Approval', `${id}.md`)

@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { query } from '../database/connection.js';
-import { hashPassword, verifyPassword, generateToken, authenticateToken } from '../database/auth.js';
+import { hashPassword, verifyPassword, generateToken, authenticateToken, requireAdmin } from '../database/auth.js';
 import { rateLimiter, authRateLimiter as authRateLimiterFunc } from '../database/rateLimiter.js';
 import { logAudit } from '../database/audit.js';
 
@@ -10,7 +10,8 @@ const router = express.Router();
 // POST /api/auth/register
 router.post('/register', authRateLimiterFunc(), async (req, res) => {
   try {
-    const { username, email, password, role = 'user' } = req.body;
+    const { username, email, password } = req.body;
+    const role = 'readonly';
 
     if (!username || !email || !password) {
       return res.status(400).json({ success: false, message: 'Username, email, and password required' });
@@ -62,19 +63,19 @@ router.post('/login', authRateLimiterFunc(), async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Incorrect email or password.' });
     }
 
     const user = result.rows[0];
 
     if (!user.is_active) {
-      return res.status(403).json({ success: false, message: 'Account is disabled' });
+      return res.status(403).json({ error: 'Account is disabled. Contact an administrator.' });
     }
 
     const isValid = verifyPassword(password, user.password_hash);
 
     if (!isValid) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Incorrect email or password.' });
     }
 
     const token = generateToken(user);
@@ -92,7 +93,11 @@ router.post('/login', authRateLimiterFunc(), async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ success: false, message: 'Login failed' });
+    // Database connection errors (Neon cold-start, etc.) → 503
+    if (err.message?.includes('connection') || err.message?.includes('timeout') || err.message?.includes('SASL') || err.message?.includes('ECONNREFUSED') || err.message?.includes('getaddrinfo')) {
+      return res.status(503).json({ error: 'Server is temporarily unavailable. Please try again in a moment.' });
+    }
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 });
 
@@ -116,7 +121,7 @@ router.get('/me', authenticateToken, async (req, res) => {
 });
 
 // POST /api/auth/api-key
-router.post('/api-key', authenticateToken, async (req, res) => {
+router.post('/api-key', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { name, expiresAt } = req.body;
 
@@ -157,7 +162,7 @@ router.get('/api-keys', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/auth/api-key/:id
-router.delete('/api-key/:id', authenticateToken, async (req, res) => {
+router.delete('/api-key/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     await query(
       `DELETE FROM api_keys WHERE id = $1 AND user_id = $2`,

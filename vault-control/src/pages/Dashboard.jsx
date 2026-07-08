@@ -3,11 +3,12 @@ import { useWebSocket } from '../hooks/useWebSocket'
 import {
   TrendingUp, TrendingDown, MessageSquare, Mail,
   Linkedin, Twitter, Facebook, Instagram, RefreshCw, Loader2, AlertCircle,
-  Clock, CheckCircle, XCircle, FileText, Zap, Inbox, Users, Cpu, Rocket,
+  Clock, CheckCircle, XCircle, FileText, Zap, Inbox, Users, Cpu, Rocket, BarChart3,
 } from 'lucide-react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   RadialBarChart, RadialBar, Tooltip, ResponsiveContainer, Legend,
+  PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import axios from 'axios'
 
@@ -53,6 +54,9 @@ export default function Dashboard({ setCurrentPage }) {
   const [workers,          setWorkers]           = useState({})
   const [autoPublishing,   setAutoPublishing]    = useState(false)
   const [publishResult,    setPublishResult]     = useState(null)
+  const [analytics,        setAnalytics]         = useState({ snapshot: { posted: 0, pending: 0, rejected: 0, approved_awaiting_post: 0 }, trend: [] })
+  const [analyticsError,   setAnalyticsError]    = useState(null)
+  const [analyticsLoading, setAnalyticsLoading]  = useState(true)
   const { isConnected: wsConnected } = useWebSocket((message) => {
     if (message.type === 'dashboard_update' || message.type === 'initial_state') {
       if (message.vaultCounts)      setVaultCounts(message.vaultCounts)
@@ -83,12 +87,38 @@ export default function Dashboard({ setCurrentPage }) {
     }
   }, [])
 
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      setAnalyticsError(null)
+      setAnalyticsLoading(true)
+      const res = await axios.get('/api/analytics/posts-summary')
+      if (res.data && typeof res.data === 'object' && 'snapshot' in res.data && 'trend' in res.data) {
+        setAnalytics(res.data)
+      } else {
+        console.warn('[Analytics] Unexpected response shape — keeping defaults', res.data)
+        setAnalyticsError('Analytics data unavailable')
+      }
+    } catch (err) {
+      console.warn('[Analytics] Fetch failed:', err.response?.data?.message || err.message)
+      setAnalyticsError('Analytics temporarily unavailable')
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
+    let tick = 0
     if (!cancelled) fetchDashboardData()
-    const interval = setInterval(() => { if (!cancelled) fetchDashboardData() }, 10000)
+    if (!cancelled) fetchAnalytics()
+    const interval = setInterval(() => {
+      if (cancelled) return
+      fetchDashboardData()
+      tick++
+      if (tick % 4 === 0) fetchAnalytics()
+    }, 10000)
     return () => { cancelled = true; clearInterval(interval) }
-  }, [fetchDashboardData])
+  }, [fetchDashboardData, fetchAnalytics])
 
   const kpiValues = useMemo(() => ({
     total: recentActivity.length,
@@ -276,6 +306,81 @@ export default function Dashboard({ setCurrentPage }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Post Pipeline Analytics */}
+      <div className="card p-6">
+        <h2 className="text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-6 font-mono flex items-center gap-2">
+          <BarChart3 size={18} className="dark:text-[#00FF88] text-green-600" />
+          POST PIPELINE STATUS
+        </h2>
+        {analyticsError && (
+          <div className="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 flex items-center gap-2 text-sm">
+            <AlertCircle size={16} />
+            {analyticsError}
+          </div>
+        )}
+        {analyticsLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-[#00FF88]" />
+              <p className="text-sm dark:text-[#B0C4FF] text-gray-500 font-mono">LOADING ANALYTICS...</p>
+            </div>
+          </div>
+        ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <h3 className="text-sm font-semibold dark:text-[#B0C4FF] text-gray-600 mb-3 text-center">Current Snapshot</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={[
+                  { name: 'Posted', value: analytics?.snapshot?.posted ?? 0, color: '#10B981' },
+                  { name: 'Pending', value: analytics?.snapshot?.pending ?? 0, color: '#FFB800' },
+                  { name: 'Rejected', value: analytics?.snapshot?.rejected ?? 0, color: '#EF4444' },
+                  { name: 'Approved', value: analytics?.snapshot?.approved_awaiting_post ?? 0, color: '#3B82F6' },
+                ]} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value">
+                  {[
+                    { color: '#10B981' },
+                    { color: '#FFB800' },
+                    { color: '#EF4444' },
+                    { color: '#3B82F6' },
+                  ].map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <Tooltip contentStyle={{ background: '#1B2A48', border: '1px solid #2A3E5F', borderRadius: '8px', color: '#E0E0E6', fontSize: '12px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex justify-center gap-6 flex-wrap">
+              {[
+                { label: 'Posted', color: '#10B981', value: analytics?.snapshot?.posted ?? 0 },
+                { label: 'Pending', color: '#FFB800', value: analytics?.snapshot?.pending ?? 0 },
+                { label: 'Rejected', color: '#EF4444', value: analytics?.snapshot?.rejected ?? 0 },
+                { label: 'Approved', color: '#3B82F6', value: analytics?.snapshot?.approved_awaiting_post ?? 0 },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-2 text-xs">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                  <span className="dark:text-[#B0C4FF] text-gray-600">{item.label}: <strong className="dark:text-white text-gray-900">{item.value}</strong></span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold dark:text-[#B0C4FF] text-gray-600 mb-3 text-center">7-Day Trend</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={analytics?.trend ?? []}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#7A7A85' }} tickFormatter={v => v.slice(5)} />
+                <YAxis tick={{ fontSize: 10, fill: '#7A7A85' }} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: '#1B2A48', border: '1px solid #2A3E5F', borderRadius: '8px', color: '#E0E0E6', fontSize: '12px' }} />
+                <Area type="monotone" dataKey="posted" stackId="1" stroke="#10B981" fill="#10B981" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="pending" stackId="1" stroke="#FFB800" fill="#FFB800" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="rejected" stackId="1" stroke="#EF4444" fill="#EF4444" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="approved_awaiting_post" stackId="1" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.3} />
+                <Legend wrapperStyle={{ fontSize: '10px', color: '#B0C4FF' }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
       </div>
 
       {/* ── System Status ── */}

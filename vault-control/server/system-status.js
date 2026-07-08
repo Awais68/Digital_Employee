@@ -13,11 +13,32 @@ const servicesConfig = [
   { name: "Odoo MCP", process: "odoo_mcp.py", type: "python" },
   { name: "Email MCP", process: "email_mcp.py", type: "python" },
   { name: "Gmail Watcher", process: "gmail_watcher.py", type: "python" },
-  { name: "WhatsApp Watcher", process: "whatsapp_watcher.py", type: "python" },
+  // WhatsApp is NOT a standalone process anymore — the Python whatsapp_watcher.py
+  // was removed 2026-07-08 and WhatsApp now runs as an embedded whatsapp-web.js
+  // client inside this server (services/whatsappService.js). pgrep-ing for the old
+  // process always returned offline → a permanent false-red tile. Check the live
+  // client status instead. type:"embedded" is handled specially in getServiceStatus.
+  { name: "WhatsApp Watcher", type: "embedded", statusFn: getWhatsAppStatus },
   { name: "LinkedIn MCP", process: "linkedin_mcp.py", type: "python" },
   { name: "Instagram Bot", process: "instagram", type: "python", checkLogs: ["instagram", "insta"] },
   { name: "Facebook Bot", process: "facebook", type: "python", checkLogs: ["facebook", "fb", "meta"] },
 ];
+
+// Live status of the embedded WhatsApp client. Re-probed on every request (no boot
+// latch): reads the current module-level status var from whatsappService. Maps the
+// client's connection lifecycle onto the dashboard's running/warning/offline states.
+async function getWhatsAppStatus() {
+  try {
+    const ws = await import("./services/whatsappService.js");
+    const s = ws.getStatus(); // 'connected'|'authenticated'|'qr_pending'|'auth_failed'|'disconnected'|'error'
+    if (s === "connected") return "running";
+    // Reachable but not fully ready (needs QR scan / mid-auth) → warning, not red.
+    if (s === "authenticated" || s === "qr_pending") return "warning";
+    return "offline";
+  } catch {
+    return "offline";
+  }
+}
 
 // ─── Service Status ───────────────────────────────────────────────────────────
 
@@ -25,6 +46,18 @@ export async function getServiceStatus() {
   const statuses = await Promise.all(
     servicesConfig.map(async (svc) => {
       try {
+        // Embedded services (e.g. the in-process WhatsApp client) have no OS
+        // process to pgrep — probe their live status function each request.
+        if (svc.type === "embedded") {
+          const status = await svc.statusFn();
+          return {
+            name: svc.name,
+            status,
+            uptime: status === "running" ? "Active" : "—",
+            lastActivity: status === "offline" ? "—" : "live",
+          };
+        }
+
         // Check if process is running
         const { stdout } = await execAsync(`pgrep -f ${svc.process}`).catch(
           () => ({ stdout: "" }),

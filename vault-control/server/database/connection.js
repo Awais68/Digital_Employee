@@ -68,7 +68,7 @@ export async function initializeSchema() {
         username VARCHAR(50) UNIQUE NOT NULL,
         email VARCHAR(100) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
-        role VARCHAR(20) DEFAULT 'user',
+        role VARCHAR(20) DEFAULT 'readonly',
         is_active BOOLEAN DEFAULT true,
         last_login TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -236,6 +236,11 @@ export async function initializeSchema() {
       }
     }
 
+    // ─── WhatsApp column migrations ────────────────────────────────────────
+    for (const col of [
+      `ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false`,
+    ]) { try { await pool.query(col); } catch {} }
+
     // ─── Email column migrations ──────────────────────────────────────────
     for (const col of [
       `ALTER TABLE IF EXISTS emails ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'unread'`,
@@ -269,6 +274,7 @@ export async function initializeSchema() {
       `CREATE INDEX IF NOT EXISTS idx_todos_created ON todos(created_at DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_posts_status ON scheduled_posts(status, scheduled_for)`,
       `CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_scheduled_posts_status ON scheduled_posts(status)`,
     ];
     for (const idx of indexes) {
       try { await pool.query(idx); } catch (e) {
@@ -276,15 +282,9 @@ export async function initializeSchema() {
       }
     }
 
-    // Insert default admin user (password: admin123)
-    await pool.query(
-      `INSERT INTO users (username, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (username) DO NOTHING`,
-      ['admin', 'admin@vault-control.local',
-       '2ba5ff8cc914a32fce0072aa46bde39d:46fa69884fe47a1a211b0d9983fa84f79cea846168b6b6d34bfc47de06142bea847bead8a0f7a5485dc46ef777d28fade6af2e16f68b38d314922c6ed607309b',
-       'admin']
-    );
+    // NOTE: Admin user seeding is now done via scripts/seed-admin.js
+    // (standalone, idempotent, uses bcrypt). Run it separately:
+    //   node scripts/seed-admin.js
 
     console.log('[PostgreSQL] Schema initialized successfully');
     return true;

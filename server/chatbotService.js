@@ -471,21 +471,46 @@ function getOpenRouterKey() {
   );
 }
 
-async function* streamChatResponse(messages, context) {
+// AI provider chain: primary first, fallbacks after. A provider is only
+// included if its key is present. All endpoints are OpenAI-compatible SSE
+// (choices[].delta.content), including Groq, so one parser serves all.
+function getProviderChain() {
+  const chain = [];
+
   const orKey = getOpenRouterKey();
-  if (!orKey) throw new Error('OPENROUTER_API_KEY is not set');
+  if (orKey) {
+    chain.push({
+      name: 'OpenRouter',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      key: orKey,
+      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
+    });
+  }
 
-  const model = process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4';
-  console.log(`[Chatbot] Using model: ${model}, key: ${orKey.slice(0, 12)}...`);
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    chain.push({
+      name: 'Groq',
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      key: groqKey,
+      model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    });
+  }
 
-  const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  return chain;
+}
+
+// Stream one provider. Throws before yielding anything if the request fails,
+// which lets the caller fall through to the next provider.
+async function* streamFromProvider(provider, messages, context) {
+  const resp = await fetch(provider.url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${orKey}`,
+      Authorization: `Bearer ${provider.key}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model,
+      model: provider.model,
       max_tokens: 1024,
       stream: true,
       messages: [
@@ -497,8 +522,8 @@ async function* streamChatResponse(messages, context) {
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
-    console.error(`[Chatbot] OpenRouter ${resp.status}: ${errText.slice(0, 200)}`);
-    throw new Error(`Server error: ${resp.status}. Dobara try karein.`);
+    console.error(`[Chatbot] ${provider.name} ${resp.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`${provider.name} error: ${resp.status}`);
   }
 
   const decoder = new TextDecoder();
@@ -523,6 +548,34 @@ async function* streamChatResponse(messages, context) {
       }
     }
   }
+}
+
+async function* streamChatResponse(messages, context) {
+  const chain = getProviderChain();
+  if (chain.length === 0) {
+    throw new Error('No AI provider configured (set OPENROUTER_API_KEY or GROQ_API_KEY)');
+  }
+
+  let lastErr;
+  for (const provider of chain) {
+    console.log(`[Chatbot] Trying ${provider.name} (model: ${provider.model}, key: ${provider.key.slice(0, 12)}...)`);
+    let yielded = false;
+    try {
+      for await (const text of streamFromProvider(provider, messages, context)) {
+        yielded = true;
+        yield text;
+      }
+      return; // provider completed successfully
+    } catch (err) {
+      lastErr = err;
+      console.error(`[Chatbot] ${provider.name} failed: ${err.message}`);
+      // Can't fall back once bytes were streamed to the client — re-throw.
+      if (yielded) throw err;
+      // Otherwise try the next provider in the chain.
+    }
+  }
+
+  throw new Error(`All AI providers failed (last: ${lastErr?.message || 'unknown'}). Dobara try karein.`);
 }
 
 module.exports = { streamChatResponse };

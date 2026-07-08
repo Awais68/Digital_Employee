@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
+import { useAuth } from '../context/AuthContext'
 
 // Priority helpers (can be memoized if needed, but they're simple expressions)
 const getPriorityColor = (priority) => {
@@ -27,6 +28,7 @@ const getPriorityWeight = (priority) => {
 }
 
 export default function Todos() {
+  const { isAdmin } = useAuth()
   const [todos, setTodos] = useState([])
   const [newTodo, setNewTodo] = useState('')
   const [newPriority, setNewPriority] = useState('medium')
@@ -329,7 +331,8 @@ export default function Todos() {
         ))}
       </div>
 
-      {/* Add New Todo */}
+      {/* Add New Todo — only for admins */}
+      {isAdmin && (
       <div className="card p-4 sm:p-6">
         <h2 className="text-base sm:text-lg font-bold dark:text-[#E0E0E6] text-gray-900 mb-3 sm:mb-4 font-mono">
           ADD NEW TASK
@@ -371,6 +374,7 @@ export default function Todos() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Search and Filters */}
       <div className="card p-3 sm:p-4">
@@ -440,8 +444,8 @@ export default function Todos() {
         </div>
       </div>
 
-      {/* Bulk Actions Bar */}
-      {selectedForBulk.size > 0 && (
+      {/* Bulk Actions Bar — admins only */}
+      {selectedForBulk.size > 0 && isAdmin && (
         <div className="card p-4 border-[#00FF88]/30 dark:bg-[#00FF88]/5">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-bold dark:text-[#00FF88]">{selectedForBulk.size} selected</span>
@@ -511,7 +515,8 @@ export default function Todos() {
         </div>
       ) : (
         <>
-          {/* Select All */}
+          {/* Select All — admins only */}
+          {isAdmin && (
           <div className="flex items-center justify-between px-3 sm:px-4 py-2">
             <button
               onClick={selectAllTodos}
@@ -525,6 +530,7 @@ export default function Todos() {
               {selectedForBulk.size === filteredTodos.length ? 'Deselect All' : 'Select All'}
             </button>
           </div>
+          )}
 
           <div className="space-y-2 content-visibility-auto px-1 sm:px-0" style={{ containIntrinsicSize: '0 3000px' }}>
           {filteredTodos.map((todo, index) => (
@@ -538,7 +544,8 @@ export default function Todos() {
                 dragId === todo.id ? 'dark:bg-[#00FF88]/5 border-[#00FF88] opacity-50' : 'hover:dark:bg-[#1A1A24]/50'
               } ${todo.completed ? 'opacity-60' : ''} ${selectedForBulk.has(todo.id) ? 'dark:bg-[#00FF88]/5' : ''}`}
             >
-              {/* Bulk Select Checkbox */}
+              {/* Bulk Select Checkbox — admins only */}
+              {isAdmin && (
               <button
                 onClick={() => toggleBulkSelect(todo.id)}
                 className="flex-shrink-0 hidden sm:block"
@@ -549,18 +556,25 @@ export default function Todos() {
                   <Square size={16} className="dark:text-[#7A7A85] opacity-0 hover:opacity-100 transition-opacity" />
                 )}
               </button>
+              )}
               {/* Drag Handle */}
               <button className="flex-shrink-0 dark:text-[#7A7A85] text-gray-400 cursor-grab active:cursor-grabbing hidden sm:block">
                 <GripVertical size={16} />
               </button>
 
-              {/* Checkbox */}
+              {/* Checkbox — read-only for non-admin */}
+              {isAdmin ? (
               <button
                 onClick={() => toggleTodo(todo.id)}
                 className={`flex-shrink-0 ${todo.completed ? 'dark:text-[#00FF88] text-green-600' : 'dark:text-[#7A7A85] text-gray-400'}`}
               >
                 {todo.completed ? <CheckCircle2 size={22} /> : <Circle size={22} />}
               </button>
+              ) : (
+              <span className={`flex-shrink-0 ${todo.completed ? 'dark:text-[#00FF88] text-green-600' : 'dark:text-[#7A7A85] text-gray-400'}`}>
+                {todo.completed ? <CheckCircle2 size={22} /> : <Circle size={22} />}
+              </span>
+              )}
 
               {/* Content */}
               <div className="flex-1 min-w-0">
@@ -608,7 +622,8 @@ export default function Todos() {
                 </div>
               </div>
 
-              {/* Actions */}
+              {/* Actions — admins only */}
+              {isAdmin && (
               <div className="flex-shrink-0 flex items-center gap-1">
                 {editingId === todo.id ? (
                   <>
@@ -643,6 +658,7 @@ export default function Todos() {
                   </>
                 )}
               </div>
+              )}
             </div>
           ))}
           </div>

@@ -41,31 +41,60 @@ export function AuthProvider({ children }) {
   }, [token, fetchUser]);
 
   const login = useCallback(async (username, password) => {
-    const res = await axios.post('/api/auth/login', { username, password });
-    if (res.data.success) {
-      setToken(res.data.token);
-      setUser(res.data.user);
-      localStorage.setItem('token', res.data.token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
-      return res.data;
+    try {
+      const res = await axios.post('/api/auth/login', { username, password });
+      if (res.data.success) {
+        setToken(res.data.token);
+        setUser(res.data.user);
+        localStorage.setItem('token', res.data.token);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+        return res.data;
+      }
+      throw new Error(res.data.message || 'Login failed');
+    } catch (err) {
+      if (err.response?.data?.error) {
+        throw new Error(err.response.data.error);
+      }
+      if (err.response?.data?.message) {
+        throw new Error(err.response.data.message);
+      }
+      if (err.message) {
+        throw err;
+      }
+      throw new Error('Authentication failed');
     }
-    throw new Error(res.data.message);
   }, []);
 
   const register = useCallback(async (username, email, password) => {
-    const res = await axios.post('/api/auth/register', { username, email, password });
-    if (res.data.success) {
-      setToken(res.data.token);
-      setUser(res.data.user);
-      localStorage.setItem('token', res.data.token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
-      return res.data;
+    try {
+      const res = await axios.post('/api/auth/register', { username, email, password });
+      if (res.data.success) {
+        setToken(res.data.token);
+        setUser(res.data.user);
+        localStorage.setItem('token', res.data.token);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+        return res.data;
+      }
+      throw new Error(res.data.message || 'Registration failed');
+    } catch (err) {
+      if (err.response?.data?.error) {
+        throw new Error(err.response.data.error);
+      }
+      if (err.response?.data?.message) {
+        throw new Error(err.response.data.message);
+      }
+      if (err.message) {
+        throw err;
+      }
+      throw new Error('Registration failed');
     }
-    throw new Error(res.data.message);
   }, []);
 
+  const role = user?.role || 'readonly';
+  const isAdmin = role === 'admin';
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, isAuthenticated: !!user, role, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );

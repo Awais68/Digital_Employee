@@ -33,6 +33,7 @@ import templatesRouter from './routes/templates.js'
 import postsRouter from './routes/posts.js'
 import adminRouter from './routes/admin.js'
 import oracleCloudRouter from './routes/oracle-cloud.js'
+import analyticsRouter from './routes/analytics.js'
 import { bus as chatbotEventBus } from './services/eventBus.js'
 
 // Chatbot router lives at repo root server/ as CommonJS — bridge via createRequire
@@ -159,6 +160,7 @@ app.use('/api/email-templates', templatesRouter)
 app.use('/api/posts', postsRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/oracle', oracleCloudRouter)
+app.use('/api/analytics', analyticsRouter)
 
 // Chatbot SSE — eventBus injected after import (already initialized above)
 setChatbotEventBus(chatbotEventBus)
@@ -697,12 +699,17 @@ async function boot() {
       console.log('[Startup] Scheduler started')
     } catch (e) { console.warn('[Startup] Scheduler error:', e.message) }
 
-    // Initialize WhatsApp
-    import('./services/whatsappService.js').then(ws => {
-      ws.initWhatsApp()
-    }).catch(err => {
-      console.warn('[WhatsApp] Failed to initialize:', err.message)
-    })
+    // Initialize WhatsApp (embedded client — single source of truth).
+    // Gated so it can be toggled without code edits: set ENABLE_WHATSAPP=false to disable.
+    if (process.env.ENABLE_WHATSAPP !== 'false') {
+      import('./services/whatsappService.js').then(ws => {
+        ws.initWhatsApp()
+      }).catch(err => {
+        console.warn('[WhatsApp] Failed to initialize:', err.message)
+      })
+    } else {
+      console.log('[WhatsApp] Disabled via ENABLE_WHATSAPP=false')
+    }
 
     // ✅ Server fully ready — allow API requests
     serverReady = true
@@ -710,12 +717,13 @@ async function boot() {
     console.log(`[Auth] ${ENABLE_AUTH ? 'Enabled' : 'Disabled (dev mode)'}`)
     console.log(`[Database] ${dbConnected ? 'Connected' : 'Not connected (file-based mode)'}`)
 
-    // Neon keep-alive — prevents cold-start on first request after idle
-    if (dbConnected) {
-      setInterval(async () => {
-        try { await query('SELECT 1') } catch {}
-      }, 30000)
-    }
+    // Neon keep-alive + live health probe — always runs so dbConnected reflects
+    // reality (not a one-shot boot latch). Recovers if the boot check missed a
+    // Neon cold-start (10-25s), and flips to false if the DB later drops.
+    setInterval(async () => {
+      try { await query('SELECT 1'); dbConnected = true }
+      catch { dbConnected = false }
+    }, 30000)
 
     // Scheduled post checker — runs every 30 seconds
     setInterval(async () => {

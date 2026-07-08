@@ -2,6 +2,7 @@ import express from 'express'
 import { readVaultFiles, getVaultPath, moveFile, writeFile } from '../vault-reader.js'
 import fs from 'fs'
 import path from 'path'
+import { requireAdmin } from '../database/auth.js'
 
 const router = express.Router()
 
@@ -67,7 +68,7 @@ router.get('/:folder/:id', (req, res) => {
 })
 
 // MOVE email between folders (Approve/Reject/Archive)
-router.post('/move', (req, res) => {
+router.post('/move', requireAdmin, (req, res) => {
   try {
     const { id, fromFolder, toFolder } = req.body
     const sourcePath = getVaultPath(fromFolder, `${id}.md`)
@@ -89,7 +90,7 @@ router.post('/move', (req, res) => {
 })
 
 // POST /:id/mark-processed — mark email as processed
-router.post('/:id/mark-processed', async (req, res) => {
+router.post('/:id/mark-processed', requireAdmin, async (req, res) => {
   try {
     const { readVaultFiles, getVaultPath } = await import('../vault-reader.js')
     const files = readVaultFiles('Inbox')
@@ -120,7 +121,7 @@ router.post('/:id/mark-processed', async (req, res) => {
 })
 
 // SAVE reply as approval
-router.post('/reply', (req, res) => {
+router.post('/reply', requireAdmin, (req, res) => {
   try {
     const { originalId, originalFrom, originalSubject, replySubject, replyBody, template } = req.body
 

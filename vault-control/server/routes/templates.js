@@ -1,5 +1,6 @@
 import express from 'express'
 import { query } from '../database/connection.js'
+import { requireAdmin } from '../database/auth.js'
 
 const router = express.Router()
 
@@ -34,7 +35,7 @@ router.get('/', async (req, res) => {
   }
 })
 
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   const { name, shortcut, body } = req.body
   const result = await query(
     'INSERT INTO email_templates(name, shortcut, body) VALUES($1,$2,$3) RETURNING *',
@@ -43,7 +44,7 @@ router.post('/', async (req, res) => {
   res.json(result.rows[0])
 })
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   const { name, shortcut, body } = req.body
   const result = await query(
     'UPDATE email_templates SET name=$1, shortcut=$2, body=$3 WHERE id=$4 RETURNING *',
@@ -52,7 +53,7 @@ router.put('/:id', async (req, res) => {
   res.json(result.rows[0])
 })
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   await query('DELETE FROM email_templates WHERE id=$1', [req.params.id])
   res.json({ success: true })
 })

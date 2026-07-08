@@ -61,15 +61,29 @@ def _ensure_package(pkg: str, import_name: str):
 _ensure_package("dotenv", "dotenv")
 _ensure_package("playwright", "playwright")
 
-# Verify Playwright browsers are installed
-try:
-    subprocess.run(
-        [sys.executable, "-m", "playwright", "install", "--dry-run"],
-        capture_output=True, check=True, timeout=10
+# Verify Playwright Chromium is installed (check binary, skip --dry-run which fails on sys deps)
+_browser_cache = Path.home() / ".cache" / "ms-playwright"
+_chromium_binary = next(
+    (_browser_cache / d / "chrome-linux64" / "chrome"
+     for d in ["chromium-1228"]
+     if (_browser_cache / d / "chrome-linux64" / "chrome").exists()),
+    None
+)
+if _chromium_binary is None:
+    _chromium_binary = next(
+        (_browser_cache / d / "chrome-linux64" / "chrome"
+         for d in os.listdir(str(_browser_cache))
+         if d.startswith("chromium-") and (_browser_cache / d / "chrome-linux64" / "chrome").exists()),
+        None
     )
-except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+if _chromium_binary is None:
     print("Installing Chromium for Playwright...")
-    subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+    subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        check=False
+    )
+else:
+    print(f"Chromium found at {_chromium_binary}")
 
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
@@ -993,13 +1007,20 @@ message_id: {msg.message_id}
             launched = await self._bootstrap()
             if not launched:
                 if AUTH_LOCK_FILE.exists():
-                    logger.warning("Auth needed - skipping until QR scanned")
-                    print("⚠️  Auth needed - exiting to prevent retry loop")
-                    print("   Scan QR code, then restart watcher")
-                    # Exit cleanly, don't retry
+                    logger.warning("Auth needed - lockfile exists, waiting for QR scan")
+                    print("⚠️  Auth needed - will retry every 30s until QR scanned")
+                    print("   Scan QR code in browser, then delete: whatsapp_session/.auth_needed")
+                    # Don't exit — wait and retry so PM2 sees persistent process
+                    while self.running:
+                        await asyncio.sleep(30)
+                        launched = await self._bootstrap()
+                        if launched:
+                            break
+                    if not launched:
+                        return
+                else:
+                    logger.error("Could not launch / login — aborting continuous mode")
                     return
-                logger.error("Could not launch / login — aborting continuous mode")
-                return
 
             logger.info(f"Continuous mode active (interval: {self.check_interval}s)")
             print(f"  Continuous mode active (interval: {self.check_interval}s)")
@@ -1022,10 +1043,18 @@ message_id: {msg.message_id}
                         launched = await self._bootstrap()
                         if not launched:
                             if AUTH_LOCK_FILE.exists():
-                                logger.warning("Auth needed - exiting to prevent retry loop")
-                                return
-                            logger.error("Recovery failed — waiting before retry")
-                            await asyncio.sleep(30)
+                                logger.warning("Auth needed - waiting for QR scan before retry")
+                                print("   Scan QR code, then delete: whatsapp_session/.auth_needed")
+                                while self.running and AUTH_LOCK_FILE.exists():
+                                    await asyncio.sleep(30)
+                                    launched = await self._bootstrap()
+                                    if launched:
+                                        break
+                                if not launched:
+                                    continue
+                            else:
+                                logger.error("Recovery failed — waiting before retry")
+                                await asyncio.sleep(30)
 
                 for _ in range(self.check_interval):
                     if not self.running:

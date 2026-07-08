@@ -3,6 +3,7 @@ import { readVaultFiles, getVaultPath, writeFile, moveFile } from '../vault-read
 import { query } from '../database/connection.js'
 import fs from 'fs'
 import path from 'path'
+import { requireAdmin } from '../database/auth.js'
 
 const router = express.Router()
 
@@ -14,7 +15,7 @@ router.get('/status', (req, res) => {
 })
 
 // POST /send — send WhatsApp message via web.js
-router.post('/send', async (req, res) => {
+router.post('/send', requireAdmin, async (req, res) => {
   const { to, message } = req.body
   try {
     const { sendMessage } = await import('../services/whatsappService.js')
@@ -203,7 +204,7 @@ router.get('/conversation/:id', (req, res) => {
 })
 
 // SEND reply (creates approval file)
-router.post('/reply', (req, res) => {
+router.post('/reply', requireAdmin, (req, res) => {
   try {
     const { to, content } = req.body
     const timestamp = new Date().toISOString().replace(/[:.]/g, '')
@@ -233,7 +234,7 @@ router.post('/reply', (req, res) => {
 })
 
 // MARK as read
-router.post('/:id/read', (req, res) => {
+router.post('/:id/read', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
     const sourcePath = getVaultPath('Inbox', `${id}.md`)
@@ -255,7 +256,7 @@ router.post('/:id/read', (req, res) => {
 })
 
 // POST /restart — restart WhatsApp service (generates new QR)
-router.post('/restart', async (req, res) => {
+router.post('/restart', requireAdmin, async (req, res) => {
   try {
     const ws = await import('../services/whatsappService.js')
     await ws.initWhatsApp()

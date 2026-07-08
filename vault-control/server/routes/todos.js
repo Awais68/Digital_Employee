@@ -1,6 +1,7 @@
 import express from 'express'
 import { query } from '../database/connection.js'
 import { createNotification } from '../services/notificationService.js'
+import { requireAdmin } from '../database/auth.js'
 
 const router = express.Router()
 
@@ -42,7 +43,7 @@ router.get('/', async (req, res) => {
   }
 })
 
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     invalidateTodosCache()
     const { title, priority, dueDate, reminderAt, description } = req.body
@@ -63,7 +64,7 @@ router.post('/', async (req, res) => {
   }
 })
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   invalidateTodosCache()
   try {
     const { id } = req.params
@@ -80,7 +81,7 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAdmin, async (req, res) => {
   invalidateTodosCache()
   try {
     const { id } = req.params
@@ -111,7 +112,7 @@ router.patch('/:id', async (req, res) => {
   }
 })
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   invalidateTodosCache()
   try {
     const { id } = req.params

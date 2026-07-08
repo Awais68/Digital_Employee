@@ -35,6 +35,8 @@ export function AppProvider({ children }) {
     });
   }, []);
 
+  const wsReconnectDelay = useRef(1000);
+
   const connectWS = useCallback(() => {
     const envUrl = import.meta.env.VITE_WS_URL;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -46,6 +48,7 @@ export function AppProvider({ children }) {
 
     ws.onopen = () => {
       setWsConnected(true);
+      wsReconnectDelay.current = 1000;
       console.log("[AppContext] WebSocket connected");
       clearTimeout(reconnectRef.current);
     };
@@ -77,28 +80,39 @@ export function AppProvider({ children }) {
 
     ws.onclose = () => {
       setWsConnected(false);
-      reconnectRef.current = setTimeout(connectWS, 3000);
+      const delay = Math.min(wsReconnectDelay.current, 15000);
+      reconnectRef.current = setTimeout(connectWS, delay);
+      wsReconnectDelay.current = delay * 1.5;
     };
 
     ws.onerror = () => ws.close();
   }, [addNotification]);
 
   useEffect(() => {
-    axios
-      .get("/api/notifications")
-      .then((r) => {
-        setNotifications(r.data || []);
-        setUnreadCount((r.data || []).filter((n) => !n.read).length);
-      })
-      .catch(() => {});
+    const apiTimeout = { current: null };
 
-    axios
-      .get("/api/whatsapp/status")
-      .then((r) => {
-        setWaStatus(r.data.status);
-        if (r.data.qr) setQrData(r.data.qr);
-      })
-      .catch(() => {});
+    const fetchNotifications = () => {
+      axios
+        .get("/api/notifications", { timeout: 8000 })
+        .then((r) => {
+          setNotifications(r.data || []);
+          setUnreadCount((r.data || []).filter((n) => !n.read).length);
+        })
+        .catch(() => {});
+    };
+
+    const fetchWhatsAppStatus = () => {
+      axios
+        .get("/api/whatsapp/status", { timeout: 8000 })
+        .then((r) => {
+          setWaStatus(r.data.status);
+          if (r.data.qr) setQrData(r.data.qr);
+        })
+        .catch(() => {});
+    };
+
+    fetchNotifications();
+    fetchWhatsAppStatus();
 
     if (Notification.permission === "default") {
       Notification.requestPermission();
@@ -109,6 +123,7 @@ export function AppProvider({ children }) {
     return () => {
       wsRef.current?.close();
       clearTimeout(reconnectRef.current);
+      clearTimeout(apiTimeout.current);
     };
   }, [connectWS]);
 

@@ -6,6 +6,7 @@ import { query } from '../database/connection.js'
 import { generateDailyPosts, DEFAULT_TOPICS } from '../services/postGenerator.js'
 import { publishPost } from '../services/socialMediaService.js'
 import { createNotification } from '../services/notificationService.js'
+import { requireAdmin } from '../database/auth.js'
 
 const uploadsDir = path.resolve('public/uploads')
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
@@ -120,7 +121,7 @@ router.get('/topics', (req, res) => {
 })
 
 // POST /generate-image - Auto-generate image for post
-router.post('/generate-image', async (req, res) => {
+router.post('/generate-image', requireAdmin, async (req, res) => {
   try {
     const { topic, style } = req.body
     
@@ -142,7 +143,7 @@ router.post('/generate-image', async (req, res) => {
   }
 })
 
-router.post('/generate', async (req, res) => {
+router.post('/generate', requireAdmin, async (req, res) => {
   console.log('[PostGen] Request received:', { topic: req.body?.topic, platforms: req.body?.platforms })
   try {
     const { topic, platforms } = req.body
@@ -197,7 +198,7 @@ router.get('/pending-approval', async (req, res) => {
   }
 })
 
-router.post('/:id/approve-publish', async (req, res) => {
+router.post('/:id/approve-publish', requireAdmin, async (req, res) => {
   try {
     const postResult = await query('SELECT * FROM scheduled_posts WHERE id=$1', [req.params.id])
     if (!postResult.rows[0]) return res.status(404).json({ error: 'Post not found' })
@@ -245,7 +246,7 @@ router.get('/queue', async (req, res) => {
 })
 
 // POST /compose — create a manual post directly in the DB
-router.post('/compose', async (req, res) => {
+router.post('/compose', requireAdmin, async (req, res) => {
   try {
     const { content, platforms, imageUrl, scheduleTime, topic, publishNow } = req.body
     if (!content || !platforms || platforms.length === 0) {
@@ -322,7 +323,7 @@ router.post('/compose', async (req, res) => {
 })
 
 // DELETE /:id — delete a scheduled/pending post
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     await query('DELETE FROM scheduled_posts WHERE id=$1', [req.params.id])
     res.json({ success: true })
@@ -332,7 +333,7 @@ router.delete('/:id', async (req, res) => {
 })
 
 // POST /upload-image — upload image for social posts
-router.post('/upload-image', upload.single('image'), (req, res) => {
+router.post('/upload-image', requireAdmin, upload.single('image'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
     const url = `/uploads/${req.file.filename}`
@@ -343,7 +344,7 @@ router.post('/upload-image', upload.single('image'), (req, res) => {
 })
 
 // POST /publish-now — immediate post to social platforms with image
-router.post('/publish-now', memoryUpload.single('image'), async (req, res) => {
+router.post('/publish-now', requireAdmin, memoryUpload.single('image'), async (req, res) => {
   try {
     let { content, platforms } = req.body
     const platformList = JSON.parse(platforms || '["linkedin","facebook","instagram"]')

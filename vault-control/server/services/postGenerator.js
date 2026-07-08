@@ -5,48 +5,78 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+// ─── TONE CONFIG (override via POST_TONE_MODE env var) ─────────
+const POST_TONE_MODE = (process.env.POST_TONE_MODE || 'authentic').toLowerCase();
+const IS_AUTHENTIC = POST_TONE_MODE === 'authentic';
+
+// ─── BANNED PATTERN REGEXES (for post-generation validation) ───
+const BANNED_PATTERNS = [
+  /1️⃣\s*|2️⃣\s*|3️⃣\s*/,
+  /\d+%\s+of\s+(enterprises|companies|businesses|organizations|consumers)/i,
+  /\$\d+(\.\d+)?\s*(trillion|billion|million)\s+(market|opportunity|industry)/i,
+  /Here's what happened this week that blew my mind/i,
+  /Drop your thoughts below/i,
+  /Let's have a real conversation/i,
+  /the numbers speak for themselves/i,
+  /here's what most people miss/i,
+  /📊|📈|📉|✅|❌|💪|🌟/,
+];
+
+function containsBannedPatterns(text) {
+  return BANNED_PATTERNS.some(re => re.test(text));
+}
+
 // STRICT PLATFORM RULES
 const STRICT_PLATFORM_RULES = {
   linkedin: {
     minWords: 80, maxWords: 300,
     minHashtags: 3, maxHashtags: 5,
-    requireEmojis: true, requireLineBreaks: true,
-    tone: 'professional, insightful, thought-leadership',
-    structure: 'HOOK → BODY (2-4 paragraphs with emojis) → HASHTAGS → CTA'
+    requireLineBreaks: true,
+    tone: 'professional, insightful, specific',
+    structure: 'HOOK → BODY (2-4 short paragraphs) → HASHTAGS → CTA'
   },
   facebook: {
     minWords: 50, maxWords: 250,
     minHashtags: 2, maxHashtags: 5,
-    requireEmojis: true,
     tone: 'friendly, conversational, relatable',
     structure: 'HOOK → BODY (conversational) → HASHTAGS'
   },
   instagram: {
     minWords: 30, maxWords: 150,
     minHashtags: 10, maxHashtags: 15,
-    requireEmojis: true, requireLineBreaks: true,
-    tone: 'casual, inspiring, motivational',
-    structure: 'HOOK → BODY (short sentences, emojis) → HASHTAGS (10-15)'
+    requireLineBreaks: true,
+    tone: 'casual, inspiring, authentic',
+    structure: 'HOOK → BODY (short sentences) → HASHTAGS (10-15)'
   },
   twitter: {
     minWords: 10, maxWords: 50,
     minHashtags: 1, maxHashtags: 3,
-    requireEmojis: true,
-    tone: 'punchy, concise, impactful',
+    tone: 'punchy, concise, specific',
     structure: 'Tweet (280 chars max) → HASHTAGS'
   }
 };
 
 function getStrictPlatformRules(platform) {
   const rules = STRICT_PLATFORM_RULES[platform] || STRICT_PLATFORM_RULES.linkedin;
+  const toneSection = IS_AUTHENTIC
+    ? `- BANNED PATTERNS (ZERO TOLERANCE — post will be rejected if any are found):
+  • Numbered listicles ("1️⃣ 2️⃣ 3️⃣ insight:")
+  • Unsourced statistics ("78% of enterprises...", "$2.3 trillion market...")
+  • Generic hook openers ("Here's what happened this week that blew my mind")
+  • Engagement-bait CTAs ("Drop your thoughts below 👇 Let's have a real conversation")
+  • Emoji bullet markers (📊 📈 as list markers)
+  • Vague filler ("the numbers speak for themselves", "here's what most people miss")
+- Emojis: use sparingly & naturally, only where a human would actually put one`
+    : `- Emojis: use at least 2-3 where appropriate`;
+
   return `Platform: ${platform}
 - Word count: ${rules.minWords}-${rules.maxWords} words (STRICT)
 - Hashtags: ${rules.minHashtags}-${rules.maxHashtags} at the END (STRICT)
-- Emojis: REQUIRED - use at least 3-5 as bullet points
 - Line breaks: ${rules.requireLineBreaks ? 'REQUIRED between paragraphs' : 'Optional'}
 - Tone: ${rules.tone}
 - Structure: ${rules.structure}
-- FORBIDDEN: buy now, click here, limited time, act fast, 100% free`;
+- FORBIDDEN: buy now, click here, limited time, act fast, 100% free
+${toneSection}`;
 }
 
 function getPlatformHashtagCount(platform) {
@@ -80,6 +110,9 @@ export const DEFAULT_TOPICS = [
   'Edge computing and IoT',
   'Prompt engineering techniques',
   'SaaS business models and metrics',
+  'Blockchain',
+  'Crypto Currency',
+  'Bitcoin',
 ];
 
 const POST_TIMES = [
@@ -215,13 +248,13 @@ Return ONLY valid JSON — no markdown, no code fences:
     research = JSON.parse(researchRaw.replace(/```json|```/g, '').trim());
   } catch {
     research = {
-      key_facts: [topic],
-      trending_angle: topic,
-      best_hashtags: ['#Tech', '#AI', '#Innovation', '#FutureOfWork'],
+      key_facts: ['Real, specific developments in ' + topic],
+      trending_angle: 'A concrete recent development in ' + topic,
+      best_hashtags: ['#' + topic.replace(/\s+/g, '')],
       relevant_accounts: [],
-      hook_ideas: [`The future of ${topic} is here`],
-      pain_points: ['Staying ahead of rapid change'],
-      social_proof: ['Industry leaders are investing heavily in this area'],
+      hook_ideas: ['A specific observation about ' + topic],
+      pain_points: ['Practical challenge teams face with ' + topic],
+      social_proof: ['Verified source citation needed'],
     };
   }
 
@@ -250,7 +283,7 @@ Use line breaks between sections.`,
     trendingAngle: research.trending_angle,
     keyFacts: research.key_facts?.slice(0, 3),
     hashtags: research.best_hashtags,
-    mentions: research.relevant_accounts?.slice(0, 2),
+    mentions: [],
     targetAudience: research.target_audience,
     contentPillar: 'Educational + Thought Leadership',
     cta: 'What are your thoughts on this? Share below 👇',
@@ -261,17 +294,38 @@ Use line breaks between sections.`,
     webSources: webData,
   };
 
-  // ── STEP 3: HIGH-QUALITY MARKETING CONTENT GENERATION ────────────────────
-  const postPrompt = `Create a HIGH-IMPACT marketing social media post #${postNumber} for ${platform}.
+  // ── STEP 3: AUTHENTIC CONTENT GENERATION ─────────────────────────────────
+  const bannedPatternsBlock = IS_AUTHENTIC ? `BANNED PATTERNS — Your post will be REJECTED if it contains ANY of these:
+  ❌ Numbered listicles ("1️⃣ First insight:", "2️⃣ Key takeaway:")
+  ❌ Unsourced statistics ("78% of enterprises...", "$2.3 trillion market...")
+  ❌ Generic hook openers ("Here's what happened this week that blew my mind")
+  ❌ Engagement-bait CTAs ("Drop your thoughts below 👇 Let's have a real conversation")
+  ❌ Emoji bullet markers (📊 📈 as list markers)
+  ❌ Vague filler ("the numbers speak for themselves", "here's what most people miss")
+  ❌ Corporate-guru framing ("I've been saying this for years", "nobody is talking about this")` : '';
+
+  const voiceInstructions = IS_AUTHENTIC
+    ? `VOICE & STYLE:
+- Write in first person about something specific you (the writer) have done, built, or learned
+- Use concrete details: real project names, real numbers from the research data, real trade-offs
+- Never fabricate data — if no specific number is available, describe the trend qualitatively
+- Sound like a knowledgeable peer at a meetup, not a LinkedIn guru
+- Every sentence should pass the "would someone actually say this in conversation?" test
+- The hook should be a genuine observation, not a manufactured "bold statement"
+- CTA should be a natural question someone would actually ask, not "share your thoughts below"`
+    : `VOICE & STYLE:
+- Professional, polished corporate tone
+- Sound like an industry expert sharing analysis
+- Use data points where available`;
+
+  const postPrompt = `Write a ${platform} social post #${postNumber} about ${topic}.
 
 TOPIC: ${topic}
 TRENDING ANGLE: ${research.trending_angle}
 KEY FACTS: ${research.key_facts?.slice(0, 3).join(' | ')}
 HOOK IDEAS: ${research.hook_ideas?.join(' | ')}
 PAIN POINTS: ${research.pain_points?.join(' | ')}
-SOCIAL PROOF: ${research.social_proof?.join(' | ')}
 HASHTAGS: ${research.best_hashtags?.join(' ')}
-ACCOUNTS TO MENTION: ${research.relevant_accounts?.slice(0, 2).join(' ')}
 
 WEB RESEARCH DATA:
 ${webData.substring(0, 1000)}
@@ -279,32 +333,39 @@ ${webData.substring(0, 1000)}
 STRICT PLATFORM RULES (MUST FOLLOW ALL):
 ${getStrictPlatformRules(platform)}
 
-MARKETING PSYCHOLOGY FRAMEWORK — Use ONE of these:
-1. AIDA: Attention → Interest → Desire → Action
-2. PAS: Problem → Agitate → Solution
-3. Hook-Story-Offer: Hook → Relatable story → Value proposition
-4. Before-After-Bridge: Where they are → Where they could be → How to get there
+${bannedPatternsBlock}
 
-CONTENT REQUIREMENTS (STRICT - VIOLATION = REJECTION):
-- Lead with a STRONG HOOK (question, bold statement, surprising stat, or relatable pain point)
-- Use specific numbers, data points, and real examples (from web research)
-- Address a real pain point your audience faces
-- Provide actionable value — don't just inform, teach something
-- Include social proof (stats, trends, expert opinions) 
-- End with a CTA that drives engagement (question, poll, discussion starter)
-- Sound human, not corporate. Like an expert sharing genuine insight.
-- NO fluff, NO generic advice, NO ChatGPT-sounding sentences
-- MUST have ${getPlatformHashtagCount(platform)} hashtags at the end
-- MUST have at least 3-5 emojis
-- MUST have line breaks between paragraphs
-- NO forbidden words: buy now, click here, limited time, act fast, 100% free
+${voiceInstructions}
 
-Return ONLY the post text. No explanations, no intro, no markdown formatting around the text.`;
+CONTENT REQUIREMENTS:
+- Lead with a specific observation or real experience (not a generic hook)
+- MANDATORY: include exactly ONE concrete, specific data point (a number, date, version,
+  named tool, or real example) drawn from the WEB RESEARCH DATA above. If the research
+  contains no usable specific, state a concrete qualitative fact instead — never invent one.
+- Address a real pain point the audience actually faces
+- Sound human, not corporate — NO fluff, NO generic advice
+- Do NOT @-mention or tag any person, company, or handle. Mentions are only allowed when a
+  specific handle is explicitly provided; none is provided here, so tag no one.
+- MUST end with ${getPlatformHashtagCount(platform)} hashtags that are SPECIFIC to this topic
+  (e.g. #RetrievalAugmentedGeneration, not #Tech / #AI / #Innovation). Ban generic one-word
+  filler tags. No forbidden words: buy now, click here, limited time, act fast, 100% free
+- Line breaks between paragraphs
 
-  const postContent = await callAI(
-    `You are a world-class marketing strategist and content creator for ${platform}. Your posts go viral because they provide extreme value in an engaging, human way.`,
-    postPrompt, 1000
-  );
+Return ONLY the post text. No explanations, no intro, no markdown formatting.`;
+
+  const systemMsg = IS_AUTHENTIC
+    ? `You write social media posts that sound like a real person who actually built or shipped something. You avoid all generic corporate-LinkedIn-guru language. You use specific details, first-person experience, and genuine observations. Every stat you cite must come from the provided research data — never fabricate numbers.`
+    : `You are a professional marketing content creator for ${platform}. Your posts are polished, data-driven, and industry-relevant.`;
+
+  let postContent = await callAI(systemMsg, postPrompt, 1000);
+  let retried = false;
+
+  if (IS_AUTHENTIC && containsBannedPatterns(postContent)) {
+    console.warn(`[PostGen] Banned patterns detected in post #${postNumber} for ${platform}. Retrying with stronger instruction.`);
+    const retryPrompt = postPrompt + `\n\nCRITICAL: Your previous draft was rejected for violating banned patterns. Write this again from scratch. Avoid ALL generic marketing language. Be specific. Be real. No stats unless they came from the web research above. No numbered lists. No emoji bullet points. No "drop your thoughts" CTAs. Write like a real human.`;
+    postContent = await callAI(systemMsg, retryPrompt, 1000);
+    retried = true;
+  }
 
   // ── IMAGE PROMPT ─────────────────────────────────────────────────────────
   const visualHook = research.hook_ideas?.[0] || research.trending_angle || topic;
@@ -331,7 +392,7 @@ Style keywords: modern, premium, editorial, tech, data visualization, dark mode,
     platform,
     content: postContent.trim(),
     hashtags: research.best_hashtags || [],
-    mentions: research.relevant_accounts || [],
+    mentions: [],
     imagePrompt,
     research,
     postNumber,
@@ -340,6 +401,9 @@ Style keywords: modern, premium, editorial, tech, data visualization, dark mode,
     webResearchUsed: webData.substring(0, 300),
     sources: webResearch.sources.map(s => ({ title: s.title, url: s.url, verified: !!s.verified })),
     verifiedSourceCount: verifiedSources.length,
+    postToneMode: POST_TONE_MODE,
+    bannedPatternCheck: IS_AUTHENTIC ? (containsBannedPatterns(postContent) ? 'FAILED_RETRY' : 'PASSED') : 'DISABLED',
+    retried,
   };
 }
 
@@ -361,7 +425,7 @@ export async function generateDailyPosts(topicInput, platforms = ['linkedin', 't
     console.log(`[PostGen] Step 1-3 complete: Web Research + Content Brief + Marketing Copy done`);
     console.log(`[PostGen] Step 4: Generating & validating images for all platforms...`);
 
-    const imageResults = await generateAllPlatformImages(topic, research, platforms, tempDir, firstPostData.imagePrompt);
+    const imageResults = await generateAllPlatformImages(topic, research, platforms, tempDir, firstPostData.imagePrompt, firstPostData.content);
 
     console.log(`[PostGen] Step 5: Assembling final marketing posts...`);
 
@@ -381,7 +445,7 @@ export async function generateDailyPosts(topicInput, platforms = ['linkedin', 't
       } else {
         console.warn(`[PostGen] ${platform}: Image generation failed, using fallback`);
         try {
-          imageUrl = await generatePostImage(postData.imagePrompt, 'professional', '4:5', postData.content || '');
+          imageUrl = await generatePostImage(postData.topic, 'professional', '4:5', postData.content || '');
         } catch (e) {
           imageUrl = null;
         }

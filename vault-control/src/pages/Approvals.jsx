@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, Clock, DollarSign, Mail, Share2, Loader2, AlertCi
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import { useAuth } from '../context/AuthContext'
 
 const TABS = ['queue', 'pending', 'approved', 'rejected']
 
@@ -20,6 +21,7 @@ const typeColors = {
 }
 
 export default function Approvals() {
+  const { isAdmin } = useAuth()
   const [activeTab, setActiveTab] = useState('pending')
   const [approvals, setApprovals] = useState([])
   const [editMode, setEditMode] = useState(null) // id of item being edited
@@ -297,7 +299,7 @@ export default function Approvals() {
             </button>
           ))}
         </div>
-        {activeTab === 'pending' && selectedForBulk.size > 0 && (
+        {activeTab === 'pending' && selectedForBulk.size > 0 && isAdmin && (
           <div className="flex items-center gap-2">
             <span className="text-sm dark:text-[#7A7A85] text-gray-600">
               {selectedForBulk.size} selected
@@ -402,7 +404,7 @@ export default function Approvals() {
               <div key={approval.id} className={`card p-6 transition-all ${isSelected ? 'dark:bg-[#00FF88]/5 border-[#00FF88]' : ''} ${isEditing ? 'dark:bg-[#1A1A24] border-[#00FF88]/50' : ''}`}>
                 <div className="flex items-start gap-4">
                   {/* Bulk Select Checkbox */}
-                  {activeTab === 'pending' && (
+                  {activeTab === 'pending' && isAdmin && (
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -428,7 +430,7 @@ export default function Approvals() {
                           <>
                             <span className="text-xs dark:text-[#00FF88] text-green-600 font-bold">EDITING</span>
                           </>
-                        ) : (
+                        ) : isAdmin && (
                           <button
                             onClick={() => startEdit(approval)}
                             className="p-1.5 rounded dark:text-[#7A7A85] text-gray-400 hover:dark:bg-[#1A1A24] hover:bg-gray-100 transition-colors"
@@ -530,7 +532,7 @@ export default function Approvals() {
 
                   {/* Actions */}
                   <div className="flex flex-col gap-2 min-w-fit">
-                    {activeTab === 'pending' && !isEditing && (
+                    {activeTab === 'pending' && !isEditing && isAdmin && (
                       <>
                         <button
                           onClick={() => handleApprove(approval.id)}
@@ -550,13 +552,16 @@ export default function Approvals() {
                         </button>
                       </>
                     )}
+                    {activeTab === 'pending' && !isEditing && !isAdmin && (
+                      <span className="text-[10px] dark:text-[#7A7A85] text-gray-500 italic">Read-only</span>
+                    )}
                     {activeTab === 'approved' && (
                       <button className="flex items-center gap-2 px-3 py-2 rounded font-medium text-sm dark:bg-gray-500/20 dark:text-gray-400 bg-gray-50 text-gray-700">
                         <FileText size={16} />
                         View Details
                       </button>
                     )}
-                    {activeTab === 'rejected' && (
+                    {activeTab === 'rejected' && isAdmin && (
                       <>
                         <button className="flex items-center gap-2 px-3 py-2 rounded font-medium text-sm dark:bg-gray-500/20 dark:text-gray-400 bg-gray-50 text-gray-700">
                           Reconsider

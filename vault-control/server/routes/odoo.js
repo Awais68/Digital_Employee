@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 
 const execAsync = promisify(exec)
+const ODOO_TIMEOUT = 25000
 const router = express.Router()
 
 const __filename = fileURLToPath(import.meta.url)
@@ -18,7 +19,7 @@ const ODOO_MCP_PATH = path.join(ROOT_DIR, 'odoo_mcp.py')
 // GET accounting summary from Odoo
 router.get('/summary', async (req, res) => {
   try {
-    const { stdout, stderr } = await execAsync(`python3 "${ODOO_MCP_PATH}" get_accounting_summary`)
+    const { stdout, stderr } = await execAsync(`python3 "${ODOO_MCP_PATH}" get_accounting_summary`, { timeout: ODOO_TIMEOUT })
     
     if (stderr && !stdout) {
       console.error('Odoo MCP Error:', stderr)
@@ -39,7 +40,7 @@ router.get('/transactions', async (req, res) => {
   const days = req.query.days || 30
   
   try {
-    const { stdout, stderr } = await execAsync(`python3 "${ODOO_MCP_PATH}" get_recent_transactions limit=${limit} days=${days}`)
+    const { stdout, stderr } = await execAsync(`python3 "${ODOO_MCP_PATH}" get_recent_transactions limit=${limit} days=${days}`, { timeout: ODOO_TIMEOUT })
     
     if (stderr && !stdout) {
       console.error('Odoo MCP Error:', stderr)
@@ -57,7 +58,7 @@ router.get('/transactions', async (req, res) => {
 // GET bank balance from Odoo
 router.get('/balance', async (req, res) => {
   try {
-    const { stdout, stderr } = await execAsync(`python3 "${ODOO_MCP_PATH}" get_bank_balance`)
+    const { stdout, stderr } = await execAsync(`python3 "${ODOO_MCP_PATH}" get_bank_balance`, { timeout: ODOO_TIMEOUT })
     
     if (stderr && !stdout) {
       console.error('Odoo MCP Error:', stderr)

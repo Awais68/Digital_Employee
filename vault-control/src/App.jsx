@@ -7,7 +7,7 @@ import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import ChatbotPanel from "./components/Chatbot/ChatbotPanel";
 import ChatbotButton from "./components/Chatbot/ChatbotButton";
-import { Loader2, Lock } from "lucide-react";
+import { Loader2, Lock, AlertCircle } from "lucide-react";
 
 // Lazy load page components to reduce initial bundle size (bundle-dynamic-imports)
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -36,6 +36,7 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [errorType, setErrorType] = useState(null);
   const { login, register } = useAuth();
   useToast();
 
@@ -43,6 +44,7 @@ function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setErrorType(null);
 
     try {
       if (isRegister) {
@@ -55,7 +57,10 @@ function LoginPage() {
         await login(username, password);
       }
     } catch (err) {
-      setError(err.message || "Authentication failed");
+      const message = err.message || "Authentication failed";
+      const isRetryable = message.toLowerCase().includes('try again') || message.toLowerCase().includes('unavailable') || message.toLowerCase().includes('too many');
+      setError(message);
+      setErrorType(isRetryable ? 'retryable' : 'auth');
     } finally {
       setLoading(false);
     }
@@ -78,7 +83,12 @@ function LoginPage() {
           </div>
 
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/50 text-red-400 text-sm">
+            <div className={`mb-4 p-3 rounded-lg text-sm flex items-start gap-2 ${
+              errorType === 'retryable'
+                ? 'bg-yellow-500/10 border border-yellow-500/50 text-yellow-400'
+                : 'bg-red-500/10 border border-red-500/50 text-red-400'
+            }`}>
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
               {error}
             </div>
           )}

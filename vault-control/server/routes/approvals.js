@@ -3,6 +3,7 @@ import { readVaultFiles, getVaultPath, writeFile } from '../vault-reader.js'
 import fs from 'fs'
 import path from 'path'
 import { createNotification } from '../services/notificationService.js'
+import { requireAdmin } from '../database/auth.js'
 
 const router = express.Router()
 
@@ -96,7 +97,7 @@ function findFileInPendingApproval(id) {
 }
 
 // APPROVE an item
-router.post('/:id/approve', (req, res) => {
+router.post('/:id/approve', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
     const pendingPath = getVaultPath('Pending_Approval')
@@ -133,7 +134,7 @@ router.post('/:id/approve', (req, res) => {
 })
 
 // REJECT an item
-router.post('/:id/reject', (req, res) => {
+router.post('/:id/reject', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
     const pendingPath = getVaultPath('Pending_Approval')
@@ -170,7 +171,7 @@ router.post('/:id/reject', (req, res) => {
 })
 
 // UPDATE an approval
-router.put('/:id', (req, res) => {
+router.put('/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
     const { frontmatter, content } = req.body
@@ -192,7 +193,7 @@ router.put('/:id', (req, res) => {
 })
 
 // UNDO an action (move from Approved/Rejected back to Pending_Approval)
-router.post('/:id/undo', (req, res) => {
+router.post('/:id/undo', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
     const pendingPath = getVaultPath('Pending_Approval')

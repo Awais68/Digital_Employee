@@ -17,9 +17,13 @@ router.get('/stats', async (req, res) => {
     cache = { data: stats, at: now }
     res.json(stats)
   } catch (err) {
+    // The remote VM being unreachable is a normal condition for a monitoring
+    // dashboard — not a gateway failure. Return 200 with online:false so the
+    // frontend renders "offline" cleanly instead of spamming 502s in the console.
     console.error('Oracle SSH error:', err.message)
-    res.status(502).json({
+    res.json({
       online: false,
+      host: process.env.ORACLE_SSH_HOST || '140.245.241.95',
       error: err.message,
       timestamp: new Date().toISOString(),
     })

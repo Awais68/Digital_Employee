@@ -1,6 +1,6 @@
 ---
 tier: Silver
-status: In Progress
+status: done
 created: 2026-04-02
 priority: high
 parent_tier: Bronze

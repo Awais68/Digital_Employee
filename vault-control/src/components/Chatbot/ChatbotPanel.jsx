@@ -1,4 +1,22 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+
+// Mirror the auth token lookup used by src/utils/axios.js request interceptor.
+// The chat stream uses fetch() (not the axios instance) because it reads the
+// response as a live SSE byte stream via res.body.getReader(), which browser
+// axios/XHR cannot expose — so the Authorization header is attached manually here.
+const TOKEN_KEYS = ["token", "auth_token", "jwt", "admin_token"];
+function getAuthToken() {
+  for (const key of TOKEN_KEYS) {
+    const t = localStorage.getItem(key);
+    if (t) return t;
+  }
+  for (const key of TOKEN_KEYS) {
+    const t = sessionStorage.getItem(key);
+    if (t) return t;
+  }
+  return null;
+}
+
 const INITIAL_MESSAGE = {
   role: "assistant",
   content:
@@ -130,9 +148,12 @@ export default function ChatbotPanel({ isOpen, onClose }) {
       const controller = new AbortController();
       abortRef.current = controller;
       const apiBase = import.meta.env.VITE_API_URL || "";
+      const token = getAuthToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch(apiBase + "/api/chat/stream", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ messages: historyForApi }),
         signal: controller.signal,
       });

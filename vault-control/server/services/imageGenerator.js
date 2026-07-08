@@ -1,15 +1,238 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { spawnSync } from 'child_process'
+import { callAI } from './aiProvider.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const GENERATED_DIR = path.resolve(__dirname, '../../public/generated')
+
+// ─── Brand logo — embedded once as base64 for the circular avatar ─────────
+const LOGO_PATH = path.resolve(__dirname, '../../public/uploads/logoBig.png')
+let _logoDataUri = null // null = not attempted, '' = attempted & failed
+function getLogoDataUri() {
+  if (_logoDataUri !== null) return _logoDataUri || null
+  try {
+    const buf = fs.readFileSync(LOGO_PATH)
+    _logoDataUri = `data:image/png;base64,${buf.toString('base64')}`
+    console.log(`[ImageGen] Brand logo loaded for avatar (${(buf.length / 1024).toFixed(0)}KB)`)
+  } catch (e) {
+    console.warn(`[ImageGen] Logo not found at ${LOGO_PATH}: ${e.message} — using initials fallback`)
+    _logoDataUri = ''
+  }
+  return _logoDataUri || null
+}
+
+// ─── Emoji stripping — librsvg has no color-emoji fallback in many deploy ─
+// environments and renders emoji as tofu (□) boxes. All text overlays are
+// stripped and stat icons are drawn as vectors, so glyph coverage never
+// affects the exported image.
+const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE00}-\u{FE0F}\u{200D}\u{2049}\u{203C}]/gu
+function stripEmoji(s) {
+  return typeof s === 'string' ? s.replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim() : s
+}
+
+// One-time observability: log whether a color-emoji font is present on the
+// host. Purely informational — rendering does not depend on it.
+let _emojiFontLogged = false
+function logEmojiFontStatus() {
+  if (_emojiFontLogged) return
+  _emojiFontLogged = true
+  try {
+    const out = spawnSync('fc-list', [':charset=1f600'], { encoding: 'utf-8', timeout: 3000 })
+    const has = !!(out.stdout && out.stdout.trim().length > 0)
+    console.log(`[ImageGen] Color-emoji font on host: ${has ? 'yes' : 'NO'} (emoji stripped from render regardless)`)
+  } catch { /* fc-list unavailable — irrelevant since emoji are stripped */ }
+}
+
+// ─── Validation constants ──────────────────────────────────────────────
+const FORBIDDEN_FRAGMENTS = [
+  'visual for:', 'editorial style', '(like Forbes', 'TechCrunch,', 'HBR covers',
+  'Requirements:', 'Core message:', 'Key data/stats to visually emphasize',
+  'Professional marketing visual', '1080x1350', 'NO human faces', 'NO text',
+  'Style keywords:', 'markdown', '```json', '```',
+  'Resolution:', 'production quality', 'premium, editorial',
+]
+const MAX_HEADLINE_CHARS = 65
+const MAX_BULLET_CHARS = 70
+const MAX_CTA_CHARS = 50
+const MAX_STAT_LABEL_CHARS = 28
+const TEMPLATE_SYNTAX_RE = /\$\{.*?\}/
 
 function getOpenRouterKey() {
   return (
     process.env.OPENROUTER_API_KEY ||
     (process.env.OPENAI_API_KEY?.startsWith('sk-or-') ? process.env.OPENAI_API_KEY : null)
   )
+}
+
+// ─── Content Validation ──────────────────────────────────────────────────
+function validateStructuredContent(content) {
+  if (!content || typeof content !== 'object') {
+    return { valid: false, error: 'Content is not an object', content }
+  }
+  if (typeof content.headline !== 'string' || content.headline.length === 0) {
+    return { valid: false, error: 'Headline missing or empty', content }
+  }
+  if (content.headline.length > MAX_HEADLINE_CHARS) {
+    console.warn(`[ImageGen] Headline truncated from ${content.headline.length} to ${MAX_HEADLINE_CHARS} chars`)
+    content.headline = content.headline.substring(0, MAX_HEADLINE_CHARS)
+  }
+  if (!Array.isArray(content.bullets)) {
+    content.bullets = []
+  }
+  if (!Array.isArray(content.stats)) {
+    content.stats = []
+  }
+  if (typeof content.cta !== 'string') {
+    content.cta = ''
+  }
+
+  const allText = JSON.stringify(content).toLowerCase()
+  for (const frag of FORBIDDEN_FRAGMENTS) {
+    if (allText.includes(frag.toLowerCase())) {
+      return { valid: false, error: `Forbidden fragment detected: "${frag}"`, content }
+    }
+  }
+  if (TEMPLATE_SYNTAX_RE.test(allText)) {
+    return { valid: false, error: 'Unresolved template syntax detected', content }
+  }
+  return { valid: true, content }
+}
+
+// ─── Rule-based content extraction from actual post text ──────────────
+function extractContentFromPost(postContent, topic) {
+  const lines = postContent.split('\n').filter(l => l.trim())
+  const headline = (
+    lines.find(l => l.length > 10 && l.length < MAX_HEADLINE_CHARS
+      && !l.startsWith('#') && !l.startsWith('@') && !l.startsWith('http')
+      && !l.startsWith('```') && !l.match(/^\d+\.\s/))
+    || topic
+  ).replace(/^[🚀💡🔥⚡🎯📊💪🌟✅📈]\s*/, '').trim()
+
+  const statLines = lines.filter(l => /\d+%/.test(l) || /\$\d/.test(l))
+  const iconPool = ['📈', '💰', '⚡', '🎯', '📊', '🌟', '🔥', '💡']
+  const usedIcons = []
+  const stats = statLines.slice(0, 4).map(l => {
+    const num = l.match(/([\d,.]+%|\$[\d,.]+[^\s]*)/)?.[1] || l.match(/([\d,.]+%|\$[\d,.]+[^\s]*)/)?.[0] || ''
+    const label = l.replace(num, '').replace(/^[→✅📊💡🔥⚡\s]*/, '').replace(/[^\w\s-]/g, '').trim().substring(0, MAX_STAT_LABEL_CHARS) || 'Key metric'
+    const icon = iconPool.find(i => !usedIcons.includes(i)) || iconPool[0]
+    usedIcons.push(icon)
+    return { icon, value: num, label }
+  })
+
+  if (stats.length === 0) {
+    const numbers = postContent.match(/\d+%|\$[\d,.]+[kKmMbBtT]?|\b\d+[xX]\b(?!\d+)/g) || []
+    const cleanNumbers = numbers.filter(n => !/^\d+x\d+$/i.test(n))
+    if (cleanNumbers.length > 0) {
+      stats.push({ icon: '📊', value: cleanNumbers[0].trim(), label: 'Impact metric' })
+    }
+  }
+
+  const bullets = lines
+    .filter(l => l.match(/^[→✅📊💡🔥⚡\d️⃣]|^- /))
+    .slice(0, 4)
+    .map(l => l.replace(/^[→✅📊💡🔥⚡\d️⃣\-]+/, '').replace(/^\s+/, '').trim())
+    .filter(l => l.length > 5 && l.length < MAX_BULLET_CHARS)
+    .map(l => l.length > MAX_BULLET_CHARS ? l.substring(0, MAX_BULLET_CHARS) + '…' : l)
+
+  const cta = (
+    lines.find(l => l.includes('?') || l.includes('👇') || l.includes('↓')
+      || /share|comment|thoughts?|think|discuss|drop|join/i.test(l))
+    || 'What are your thoughts? 👇'
+  ).replace(/^[🚀💡🔥⚡🎯📊💪🌟✅📈]\s*/, '').trim().substring(0, MAX_CTA_CHARS)
+
+  return { headline, bullets, stats, cta }
+}
+
+// ─── AI-based content extraction with JSON schema + retry ─────────────
+async function extractContentViaAI(postContent, topic) {
+  const systemPrompt = 'You extract structured image-overlay content from marketing posts. Return ONLY valid JSON — no markdown, no code fences.'
+
+  const prompt = `Extract image overlay content from the marketing post below for a branded social media image.
+
+Return ONLY valid JSON (no markdown, no code fences) with this exact schema:
+{
+  "headline": "Short compelling headline (MAX 6 WORDS, attention-grabbing, no quotes)",
+  "bullets": ["2-4 key takeaways, each under 50 chars"],
+  "stats": [
+    {"icon": "📊", "value": "exact number like 78%", "label": "short label under 25 chars"}
+  ],
+  "cta": "Short call to action (max 5 words)"
+}
+
+STRICT RULES:
+- Headline: max 6 words, must be compelling, no instruction text
+- Stats: extract real numbers/percentages from the post content. Max 4.
+  If the post has no clear numbers, use an empty array [].
+- Bullets: concrete takeaways from the post content.
+- CTA: short action prompt from the post end.
+- NEVER include instruction text, prompt text, or meta commentary.
+- The content is for a SOCIAL MEDIA IMAGE overlay — make it punchy.
+
+MARKETING POST:
+${postContent.substring(0, 1500)}`
+
+  let lastError = null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const raw = await callAI(systemPrompt, prompt, 600)
+      const cleaned = raw.replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(cleaned)
+
+      const validation = validateStructuredContent(parsed)
+      if (validation.valid) {
+        console.log(`[ImageGen] AI content extraction succeeded (attempt ${attempt + 1})`)
+        return validation.content
+      }
+      lastError = validation.error
+      console.warn(`[ImageGen] AI extraction attempt ${attempt + 1} validation failed:`,
+        lastError, '- raw:', raw.substring(0, 120))
+    } catch (e) {
+      lastError = e.message
+      console.warn(`[ImageGen] AI extraction attempt ${attempt + 1} parse failed:`, e.message)
+    }
+  }
+  throw new Error(`AI content extraction failed after 2 attempts: ${lastError}`)
+}
+
+// ─── Combined extraction: AI first, rule-based fallback ───────────────
+async function extractImageContent(postContent, topic) {
+  if (!postContent || postContent.trim().length === 0) {
+    console.warn('[ImageGen] No post content — extracting from topic only')
+    const content = extractContentFromPost(topic || 'Insights', topic)
+    const validation = validateStructuredContent(content)
+    if (validation.valid) return validation.content
+    return { headline: topic || 'Insights', bullets: [], stats: [], cta: '' }
+  }
+  try {
+    const cleaned = postContent.replace(/```[\s\S]*?```/g, '').trim()
+    const aiContent = await extractContentViaAI(cleaned, topic)
+    return aiContent
+  } catch (e) {
+    console.warn('[ImageGen] Falling back to rule-based extraction:', e.message)
+    const ruleContent = extractContentFromPost(postContent, topic)
+    return ruleContent
+  }
+}
+
+// ─── Pre-render sanitization: returns { safe, reason } ────────────────
+function isContentSafeForRendering(content) {
+  const allText = (content.headline + ' ' + content.cta + ' ' +
+    content.bullets.join(' ') + ' ' + JSON.stringify(content.stats)).toLowerCase()
+
+  for (const frag of FORBIDDEN_FRAGMENTS) {
+    if (allText.includes(frag.toLowerCase())) {
+      return { safe: false, reason: `Forbidden content: "${frag}"` }
+    }
+  }
+  if (TEMPLATE_SYNTAX_RE.test(allText)) {
+    return { safe: false, reason: 'Unresolved template syntax' }
+  }
+  if (!content.headline || content.headline.trim().length === 0) {
+    return { safe: false, reason: 'Empty headline' }
+  }
+  return { safe: true }
 }
 
 // ─── Wikipedia image — primary (topic-relevant, free, no API key) ──────────
@@ -48,7 +271,7 @@ async function generateViaWikipedia(topic, width = 1080, height = 1350) {
   return url;
 }
 
-// ─── Canva-Style Image with Post Content ──────────────────────────────────
+// ─── Branded Template Image with Structured Content ──────────────────────
 async function generateCanvaStyleImage(topic, postContent = '', width = 1080, height = 1350) {
   const LINKEDIN_BLUE = '#0A66C2'
   const ELECTRIC_TEAL = '#00C9A7'
@@ -57,34 +280,161 @@ async function generateCanvaStyleImage(topic, postContent = '', width = 1080, he
   const WHITE = '#FFFFFF'
   const LIGHT = 'rgba(255,255,255,0.75)'
   const DIM = 'rgba(255,255,255,0.4)'
+  const CARD_BG = 'rgba(10,102,194,0.12)'
+  const CARD_BORDER = 'rgba(10,102,194,0.25)'
 
-  // Extract key points from content
-  const lines = postContent.split('\n').filter(l => l.trim())
-  const bulletPoints = lines.filter(l => l.match(/^[→✅📊💡🔥⚡1-9️⃣]|^- /)).slice(0, 5)
-  const hashtags = (postContent.match(/#\w+/g) || []).slice(0, 4)
-  const mentions = (postContent.match(/@\w+/g) || []).slice(0, 3)
+  // ── Step 1: Extract structured content from post body ────────────────
+  let content
+  if (typeof postContent === 'object' && postContent !== null && postContent.headline) {
+    content = postContent
+  } else if (typeof postContent === 'string') {
+    const cleanBody = postContent.replace(/```[\s\S]*?```/g, '').trim()
+    content = await extractImageContent(cleanBody, topic)
+  } else {
+    content = { headline: topic, bullets: [], stats: [], cta: '' }
+  }
 
-  // Get hook (first meaningful line)
-  const hook = lines.find(l => l.length > 20 && !l.startsWith('#') && !l.startsWith('@')) || topic
-  const hookLines = hook.match(/.{1,25}/g) || [hook.substring(0, 25)]
+  // ── Step 2: Pre-render validation ────────────────────────────────────
+  const validation = validateStructuredContent(content)
+  if (!validation.valid) {
+    console.warn(`[ImageGen] Content validation failed: ${validation.error} — falling back to Pollinations`)
+    throw new Error(`Content validation: ${validation.error}`)
+  }
 
-  // Stats from content
-  const stats = postContent.match(/\d+[%x$]|\d+\s*(million|billion|trillion)/gi) || []
+  const safety = isContentSafeForRendering(content)
+  if (!safety.safe) {
+    console.warn(`[ImageGen] Content unsafe for rendering: ${safety.reason} — falling back to Pollinations`)
+    throw new Error(`Content safety: ${safety.reason}`)
+  }
 
-  // Build SVG
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  // ── Step 3: Build branded template SVG (adaptive vertical flow) ───────
+  // librsvg has no color-emoji fallback, so all emoji are stripped from text
+  // and stat icons are drawn as vectors. Content blocks flow from a single
+  // cursor and the whole group is centred between header and footer, so an
+  // empty stats/bullets set never leaves a dead vertical gap.
+  logEmojiFontStatus()
+  const headline = stripEmoji(content.headline) || topic
+  const cta = stripEmoji(content.cta || '')
+  const bullets = (content.bullets || []).map(b => stripEmoji(b)).filter(Boolean)
+  const stats = (content.stats || [])
+    .map(s => ({ value: stripEmoji(s.value || ''), label: stripEmoji(s.label || '') }))
+    .filter(s => s.value)
+  const logoUri = getLogoDataUri()
+
+  // Layout bounds: content flows between the header and the footer bar.
+  const HEADER_BOTTOM = 130
+  const FOOTER_TOP = height - 110
+  const AVAILABLE = FOOTER_TOP - HEADER_BOTTOM
+  const BLOCK_GAP = 44
+
+  // Headline → up to 2 lines.
+  const hWords = headline.split(/\s+/)
+  const hMid = Math.ceil(hWords.length / 2)
+  const hLine1 = hWords.length > 4 ? hWords.slice(0, hMid).join(' ') : headline
+  const hLine2 = hWords.length > 4 ? hWords.slice(hMid).join(' ') : ''
+  const hFontSize = Math.min(64, Math.max(40, Math.floor(620 / (Math.max(hLine1.length, hLine2.length) + 1))))
+  const headlineH = hFontSize + (hLine2 ? Math.floor(hFontSize * 0.72) + 12 : 0)
+
+  // Stats grid geometry.
+  const statCardW = 280, statCardH = 150, statGap = 30
+  const statCols = Math.max(1, Math.min(stats.length, 3))
+  const statRows = stats.length ? Math.ceil(stats.length / statCols) : 0
+  const statTotalW = statCols * statCardW + (statCols - 1) * statGap
+  const statStartX = (width - statTotalW) / 2
+  const statsH = statRows ? statRows * statCardH + (statRows - 1) * statGap : 0
+
+  const bulletGap = 46
+  const bulletsH = bullets.length * bulletGap
+  const avatarH = 118        // circle r56 + breathing room
+  const dividerH = 3
+  const ctaH = cta ? 54 : 0
+
+  // Assemble the ordered list of present blocks with their measured heights.
+  const blocks = []
+  blocks.push({ kind: 'avatar', h: avatarH })
+  blocks.push({ kind: 'headline', h: headlineH })
+  blocks.push({ kind: 'divider', h: dividerH })
+  if (statsH) blocks.push({ kind: 'stats', h: statsH })
+  if (bulletsH) blocks.push({ kind: 'bullets', h: bulletsH })
+  if (ctaH) blocks.push({ kind: 'cta', h: ctaH })
+
+  const totalH = blocks.reduce((a, b) => a + b.h, 0) + BLOCK_GAP * (blocks.length - 1)
+  let cursorY = HEADER_BOTTOM + Math.max(0, (AVAILABLE - totalH) / 2)
+
+  // Render each block relative to the flowing cursor.
+  const parts = []
+  for (const block of blocks) {
+    const cx = width / 2
+    if (block.kind === 'avatar') {
+      const acx = cx, acy = cursorY + avatarH / 2, r = 56
+      if (logoUri) {
+        parts.push(`<g filter="url(#cardShadow)">
+    <circle cx="${acx}" cy="${acy}" r="${r}" fill="${DARK_NAVY}"/>
+    <clipPath id="avatarClip"><circle cx="${acx}" cy="${acy}" r="${r - 3}"/></clipPath>
+    <image href="${logoUri}" xlink:href="${logoUri}" x="${acx - (r - 3)}" y="${acy - (r - 3)}" width="${2 * (r - 3)}" height="${2 * (r - 3)}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
+    <circle cx="${acx}" cy="${acy}" r="${r}" stroke="${ELECTRIC_TEAL}" stroke-width="2" fill="none"/>
+  </g>`)
+      } else {
+        // Fallback: solid branded initials (no dashed 'loading' ring).
+        parts.push(`<g>
+    <circle cx="${acx}" cy="${acy}" r="${r}" fill="rgba(10,102,194,0.25)"/>
+    <circle cx="${acx}" cy="${acy}" r="${r}" stroke="${ELECTRIC_TEAL}" stroke-width="2" fill="none"/>
+    <text x="${acx}" y="${acy + 12}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="32" font-weight="700" text-anchor="middle">DE</text>
+  </g>`)
+      }
+    } else if (block.kind === 'headline') {
+      parts.push(`<g filter="url(#glow)">
+    <text x="${cx}" y="${cursorY + hFontSize}" fill="${WHITE}" font-family="'Poppins','Inter',sans-serif" font-size="${hFontSize}" font-weight="700" letter-spacing="-0.5" text-anchor="middle">${escapeXml(hLine1)}</text>
+    ${hLine2 ? `<text x="${cx}" y="${cursorY + hFontSize + Math.floor(hFontSize * 0.72) + 8}" fill="${ELECTRIC_TEAL}" font-family="'Poppins','Inter',sans-serif" font-size="${Math.floor(hFontSize * 0.72)}" font-weight="600" letter-spacing="-0.3" text-anchor="middle">${escapeXml(hLine2)}</text>` : ''}
+  </g>`)
+    } else if (block.kind === 'divider') {
+      parts.push(`<rect x="${cx - 40}" y="${cursorY}" width="80" height="3" rx="1.5" fill="${ELECTRIC_TEAL}"/>`)
+    } else if (block.kind === 'stats') {
+      parts.push(stats.map((stat, i) => {
+        const col = i % statCols, row = Math.floor(i / statCols)
+        const sx = statStartX + col * (statCardW + statGap)
+        const sy = cursorY + row * (statCardH + statGap)
+        const icx = sx + statCardW / 2, icy = sy + 42
+        // Drawn vector "mini-chart" icon — no emoji, always renders.
+        const bars = [14, 22, 30].map((bh, bi) =>
+          `<rect x="${icx - 15 + bi * 12}" y="${icy + 12 - bh}" width="8" height="${bh}" rx="2" fill="${ELECTRIC_TEAL}"/>`
+        ).join('')
+        return `<g filter="url(#cardShadow)">
+      <rect x="${sx}" y="${sy}" width="${statCardW}" height="${statCardH}" rx="16" fill="${CARD_BG}"/>
+      <rect x="${sx}" y="${sy}" width="${statCardW}" height="${statCardH}" rx="16" stroke="${CARD_BORDER}" stroke-width="1" fill="none"/>
+      <circle cx="${icx}" cy="${icy}" r="24" fill="rgba(0,201,167,0.15)"/>
+      ${bars}
+      <text x="${icx}" y="${sy + 100}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="30" font-weight="700" text-anchor="middle">${escapeXml(stat.value || '—')}</text>
+      <text x="${icx}" y="${sy + 128}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="14" letter-spacing="0.3" text-anchor="middle">${escapeXml(stat.label || '')}</text>
+    </g>`
+      }).join('\n    '))
+    } else if (block.kind === 'bullets') {
+      const bx = cx - 240
+      parts.push(bullets.map((point, i) => {
+        const by = cursorY + i * bulletGap + 18
+        return `<path d="M ${bx} ${by - 10} L ${bx + 12} ${by - 5} L ${bx} ${by} Z" fill="${ELECTRIC_TEAL}"/>
+    <text x="${bx + 24}" y="${by}" fill="${LIGHT}" font-family="'Inter',sans-serif" font-size="20" font-weight="400">${escapeXml(point.substring(0, MAX_BULLET_CHARS))}</text>`
+      }).join('\n    '))
+    } else if (block.kind === 'cta') {
+      parts.push(`<rect x="${cx - 180}" y="${cursorY}" width="360" height="54" rx="27" fill="${ELECTRIC_TEAL}"/>
+    <text x="${cx}" y="${cursorY + 34}" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="18" font-weight="600" text-anchor="middle">${escapeXml(cta)}</text>`)
+    }
+    cursorY += block.h + BLOCK_GAP
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="${DARK_NAVY}"/>
       <stop offset="50%" stop-color="#0C2340"/>
       <stop offset="100%" stop-color="${DARKER}"/>
     </linearGradient>
-    <radialGradient id="glow1" cx="30%" cy="30%">
+    <radialGradient id="glow1" cx="30%" cy="25%">
       <stop offset="0%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0.2"/>
       <stop offset="100%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="glow2" cx="70%" cy="70%">
-      <stop offset="0%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0.15"/>
+      <stop offset="0%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0.12"/>
       <stop offset="100%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -92,12 +442,8 @@ async function generateCanvaStyleImage(topic, postContent = '', width = 1080, he
       <stop offset="50%" stop-color="${ELECTRIC_TEAL}"/>
       <stop offset="100%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="blueLine" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0"/>
-      <stop offset="50%" stop-color="${LINKEDIN_BLUE}"/>
-      <stop offset="100%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0"/>
-    </linearGradient>
     <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="cardShadow"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="${DARKER}" flood-opacity="0.4"/></filter>
   </defs>
 
   <!-- Background -->
@@ -106,63 +452,41 @@ async function generateCanvaStyleImage(topic, postContent = '', width = 1080, he
   <rect width="${width}" height="${height}" fill="url(#glow2)"/>
 
   <!-- Top bar -->
-  <rect x="0" y="0" width="${width}" height="6" fill="${LINKEDIN_BLUE}"/>
-  
-  <!-- Logo area -->
-  <rect x="80" y="50" width="40" height="40" rx="8" fill="${ELECTRIC_TEAL}"/>
-  <text x="100" y="78" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="20" font-weight="700" text-anchor="middle">D</text>
-  <text x="135" y="78" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="16" font-weight="600">Digital FTE</text>
-  <text x="${width - 80}" y="78" fill="${DIM}" font-family="'Inter',sans-serif" font-size="12" text-anchor="end">Professional Insights</text>
+  <rect x="0" y="0" width="${width}" height="5" fill="${LINKEDIN_BLUE}"/>
 
-  <!-- Accent line -->
-  <rect x="80" y="110" width="200" height="2" rx="1" fill="url(#accent)"/>
+  <!-- Logo lockup -->
+  <rect x="60" y="40" width="36" height="36" rx="8" fill="${ELECTRIC_TEAL}"/>
+  <text x="78" y="66" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="18" font-weight="700" text-anchor="middle">D</text>
+  <text x="110" y="66" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="15" font-weight="600">Digital FTE</text>
 
-  <!-- Hook / Headline -->
-  <g filter="url(#glow)">
-    ${hookLines.map((line, i) =>
-      `<text x="80" y="${170 + i * 55}" fill="${WHITE}" font-family="'Poppins','Inter',sans-serif" font-size="42" font-weight="700" letter-spacing="-0.5">${escapeXml(line.trim())}</text>`
+  <!-- Decorative dot pattern -->
+  <g fill="${ELECTRIC_TEAL}" opacity="0.08">
+    ${Array.from({ length: 6 }, (_, i) =>
+      `<circle cx="${width - 120 + i * 20}" cy="${40 + (i % 2) * 10}" r="${2 - (i % 2)}"/>`
     ).join('\n    ')}
   </g>
 
-  <!-- Content bullets -->
-  ${bulletPoints.map((point, i) => {
-    const y = 170 + hookLines.length * 55 + 40 + i * 52
-    const cleanPoint = point.replace(/^[→✅📊💡🔥⚡1-9️⃣]\s*/, '').replace(/^-\s*/, '')
-    return `<text x="100" y="${y}" fill="${ELECTRIC_TEAL}" font-family="sans-serif" font-size="18">▸</text>
-    <text x="130" y="${y}" fill="${LIGHT}" font-family="'Inter',sans-serif" font-size="22" font-weight="400">${escapeXml(cleanPoint.substring(0, 55))}</text>`
-  }).join('\n    ')}
-
-  <!-- Stats highlight -->
-  ${stats.length > 0 ? `
-  <rect x="80" y="${height - 350}" width="${width - 160}" height="80" rx="12" fill="${LINKEDIN_BLUE}" fill-opacity="0.15"/>
-  <rect x="80" y="${height - 350}" width="${width - 160}" height="80" rx="12" stroke="${LINKEDIN_BLUE}" stroke-width="1" fill="none" stroke-opacity="0.3"/>
-  <text x="${width/2}" y="${height - 300}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="28" font-weight="700" text-anchor="middle">${escapeXml(stats[0])}</text>
-  <text x="${width/2}" y="${height - 275}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="14" text-anchor="middle">Key Metric</text>
-  ` : ''}
-
-  <!-- Hashtags -->
-  <text x="80" y="${height - 180}" fill="${ELECTRIC_TEAL}" font-family="'Inter',sans-serif" font-size="16" font-weight="500">${hashtags.map(h => escapeXml(h)).join('  ')}</text>
-
-  <!-- Mentions -->
-  <text x="80" y="${height - 150}" fill="${LINKEDIN_BLUE}" font-family="'Inter',sans-serif" font-size="15">${mentions.map(m => escapeXml(m)).join('  ')}</text>
+  <!-- Flowing content -->
+  ${parts.join('\n  ')}
 
   <!-- Bottom bar -->
-  <rect x="0" y="${height - 100}" width="${width}" height="100" fill="${DARKER}" fill-opacity="0.5"/>
-  <rect x="80" y="${height - 95}" width="150" height="3" rx="1.5" fill="url(#accent)"/>
-  <text x="80" y="${height - 55}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="18" font-weight="600">Follow for more insights</text>
-  <text x="80" y="${height - 35}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="13">Digital Transformation • AI • Innovation</text>
+  <rect x="0" y="${height - 90}" width="${width}" height="90" fill="${DARKER}" fill-opacity="0.5"/>
+  <rect x="60" y="${height - 85}" width="120" height="3" rx="1.5" fill="url(#accent)"/>
+  <text x="60" y="${height - 50}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="16" font-weight="600">Follow for more</text>
+  <text x="60" y="${height - 30}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="12">Digital Transformation • AI • Innovation</text>
+  <text x="${width - 60}" y="${height - 50}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="11" text-anchor="end">Digital FTE Insights</text>
 
   <!-- Corner brackets -->
-  <g stroke="${ELECTRIC_TEAL}" stroke-width="1.5" fill="none" opacity="0.3">
-    <path d="M 50 50 L 50 80 M 50 50 L 80 50"/>
-    <path d="M ${width-50} 50 L ${width-50} 80 M ${width-50} 50 L ${width-80} 50"/>
-    <path d="M 50 ${height-50} L 50 ${height-80} M 50 ${height-50} L 80 ${height-50}"/>
-    <path d="M ${width-50} ${height-50} L ${width-50} ${height-80} M ${width-50} ${height-50} L ${width-80} ${height-50}"/>
+  <g stroke="${ELECTRIC_TEAL}" stroke-width="1.5" fill="none" opacity="0.25">
+    <path d="M 40 40 L 40 70 M 40 40 L 70 40"/>
+    <path d="M ${width-40} 40 L ${width-40} 70 M ${width-40} 40 L ${width-70} 40"/>
+    <path d="M 40 ${height-40} L 40 ${height-70} M 40 ${height-40} L 70 ${height-40}"/>
+    <path d="M ${width-40} ${height-40} L ${width-40} ${height-70} M ${width-40} ${height-40} L ${width-70} ${height-40}"/>
   </g>
 </svg>`
 
   fs.mkdirSync(GENERATED_DIR, { recursive: true })
-  const filename = `canva_${Date.now()}.png`
+  const filename = `branded_${Date.now()}.png`
   const destPath = path.join(GENERATED_DIR, filename)
 
   try {
@@ -171,9 +495,9 @@ async function generateCanvaStyleImage(topic, postContent = '', width = 1080, he
       .resize(width, height, { fit: 'cover', kernel: sharp.kernel.lanczos3 })
       .png({ quality: 98 })
       .toFile(destPath)
-    console.log(`[ImageGen] Canva-style image: ${filename}`)
+    console.log(`[ImageGen] Branded template image: ${filename}`)
   } catch (e) {
-    const svgPath = path.join(GENERATED_DIR, `canva_${Date.now()}.svg`)
+    const svgPath = path.join(GENERATED_DIR, `branded_${Date.now()}.svg`)
     fs.writeFileSync(svgPath, svg, 'utf-8')
     const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`
     return `${base}/generated/${path.basename(svgPath)}`
@@ -392,12 +716,12 @@ async function generateViaPollinations(topic, width = 1080, height = 1350) {
 }
 
 export async function generatePostImage(topic, style = 'professional', aspectRatio = '4:5', postContent = '') {
-  // 1. Canva-style with post content (best - shows actual content)
+  // 1. Branded template with structured content from post body
   if (postContent) {
     try {
       return await generateCanvaStyleImage(topic, postContent)
     } catch (e) {
-      console.warn('[ImageGen] Canva-style failed:', e.message)
+      console.warn(`[ImageGen] Branded template skipped: ${e.message} — falling through to photo modes`)
     }
   }
 
@@ -408,8 +732,9 @@ export async function generatePostImage(topic, style = 'professional', aspectRat
     console.warn('[ImageGen] Premium design failed:', e.message)
   }
 
-  // 3. Pollinations AI - topic-relevant images
+  // 3. Pollinations AI — topic-relevant photo images
   try {
+    console.log('[ImageGen] Falling back to Pollinations AI photo mode')
     return await generateViaPollinations(topic)
   } catch (e) {
     console.warn('[ImageGen] Pollinations failed:', e.message)
