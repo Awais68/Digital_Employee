@@ -106,7 +106,7 @@ app.use('/api', rateLimiter({ windowMs: 15 * 60 * 1000, max: 1000 }))
 
 // ─── AUTH-FREE ROUTES (registered before auth middleware) ──────
 app.use('/api/notifications', notificationsRouter)
-app.use('/api/whatsapp',      whatsappRouter)
+app.use('/api/whatsapp',      optionalAuth, whatsappRouter)  // optionalAuth => req.user set so requireAdmin enforces admin on write routes; GET reads stay public
 app.use('/api/auth',          authRouter)
 
 // CSRF token endpoint

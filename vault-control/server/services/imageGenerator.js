@@ -7,20 +7,32 @@ import { callAI } from './aiProvider.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const GENERATED_DIR = path.resolve(__dirname, '../../public/generated')
 
-// ─── Brand logo — embedded once as base64 for the circular avatar ─────────
+// ─── Brand logo — embedded once as base64 for the header lockup ───────────
+// The ASNEXA brand mark sits on the right of the header. A generic file
+// loader is used so any image (png/jpeg) can be embedded as a data URI.
 const LOGO_PATH = path.resolve(__dirname, '../../public/uploads/logoBig.png')
-let _logoDataUri = null // null = not attempted, '' = attempted & failed
-function getLogoDataUri() {
-  if (_logoDataUri !== null) return _logoDataUri || null
+const BRAND_LOGO_PATH = path.resolve(__dirname, '../../public/uploads/logoAsNexa.jpeg')
+
+const _logoCache = {} // path -> dataUri | '' (attempted & failed)
+function loadImageDataUri(filePath) {
+  if (filePath in _logoCache) return _logoCache[filePath] || null
   try {
-    const buf = fs.readFileSync(LOGO_PATH)
-    _logoDataUri = `data:image/png;base64,${buf.toString('base64')}`
-    console.log(`[ImageGen] Brand logo loaded for avatar (${(buf.length / 1024).toFixed(0)}KB)`)
+    const buf = fs.readFileSync(filePath)
+    const ext = path.extname(filePath).toLowerCase()
+    const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.svg' ? 'image/svg+xml' : 'image/png'
+    _logoCache[filePath] = `data:${mime};base64,${buf.toString('base64')}`
+    console.log(`[ImageGen] Logo loaded: ${path.basename(filePath)} (${(buf.length / 1024).toFixed(0)}KB)`)
   } catch (e) {
-    console.warn(`[ImageGen] Logo not found at ${LOGO_PATH}: ${e.message} — using initials fallback`)
-    _logoDataUri = ''
+    console.warn(`[ImageGen] Logo not found at ${filePath}: ${e.message}`)
+    _logoCache[filePath] = ''
   }
-  return _logoDataUri || null
+  return _logoCache[filePath] || null
+}
+function getLogoDataUri() {
+  return loadImageDataUri(LOGO_PATH)
+}
+function getBrandLogoDataUri() {
+  return loadImageDataUri(BRAND_LOGO_PATH)
 }
 
 // ─── Emoji stripping — librsvg has no color-emoji fallback in many deploy ─
@@ -54,8 +66,8 @@ const FORBIDDEN_FRAGMENTS = [
   'Resolution:', 'production quality', 'premium, editorial',
 ]
 const MAX_HEADLINE_CHARS = 65
-const MAX_BULLET_CHARS = 70
-const MAX_CTA_CHARS = 50
+const MAX_BULLET_CHARS = 95
+const MAX_CTA_CHARS = 80
 const MAX_STAT_LABEL_CHARS = 28
 const TEMPLATE_SYNTAX_RE = /\$\{.*?\}/
 
@@ -133,8 +145,15 @@ function extractContentFromPost(postContent, topic) {
     .filter(l => l.match(/^[→✅📊💡🔥⚡\d️⃣]|^- /))
     .slice(0, 4)
     .map(l => l.replace(/^[→✅📊💡🔥⚡\d️⃣\-]+/, '').replace(/^\s+/, '').trim())
-    .filter(l => l.length > 5 && l.length < MAX_BULLET_CHARS)
-    .map(l => l.length > MAX_BULLET_CHARS ? l.substring(0, MAX_BULLET_CHARS) + '…' : l)
+    .filter(l => l.length > 5)
+    .map(l => {
+      if (l.length <= MAX_BULLET_CHARS) return l
+      // Truncate long bullets at the last word boundary instead of dropping them
+      const clipped = l.substring(0, MAX_BULLET_CHARS)
+      const lastSpace = clipped.lastIndexOf(' ')
+      const base = lastSpace > 0 ? clipped.substring(0, lastSpace) : clipped
+      return base + '…'
+    })
 
   const cta = (
     lines.find(l => l.includes('?') || l.includes('👇') || l.includes('↓')
@@ -154,7 +173,7 @@ async function extractContentViaAI(postContent, topic) {
 Return ONLY valid JSON (no markdown, no code fences) with this exact schema:
 {
   "headline": "Short compelling headline (MAX 6 WORDS, attention-grabbing, no quotes)",
-  "bullets": ["2-4 key takeaways, each under 50 chars"],
+  "bullets": ["3-4 key takeaways from the post's bullet list, each under 50 chars"],
   "stats": [
     {"icon": "📊", "value": "exact number like 78%", "label": "short label under 25 chars"}
   ],
@@ -176,7 +195,7 @@ ${postContent.substring(0, 1500)}`
   let lastError = null
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const raw = await callAI(systemPrompt, prompt, 600)
+      const raw = await callAI(systemPrompt, prompt, 800)
       const cleaned = raw.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(cleaned)
 
@@ -205,13 +224,18 @@ async function extractImageContent(postContent, topic) {
     if (validation.valid) return validation.content
     return { headline: topic || 'Insights', bullets: [], stats: [], cta: '' }
   }
+  const ruleContent = extractContentFromPost(postContent, topic)
+  const ruleValidation = validateStructuredContent(ruleContent)
+  if (ruleValidation.valid) {
+    return ruleValidation.content
+  }
   try {
+    console.warn('[ImageGen] Rule-based extraction insufficient — trying AI extraction')
     const cleaned = postContent.replace(/```[\s\S]*?```/g, '').trim()
     const aiContent = await extractContentViaAI(cleaned, topic)
     return aiContent
   } catch (e) {
-    console.warn('[ImageGen] Falling back to rule-based extraction:', e.message)
-    const ruleContent = extractContentFromPost(postContent, topic)
+    console.warn('[ImageGen] AI extraction failed too, using rule-based result:', e.message)
     return ruleContent
   }
 }
@@ -307,11 +331,7 @@ async function generateCanvaStyleImage(topic, postContent = '', width = 1080, he
     throw new Error(`Content safety: ${safety.reason}`)
   }
 
-  // ── Step 3: Build branded template SVG (adaptive vertical flow) ───────
-  // librsvg has no color-emoji fallback, so all emoji are stripped from text
-  // and stat icons are drawn as vectors. Content blocks flow from a single
-  // cursor and the whole group is centred between header and footer, so an
-  // empty stats/bullets set never leaves a dead vertical gap.
+  // ── Step 3: Build branded template SVG v2 (redesigned for Phase 4) ──
   logEmojiFontStatus()
   const headline = stripEmoji(content.headline) || topic
   const cta = stripEmoji(content.cta || '')
@@ -320,121 +340,209 @@ async function generateCanvaStyleImage(topic, postContent = '', width = 1080, he
     .map(s => ({ value: stripEmoji(s.value || ''), label: stripEmoji(s.label || '') }))
     .filter(s => s.value)
   const logoUri = getLogoDataUri()
+  const brandLogoUri = getBrandLogoDataUri()
 
-  // Layout bounds: content flows between the header and the footer bar.
-  const HEADER_BOTTOM = 130
-  const FOOTER_TOP = height - 110
+  // Derive a topic category badge text from the content
+  const KICKER_LABELS = ['TECH INSIGHT', 'AI TRENDS', 'INNOVATION', 'DEEP DIVE', 'ANALYSIS', 'PERSPECTIVE']
+  const topicLower = topic.toLowerCase()
+  const kicker = topicLower.includes('ai') ? 'AI TRENDS'
+    : topicLower.includes('tech') || topicLower.includes('digital') ? 'TECH INSIGHT'
+    : topicLower.includes('data') ? 'DATA DEEP DIVE'
+    : topicLower.includes('automation') ? 'AUTOMATION'
+    : topicLower.includes('agent') ? 'AI AGENTS'
+    : topicLower.includes('build') || topicLower.includes('dev') ? 'BUILDERS'
+    : KICKER_LABELS[Math.abs(topic.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % KICKER_LABELS.length]
+
+  // Layout bounds
+  const HEADER_BOTTOM = 155
+  const FOOTER_TOP = height - 130
   const AVAILABLE = FOOTER_TOP - HEADER_BOTTOM
-  const BLOCK_GAP = 44
+  const BLOCK_GAP = 28
 
-  // Headline → up to 2 lines.
-  const hWords = headline.split(/\s+/)
-  const hMid = Math.ceil(hWords.length / 2)
-  const hLine1 = hWords.length > 4 ? hWords.slice(0, hMid).join(' ') : headline
-  const hLine2 = hWords.length > 4 ? hWords.slice(hMid).join(' ') : ''
-  const hFontSize = Math.min(64, Math.max(40, Math.floor(620 / (Math.max(hLine1.length, hLine2.length) + 1))))
-  const headlineH = hFontSize + (hLine2 ? Math.floor(hFontSize * 0.72) + 12 : 0)
+  // ── Headline (40-50% larger) ──────────────────────────────────────────
+  const H_PAD = 60
+  const H_USABLE = width - 2 * H_PAD
+  const hFontSize = Math.min(76, Math.max(48, Math.floor(720 / Math.sqrt(headline.length + 1)) + 10))
+  const H_CHAR_W = hFontSize * 0.56
+  const hMaxChars = Math.max(8, Math.floor(H_USABLE / H_CHAR_W))
+  const hLines = []
+  {
+    let line = ''
+    for (const w of headline.split(/\s+/)) {
+      const candidate = line ? `${line} ${w}` : w
+      if (candidate.length > hMaxChars && line) { hLines.push(line); line = w }
+      else line = candidate
+    }
+    if (line) hLines.push(line)
+  }
+  const H_LINE_H = Math.floor(hFontSize * 1.18)
+  const headlineH = hLines.length * H_LINE_H + 18
 
-  // Stats grid geometry.
-  const statCardW = 280, statCardH = 150, statGap = 30
+  const cx = width / 2
+
+  // ── Text wrapping helpers ────────────────────────────────────────────
+  function wrapText(text, maxChars) {
+    const words = text.split(/\s+/)
+    const lines = []
+    let line = ''
+    for (const w of words) {
+      const candidate = line ? `${line} ${w}` : w
+      if (candidate.length > maxChars && line) { lines.push(line); line = w }
+      else line = candidate
+    }
+    if (line) lines.push(line)
+    return lines
+  }
+
+  // ── Body block (KEY POINTS) — 2× bullet font, box auto-fits content ──
+  const bodyBullets = bullets.slice(0, 3)
+  const BODY_BULLET_FONT = 38            // 2× the previous 19
+  const BODY_PAD_X = 40                  // left/right inner padding
+  const BODY_BULLET_PAD_LEFT = 56        // bullet dot + gutter before text
+  const BODY_CHAR_W = BODY_BULLET_FONT * 0.56
+  // Max text width available if the box spanned the full usable width
+  const BODY_MAX_BOX_WIDTH = Math.min(width - 2 * H_PAD, 960)
+  const BODY_TEXT_MAX_AVAIL = BODY_MAX_BOX_WIDTH - BODY_PAD_X - BODY_BULLET_PAD_LEFT
+  const BODY_MAX_CHARS = Math.max(10, Math.floor(BODY_TEXT_MAX_AVAIL / BODY_CHAR_W))
+  const bodyBulletLines = bodyBullets.map(p => wrapText(p, BODY_MAX_CHARS))
+  const bodyTotalLines = bodyBulletLines.reduce((a, l) => a + l.length, 0)
+  // Snugly fit box WIDTH to the widest rendered line
+  const bodyWidestChars = bodyBulletLines.reduce((m, l) => Math.max(m, ...l.map(s => s.length)), 0)
+  const BODY_BOX_WIDTH = bodyBullets.length
+    ? Math.min(BODY_MAX_BOX_WIDTH, Math.max(360, Math.ceil(bodyWidestChars * BODY_CHAR_W) + BODY_PAD_X + BODY_BULLET_PAD_LEFT))
+    : 0
+  const BODY_BOX_X = cx - BODY_BOX_WIDTH / 2
+  const BODY_BULLET_LINE_H = Math.round(BODY_BULLET_FONT * 1.32)  // line height for 38px text
+  const BODY_LABEL_H = 46                 // "KEY POINTS" label band
+  const BODY_PAD_Y = 32                   // top + bottom inner padding
+  // Snugly fit box HEIGHT: label + all lines (with inter-bullet gap) + padding
+  const bodyBulletGaps = Math.max(0, bodyBullets.length - 1)
+  const bodyBulletH = bodyBullets.length
+    ? BODY_LABEL_H + bodyTotalLines * BODY_BULLET_LINE_H + bodyBulletGaps * 12 + BODY_PAD_Y
+    : 0
+
+  // ── Stats grid ────────────────────────────────────────────────────────
+  const statCardW = 280, statCardH = 120, statGap = 24
   const statCols = Math.max(1, Math.min(stats.length, 3))
   const statRows = stats.length ? Math.ceil(stats.length / statCols) : 0
   const statTotalW = statCols * statCardW + (statCols - 1) * statGap
   const statStartX = (width - statTotalW) / 2
   const statsH = statRows ? statRows * statCardH + (statRows - 1) * statGap : 0
 
-  const bulletGap = 46
-  const bulletsH = bullets.length * bulletGap
-  const avatarH = 118        // circle r56 + breathing room
-  const dividerH = 3
-  const ctaH = cta ? 54 : 0
+  // ── CTA / question pill ─────────────────────────────────────────────
+  const CTA_FONT = 18
+  const CTA_CHAR_W = CTA_FONT * 0.56
+  const CTA_PILL_PAD_X = 40
+  const CTA_MARGIN_TOP = 16              // extra breathing room above the pill
+  const CTA_MAX_PILL_W = Math.min(width - 2 * H_PAD, 760)
+  const CTA_MAX_CHARS = Math.max(14, Math.floor((CTA_MAX_PILL_W - 2 * CTA_PILL_PAD_X) / CTA_CHAR_W))
+  const ctaLines = cta ? wrapText(cta, CTA_MAX_CHARS) : []
+  const ctaLineH = 28
+  const CTA_PILL_PAD_Y = 30
+  const ctaPillH = ctaLines.length ? ctaLines.length * ctaLineH + CTA_PILL_PAD_Y : 0
+  const ctaH = cta ? ctaPillH + CTA_MARGIN_TOP : 0
 
-  // Assemble the ordered list of present blocks with their measured heights.
+  // ── ASNEXA brand block (small, subtle, below CTA) ────────────────────
+  const asnexaH = 40
+
+  // ── Big Digital FTE logo (inserted below kicker, above headline) ─────
+  const BIGLOGO_W = Math.round(Math.min(H_USABLE, 300))
+  const BIGLOGO_H = Math.round(BIGLOGO_W * 0.5)
+  const HEADLINE_SHIFT_UP = 64 // pull the heading block tight under the logo
+
+  // ── Assemble block order ──────────────────────────────────────────────
   const blocks = []
-  blocks.push({ kind: 'avatar', h: avatarH })
+  blocks.push({ kind: 'kicker', h: 30 })
+  if (logoUri) blocks.push({ kind: 'biglogo', h: BIGLOGO_H, gapAfter: BLOCK_GAP - HEADLINE_SHIFT_UP })
   blocks.push({ kind: 'headline', h: headlineH })
-  blocks.push({ kind: 'divider', h: dividerH })
+  if (bodyBulletH) blocks.push({ kind: 'body', h: bodyBulletH })
   if (statsH) blocks.push({ kind: 'stats', h: statsH })
-  if (bulletsH) blocks.push({ kind: 'bullets', h: bulletsH })
   if (ctaH) blocks.push({ kind: 'cta', h: ctaH })
+  blocks.push({ kind: 'asnexa', h: asnexaH })
 
-  const totalH = blocks.reduce((a, b) => a + b.h, 0) + BLOCK_GAP * (blocks.length - 1)
+  const totalH = blocks.reduce((a, b) => a + b.h, 0)
+    + blocks.slice(0, -1).reduce((a, b) => a + (b.gapAfter != null ? b.gapAfter : BLOCK_GAP), 0)
   let cursorY = HEADER_BOTTOM + Math.max(0, (AVAILABLE - totalH) / 2)
 
-  // Render each block relative to the flowing cursor.
+  // ── Render blocks ─────────────────────────────────────────────────────
   const parts = []
   for (const block of blocks) {
-    const cx = width / 2
-    if (block.kind === 'avatar') {
-      const acx = cx, acy = cursorY + avatarH / 2, r = 56
-      if (logoUri) {
-        parts.push(`<g filter="url(#cardShadow)">
-    <circle cx="${acx}" cy="${acy}" r="${r}" fill="${DARK_NAVY}"/>
-    <clipPath id="avatarClip"><circle cx="${acx}" cy="${acy}" r="${r - 3}"/></clipPath>
-    <image href="${logoUri}" xlink:href="${logoUri}" x="${acx - (r - 3)}" y="${acy - (r - 3)}" width="${2 * (r - 3)}" height="${2 * (r - 3)}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
-    <circle cx="${acx}" cy="${acy}" r="${r}" stroke="${ELECTRIC_TEAL}" stroke-width="2" fill="none"/>
-  </g>`)
-      } else {
-        // Fallback: solid branded initials (no dashed 'loading' ring).
-        parts.push(`<g>
-    <circle cx="${acx}" cy="${acy}" r="${r}" fill="rgba(10,102,194,0.25)"/>
-    <circle cx="${acx}" cy="${acy}" r="${r}" stroke="${ELECTRIC_TEAL}" stroke-width="2" fill="none"/>
-    <text x="${acx}" y="${acy + 12}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="32" font-weight="700" text-anchor="middle">DE</text>
-  </g>`)
-      }
+    if (block.kind === 'kicker') {
+      parts.push(`<rect x="${cx - 60}" y="${cursorY}" width="120" height="24" rx="12" fill="${ELECTRIC_TEAL}" opacity="0.9"/>
+    <text x="${cx}" y="${cursorY + 17}" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="11" font-weight="700" letter-spacing="1.5" text-anchor="middle">${kicker}</text>`)
+    } else if (block.kind === 'biglogo') {
+      parts.push(`<image href="${logoUri}" xlink:href="${logoUri}" x="${cx - BIGLOGO_W / 2}" y="${cursorY}" width="${BIGLOGO_W}" height="${BIGLOGO_H}" preserveAspectRatio="xMidYMid meet"/>`)
     } else if (block.kind === 'headline') {
+      const lines = hLines.map((ln, i) =>
+        `<text x="${cx}" y="${cursorY + hFontSize + i * H_LINE_H}" fill="${WHITE}" font-family="'Poppins','Inter',sans-serif" font-size="${hFontSize}" font-weight="700" letter-spacing="-0.5" text-anchor="middle">${escapeXml(ln)}</text>`
+      ).join('\n    ')
       parts.push(`<g filter="url(#glow)">
-    <text x="${cx}" y="${cursorY + hFontSize}" fill="${WHITE}" font-family="'Poppins','Inter',sans-serif" font-size="${hFontSize}" font-weight="700" letter-spacing="-0.5" text-anchor="middle">${escapeXml(hLine1)}</text>
-    ${hLine2 ? `<text x="${cx}" y="${cursorY + hFontSize + Math.floor(hFontSize * 0.72) + 8}" fill="${ELECTRIC_TEAL}" font-family="'Poppins','Inter',sans-serif" font-size="${Math.floor(hFontSize * 0.72)}" font-weight="600" letter-spacing="-0.3" text-anchor="middle">${escapeXml(hLine2)}</text>` : ''}
+    ${lines}
   </g>`)
-    } else if (block.kind === 'divider') {
-      parts.push(`<rect x="${cx - 40}" y="${cursorY}" width="80" height="3" rx="1.5" fill="${ELECTRIC_TEAL}"/>`)
+    } else if (block.kind === 'body') {
+      parts.push(`<rect x="${BODY_BOX_X}" y="${cursorY}" width="${BODY_BOX_WIDTH}" height="${bodyBulletH}" rx="18" fill="rgba(255,255,255,0.04)" stroke="rgba(0,201,167,0.15)" stroke-width="1"/>
+    <text x="${BODY_BOX_X + BODY_PAD_X}" y="${cursorY + 34}" fill="${ELECTRIC_TEAL}" font-family="'Poppins',sans-serif" font-size="16" font-weight="700" letter-spacing="1.4">KEY POINTS</text>`)
+      // baseline of the first bullet line, below the label band
+      let runY = cursorY + BODY_LABEL_H + Math.round(BODY_BULLET_FONT * 0.82)
+      bodyBulletLines.forEach((lines, bi) => {
+        lines.forEach((ln, li) => {
+          if (li === 0) {
+            parts.push(`<circle cx="${BODY_BOX_X + BODY_PAD_X + 8}" cy="${runY - Math.round(BODY_BULLET_FONT * 0.32)}" r="8" fill="${LINKEDIN_BLUE}"/>`)
+          }
+          const indent = BODY_BOX_X + BODY_PAD_X + BODY_BULLET_PAD_LEFT - (li === 0 ? 0 : 0)
+          parts.push(`<text x="${indent}" y="${runY}" fill="${LIGHT}" font-family="'Inter',sans-serif" font-size="${BODY_BULLET_FONT}" font-weight="500">${escapeXml(ln)}</text>`)
+          runY += BODY_BULLET_LINE_H
+        })
+        if (bi < bodyBulletLines.length - 1) runY += 12
+      })
     } else if (block.kind === 'stats') {
       parts.push(stats.map((stat, i) => {
         const col = i % statCols, row = Math.floor(i / statCols)
         const sx = statStartX + col * (statCardW + statGap)
         const sy = cursorY + row * (statCardH + statGap)
-        const icx = sx + statCardW / 2, icy = sy + 42
-        // Drawn vector "mini-chart" icon — no emoji, always renders.
-        const bars = [14, 22, 30].map((bh, bi) =>
-          `<rect x="${icx - 15 + bi * 12}" y="${icy + 12 - bh}" width="8" height="${bh}" rx="2" fill="${ELECTRIC_TEAL}"/>`
-        ).join('')
         return `<g filter="url(#cardShadow)">
-      <rect x="${sx}" y="${sy}" width="${statCardW}" height="${statCardH}" rx="16" fill="${CARD_BG}"/>
-      <rect x="${sx}" y="${sy}" width="${statCardW}" height="${statCardH}" rx="16" stroke="${CARD_BORDER}" stroke-width="1" fill="none"/>
-      <circle cx="${icx}" cy="${icy}" r="24" fill="rgba(0,201,167,0.15)"/>
-      ${bars}
-      <text x="${icx}" y="${sy + 100}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="30" font-weight="700" text-anchor="middle">${escapeXml(stat.value || '—')}</text>
-      <text x="${icx}" y="${sy + 128}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="14" letter-spacing="0.3" text-anchor="middle">${escapeXml(stat.label || '')}</text>
+      <rect x="${sx}" y="${sy}" width="${statCardW}" height="${statCardH}" rx="14" fill="url(#metricFill)"/>
+      <rect x="${sx}" y="${sy}" width="${statCardW}" height="${statCardH}" rx="14" stroke="${ELECTRIC_TEAL}" stroke-width="1.5" stroke-opacity="0.4" fill="none"/>
+      <rect x="${sx}" y="${sy}" width="5" height="${statCardH}" rx="2.5" fill="${ELECTRIC_TEAL}"/>
+      <text x="${sx + statCardW / 2}" y="${sy + 50}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="32" font-weight="700" text-anchor="middle">${escapeXml(stat.value || '—')}</text>
+      <text x="${sx + statCardW / 2}" y="${sy + 86}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="14" letter-spacing="0.3" text-anchor="middle">${escapeXml(stat.label || '')}</text>
     </g>`
       }).join('\n    '))
-    } else if (block.kind === 'bullets') {
-      const bx = cx - 240
-      parts.push(bullets.map((point, i) => {
-        const by = cursorY + i * bulletGap + 18
-        return `<path d="M ${bx} ${by - 10} L ${bx + 12} ${by - 5} L ${bx} ${by} Z" fill="${ELECTRIC_TEAL}"/>
-    <text x="${bx + 24}" y="${by}" fill="${LIGHT}" font-family="'Inter',sans-serif" font-size="20" font-weight="400">${escapeXml(point.substring(0, MAX_BULLET_CHARS))}</text>`
-      }).join('\n    '))
     } else if (block.kind === 'cta') {
-      parts.push(`<rect x="${cx - 180}" y="${cursorY}" width="360" height="54" rx="27" fill="${ELECTRIC_TEAL}"/>
-    <text x="${cx}" y="${cursorY + 34}" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="18" font-weight="600" text-anchor="middle">${escapeXml(cta)}</text>`)
+      const pillY = cursorY + CTA_MARGIN_TOP   // 16px margin-top above the pill
+      const widestCta = ctaLines.reduce((m, l) => Math.max(m, l.length), 0)
+      const pillW = Math.min(CTA_MAX_PILL_W, Math.max(320, Math.ceil(widestCta * CTA_CHAR_W) + 2 * CTA_PILL_PAD_X))
+      const pillX = cx - pillW / 2
+      // Solid dark-navy pill, teal border + soft drop shadow for strong contrast
+      parts.push(`<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${ctaPillH}" rx="${ctaPillH / 2}" fill="#08233D" stroke="${ELECTRIC_TEAL}" stroke-width="2" filter="url(#ctaGlow)"/>`)
+      const firstBaseline = pillY + CTA_PILL_PAD_Y / 2 + CTA_FONT
+      ctaLines.forEach((ln, i) => {
+        const lineY = firstBaseline + i * ctaLineH
+        parts.push(`<text x="${cx}" y="${lineY}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="${CTA_FONT}" font-weight="700" text-anchor="middle">${escapeXml(ln)}</text>`)
+      })
+    } else if (block.kind === 'asnexa') {
+      if (brandLogoUri) {
+        parts.push(`<image href="${brandLogoUri}" xlink:href="${brandLogoUri}" x="${cx - 60}" y="${cursorY}" width="120" height="${asnexaH - 4}" preserveAspectRatio="xMidYMid meet" opacity="0.5"/>`)
+      } else {
+        parts.push(`<text x="${cx}" y="${cursorY + 16}" fill="${DIM}" font-family="'Poppins',sans-serif" font-size="12" font-weight="500" text-anchor="middle" letter-spacing="3" opacity="0.5">ASNEXA</text>`)
+      }
     }
-    cursorY += block.h + BLOCK_GAP
+    cursorY += block.h + (block.gapAfter != null ? block.gapAfter : BLOCK_GAP)
   }
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="${DARK_NAVY}"/>
-      <stop offset="50%" stop-color="#0C2340"/>
+      <stop offset="40%" stop-color="#0F2440"/>
       <stop offset="100%" stop-color="${DARKER}"/>
     </linearGradient>
     <radialGradient id="glow1" cx="30%" cy="25%">
-      <stop offset="0%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0.2"/>
+      <stop offset="0%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0.25"/>
       <stop offset="100%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="glow2" cx="70%" cy="70%">
-      <stop offset="0%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0.12"/>
+      <stop offset="0%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0.18"/>
       <stop offset="100%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -442,46 +550,72 @@ async function generateCanvaStyleImage(topic, postContent = '', width = 1080, he
       <stop offset="50%" stop-color="${ELECTRIC_TEAL}"/>
       <stop offset="100%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
     </linearGradient>
-    <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <filter id="cardShadow"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="${DARKER}" flood-opacity="0.4"/></filter>
+    <linearGradient id="topbar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0066FF"/>
+      <stop offset="50%" stop-color="#00E5A0"/>
+      <stop offset="100%" stop-color="#7C4DFF"/>
+    </linearGradient>
+    <linearGradient id="metricFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(10,102,194,0.25)"/>
+      <stop offset="100%" stop-color="rgba(0,201,167,0.12)"/>
+    </linearGradient>
+    <filter id="glow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="${DARKER}" flood-opacity="0.6"/></filter>
+    <filter id="cardShadow"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="${DARKER}" flood-opacity="0.45"/></filter>
+    <filter id="ctaGlow"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/></filter>
+    <!-- Circuit/network pattern overlay -->
+    <pattern id="circuitGrid" width="120" height="120" patternUnits="userSpaceOnUse">
+      <rect width="120" height="120" fill="none"/>
+      <path d="M 0 60 L 30 60 L 50 40 L 70 60 L 120 60" stroke="rgba(0,201,167,0.06)" stroke-width="0.5" fill="none"/>
+      <path d="M 60 0 L 60 30 L 40 50 L 60 70 L 60 120" stroke="rgba(10,102,194,0.06)" stroke-width="0.5" fill="none"/>
+      <circle cx="50" cy="40" r="2" fill="rgba(0,201,167,0.1)"/>
+      <circle cx="70" cy="60" r="3" fill="rgba(10,102,194,0.08)"/>
+      <circle cx="40" cy="50" r="1.5" fill="rgba(0,201,167,0.08)"/>
+      <circle cx="60" cy="30" r="1.5" fill="rgba(10,102,194,0.08)"/>
+      <circle cx="30" cy="60" r="2" fill="rgba(0,201,167,0.06)"/>
+    </pattern>
   </defs>
 
-  <!-- Background -->
+  <!-- Background layers -->
   <rect width="${width}" height="${height}" fill="url(#bg)"/>
+  <rect width="${width}" height="${height}" fill="url(#circuitGrid)"/>
   <rect width="${width}" height="${height}" fill="url(#glow1)"/>
   <rect width="${width}" height="${height}" fill="url(#glow2)"/>
 
-  <!-- Top bar -->
-  <rect x="0" y="0" width="${width}" height="5" fill="${LINKEDIN_BLUE}"/>
+  <!-- Top bar — wider, bolder gradient accent -->
+  <rect x="0" y="0" width="${width}" height="8" fill="url(#topbar)"/>
 
-  <!-- Logo lockup -->
-  <rect x="60" y="40" width="36" height="36" rx="8" fill="${ELECTRIC_TEAL}"/>
-  <text x="78" y="66" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="18" font-weight="700" text-anchor="middle">D</text>
-  <text x="110" y="66" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="15" font-weight="600">Digital FTE</text>
+  <!-- Header row — all elements aligned on the same horizontal band (moved 10px down) ── -->
+  <rect x="50" y="32" width="46" height="46" rx="12" fill="${ELECTRIC_TEAL}"/>
+  <text x="73" y="62" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="26" font-weight="700" text-anchor="middle">D</text>
+  <text x="110" y="62" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="22" font-weight="700" letter-spacing="-0.3">Digital FTE</text>
 
-  <!-- Decorative dot pattern -->
-  <g fill="${ELECTRIC_TEAL}" opacity="0.08">
-    ${Array.from({ length: 6 }, (_, i) =>
-      `<circle cx="${width - 120 + i * 20}" cy="${40 + (i % 2) * 10}" r="${2 - (i % 2)}"/>`
-    ).join('\n    ')}
-  </g>
+  <!-- AI TRENDS badge (top right) ──────────────────────────────────── -->
+  <rect x="${width - 180}" y="26" width="130" height="38" rx="19" fill="rgba(0,201,167,0.12)" stroke="${ELECTRIC_TEAL}" stroke-width="1.5"/>
+  <circle cx="${width - 168}" cy="45" r="4" fill="#00E5A0"/>
+  <text x="${width - 157}" y="50" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="12" font-weight="700" letter-spacing="1.5">AI TRENDS</text>
+
+  <!-- ASNEXA brand logo (top right, left of AI TRENDS badge) — moved 10px down + ~35% larger ── -->
+  ${brandLogoUri
+    ? `<image href="${brandLogoUri}" xlink:href="${brandLogoUri}" x="${width - 360}" y="30" width="160" height="48" preserveAspectRatio="xMidYMid meet"/>`
+    : `<text x="${width - 200}" y="62" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="24" font-weight="700" letter-spacing="2" text-anchor="end">ASNEXA</text>`}
 
   <!-- Flowing content -->
   ${parts.join('\n  ')}
 
-  <!-- Bottom bar -->
-  <rect x="0" y="${height - 90}" width="${width}" height="90" fill="${DARKER}" fill-opacity="0.5"/>
-  <rect x="60" y="${height - 85}" width="120" height="3" rx="1.5" fill="url(#accent)"/>
-  <text x="60" y="${height - 50}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="16" font-weight="600">Follow for more</text>
-  <text x="60" y="${height - 30}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="12">Digital Transformation • AI • Innovation</text>
-  <text x="${width - 60}" y="${height - 50}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="11" text-anchor="end">Digital FTE Insights</text>
+  <!-- Bottom bar - rebalanced spacing (content shifted UP 10px, larger fonts) -->
+  <rect x="0" y="${height - 110}" width="${width}" height="110" fill="${DARKER}" fill-opacity="0.6"/>
+  <rect x="50" y="${height - 112}" width="160" height="3" rx="1.5" fill="url(#accent)"/>
+  <text x="50" y="${height - 70}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="21" font-weight="600">Follow for more</text>
+  <text x="50" y="${height - 44}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="16">Digital Transformation  ·  AI  ·  Innovation</text>
+  <text x="${width - 50}" y="${height - 70}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="15" text-anchor="end" letter-spacing="0.5">Digital FTE Insights</text>
+  <text x="${width - 50}" y="${height - 44}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="13" text-anchor="end" opacity="0.6">Follow for daily tech insights</text>
 
-  <!-- Corner brackets -->
-  <g stroke="${ELECTRIC_TEAL}" stroke-width="1.5" fill="none" opacity="0.25">
-    <path d="M 40 40 L 40 70 M 40 40 L 70 40"/>
-    <path d="M ${width-40} 40 L ${width-40} 70 M ${width-40} 40 L ${width-70} 40"/>
-    <path d="M 40 ${height-40} L 40 ${height-70} M 40 ${height-40} L 70 ${height-40}"/>
-    <path d="M ${width-40} ${height-40} L ${width-40} ${height-70} M ${width-40} ${height-40} L ${width-70} ${height-40}"/>
+  <!-- Corner brackets (slightly stronger) -->
+  <g stroke="${ELECTRIC_TEAL}" stroke-width="1.5" fill="none" opacity="0.3">
+    <path d="M 30 30 L 30 60 M 30 30 L 60 30"/>
+    <path d="M ${width-30} 30 L ${width-30} 60 M ${width-30} 30 L ${width-60} 30"/>
+    <path d="M 30 ${height-30} L 30 ${height-60} M 30 ${height-30} L 60 ${height-30}"/>
+    <path d="M ${width-30} ${height-30} L ${width-30} ${height-60} M ${width-30} ${height-30} L ${width-60} ${height-30}"/>
   </g>
 </svg>`
 

@@ -160,11 +160,20 @@ export default function ChatbotPanel({ isOpen, onClose }) {
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      // SSE events are "data: {...}\n\n" but a single reader.read() can split a
+      // line across chunk boundaries. Buffer across reads and only consume
+      // complete lines, keeping any trailing partial for the next read — else
+      // split lines fail JSON.parse and are silently dropped (intermittent
+      // blank/partial responses, including a lost `done` event).
+      let sseBuffer = "";
+      let committed = false;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const raw = decoder.decode(value, { stream: true });
-        for (const line of raw.split("\n")) {
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split("\n");
+        sseBuffer = lines.pop(); // keep incomplete trailing line for next read
+        for (const line of lines) {
           if (!line.startsWith("data:")) continue;
           try {
             const parsed = JSON.parse(line.slice(5).trim());
@@ -204,6 +213,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
                 ...prev,
                 { role: "assistant", content: final },
               ]);
+              committed = true;
               setStreamingText("");
               setIsThinking(false);
             } else if (parsed.type === "error") {
@@ -213,6 +223,22 @@ export default function ChatbotPanel({ isOpen, onClose }) {
             // partial SSE — ignore
           }
         }
+      }
+      // Stream ended without a `done` event (network drop, proxy cut-off, etc.)
+      // but we did receive text — commit it so the bubble is never left blank.
+      if (!committed) {
+        const final = accumulated
+          .replace(/<ACTION>[\s\S]*?<\/ACTION>/g, "")
+          .replace(/<think>[\s\S]*?<\/think>/gi, "")
+          .trim();
+        if (final) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: final },
+          ]);
+        }
+        setStreamingText("");
+        setIsThinking(false);
       }
     } catch (err) {
       if (err.name !== "AbortError") {

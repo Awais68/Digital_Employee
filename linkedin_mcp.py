@@ -229,8 +229,9 @@ class LinkedInMCP:
         session_file = SESSION_DIR / "session.json"
         
         try:
-            # Calculate expiration time (access tokens expire in 30 days)
-            expires_in_seconds = 2592000  # 30 days
+            # Calculate expiration time. LinkedIn access tokens last ~60 days;
+            # use 55 to leave a safety margin before LinkedIn's hard expiry.
+            expires_in_seconds = 4752000  # 55 days
             expires_at = datetime.now() + timedelta(seconds=expires_in_seconds)
             
             session_data = {
@@ -258,8 +259,18 @@ class LinkedInMCP:
     def _is_token_expired(self) -> bool:
         """Check if the current access token is expired."""
         session_file = SESSION_DIR / "session.json"
-        
+
         if not session_file.exists():
+            # No persisted session. Fall back to the token configured directly in
+            # .env (LINKEDIN_ACCESS_TOKEN). LinkedIn's standard flow issues a
+            # ~60-day access token with NO refresh token, so a missing session
+            # file must NOT be treated as "expired" — that false-positive is what
+            # blocked all auto-posting despite a perfectly valid token.
+            if self.access_token:
+                # Bootstrap a session file so future runs track a real expiry
+                # instead of hitting this fallback every time.
+                self._save_session()
+                return False
             return True
         
         try:
@@ -576,7 +587,7 @@ class LinkedInMCP:
 
     def _build_post_content(self, content: str) -> tuple:
         """
-        Build post content with entity positions for hashtags.
+        Build post content with entity positions for hashtags and mentions.
 
         Args:
             content: Raw post content
@@ -584,7 +595,10 @@ class LinkedInMCP:
         Returns:
             Tuple of (formatted_content, entities_dict)
         """
-        entities = {"hashtags": []}
+        entities = {"hashtags": [], "mentions": []}
+
+        # Load mention config for URN lookups
+        mention_config = self._load_mention_config()
         
         # Find all hashtags
         hashtag_pattern = re.compile(r'#(\w+)')
@@ -601,7 +615,42 @@ class LinkedInMCP:
                 "text": hashtag
             })
 
+        # Find all @mentions and resolve to URNs
+        mention_pattern = re.compile(r'@(\w+(?:\s+\w+)?)')
+        for match in mention_pattern.finditer(content):
+            name = match.group(1)
+            start = match.start()
+            # length includes the @ symbol + name
+            length = match.end() - start
+            # Look up the URN from config (case-insensitive)
+            matched_entry = None
+            name_lower = name.lower()
+            for config_name, entry in mention_config.items():
+                if config_name.lower() == name_lower:
+                    matched_entry = entry
+                    break
+            
+            if matched_entry:
+                entities["mentions"].append({
+                    "start": start,
+                    "length": length,
+                    "entityType": "MEMBER",
+                    "member": {
+                        "urn": matched_entry["urn"]
+                    }
+                })
+
         return content, entities
+
+    def _load_mention_config(self) -> dict:
+        """Load LinkedIn mention URN mappings from config file."""
+        config_path = BASE_DIR / "config" / "linkedin_mentions.json"
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.debug(f"Mention config not loaded: {e}")
+            return {}
 
     def _build_ugc_post_payload(
         self,
@@ -613,16 +662,16 @@ class LinkedInMCP:
     ) -> Dict:
         """Build the UGC Post API payload."""
 
-        # Build shareCommentary with text and optional hashtag attributes
+        # Build shareCommentary with text and optional hashtag/mention attributes
         share_commentary = {
             "text": content
         }
 
-        # Add hashtag attributes if present
+        # Combine hashtag + mention attributes
+        all_attributes = []
         if entities.get("hashtags"):
-            share_commentary["attributes"] = []
             for hashtag in entities["hashtags"]:
-                share_commentary["attributes"].append({
+                all_attributes.append({
                     "start": hashtag["start"],
                     "length": hashtag["length"],
                     "entityType": "HASHTAG",
@@ -630,6 +679,20 @@ class LinkedInMCP:
                         "tag": hashtag["text"]
                     }
                 })
+
+        if entities.get("mentions"):
+            for mention in entities["mentions"]:
+                all_attributes.append({
+                    "start": mention["start"],
+                    "length": mention["length"],
+                    "entityType": "MEMBER",
+                    "member": {
+                        "urn": mention["member"]["urn"]
+                    }
+                })
+
+        if all_attributes:
+            share_commentary["attributes"] = all_attributes
 
         # Build shareContent object
         share_content = {
@@ -935,12 +998,12 @@ class LinkedInMCP:
 
         try:
             # Test by fetching current user info
-            response = self.session.get(f"{self.api_base}/me")
+            response = self.session.get(f"{self.api_base}/userinfo")
 
             if response.status_code == 200:
                 user_data = response.json()
                 result["success"] = True
-                result["message"] = f"Connected as: {user_data.get('localizedFirstName', 'Unknown')}"
+                result["message"] = f"Connected as: {user_data.get('name', user_data.get('given_name', 'Unknown'))}"
                 logger.info(f"✅ Connection test successful: {result['message']}")
             else:
                 result["message"] = f"Connection test failed: {response.status_code}"

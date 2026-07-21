@@ -420,6 +420,25 @@ router.get('/live-messages/:chatId', async (req, res) => {
     console.error('[WA] /live-messages error:', e.message)
     res.status(500).json({ error: e.message, messages: [] })
   }
-}) 
+})
+
+// DELETE /messages/:msg_id — remove a message row from DB (admin only)
+// Deletes the audit/history row only; does NOT delete the message on WhatsApp itself.
+router.delete('/messages/:msg_id', requireAdmin, async (req, res) => {
+  const { msg_id } = req.params
+  try {
+    const result = await query(
+      'DELETE FROM whatsapp_messages WHERE msg_id = $1 RETURNING id',
+      [msg_id]
+    )
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Message not found' })
+    }
+    res.json({ success: true, deleted: msg_id })
+  } catch (e) {
+    console.error('[WA] delete message error:', e.message)
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
 
 export default router

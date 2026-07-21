@@ -1,3 +1,18 @@
+// Global flag — set to true when ALL AI providers fail and mock content is returned.
+// Consumers (postGenerator.js etc.) must check this after callAI() and abort/log loudly.
+export let _lastCallUsedMock = false;
+
+export function _resetMockFlag() {
+  _lastCallUsedMock = false;
+}
+
+const FREE_OR_MODELS = [
+  'google/gemma-4-26b-a4b-it:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'openai/gpt-oss-20b:free',
+];
+
 async function tryProvider(name, fn) {
   try {
     const result = await fn()
@@ -10,6 +25,7 @@ async function tryProvider(name, fn) {
 
 export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
   let result
+  _resetMockFlag()
 
   result = await tryProvider('Anthropic', async () => {
     if (!process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-')) return null
@@ -44,24 +60,41 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
   result = await tryProvider('OpenRouter', async () => {
     const orKey = process.env.OPENROUTER_API_KEY || (process.env.OPENAI_API_KEY?.startsWith('sk-or-') ? process.env.OPENAI_API_KEY : null)
     if (!orKey) return null
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${orKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: maxTokens,
-      }),
-    });
-    const data = await resp.json();
-    if (!data.choices) throw new Error(JSON.stringify(data).slice(0, 200))
-    return data.choices[0].message.content;
+
+    const configuredModel = process.env.OPENROUTER_MODEL;
+    const modelsToTry = configuredModel
+      ? [configuredModel, ...FREE_OR_MODELS.filter(m => m !== configuredModel)]
+      : FREE_OR_MODELS;
+
+    for (const model of modelsToTry) {
+      try {
+        const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${orKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            max_tokens: maxTokens,
+          }),
+        });
+        const data = await resp.json();
+        if (data.choices) {
+          console.log(`[aiProvider] OpenRouter OK with model: ${model}`);
+          return data.choices[0].message.content;
+        }
+        const errMsg = data.error?.message || JSON.stringify(data).slice(0, 100);
+        console.warn(`[aiProvider] OpenRouter model ${model} failed: ${errMsg}`);
+      } catch (e) {
+        console.warn(`[aiProvider] OpenRouter model ${model} threw: ${e.message.slice(0, 80)}`);
+      }
+    }
+    throw new Error('All OpenRouter models exhausted');
   })
   if (result) return result
 
@@ -78,7 +111,8 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
   })
   if (result) return result
 
-  console.warn('[aiProvider] All providers failed — generating smart mock response')
+  _lastCallUsedMock = true;
+  console.error('[aiProvider] ⚠ ALL AI PROVIDERS FAILED — returning mock content. Check API keys and billing.');
   return generateSmartMock(userPrompt)
 }
 
@@ -86,32 +120,14 @@ function generateSmartMock(topic) {
   const cleanTopic = topic.replace(/[^a-zA-Z0-9\s]/g, '').trim()
   const shortTopic = cleanTopic.split(' ').slice(0, 5).join(' ')
 
-  // Clean fallback hooks — no generic "nobody is talking about this" framing
-  const hooks = [
-    `Working on ${shortTopic}. Here are a few things I have found useful:`,
-    `I have been spending time on ${shortTopic}. Some observations:`,
-    `${shortTopic} — a few thoughts after working with it recently:`,
-    `Some practical notes on ${shortTopic} from a current project:`,
-  ]
-
-  // Clean fallback bodies — no fabricated stats, no numbered listicles, no "drop your thoughts"
   const bodies = [
-    `The most interesting part of working with ${shortTopic} has been seeing where assumptions break down in practice. What looks good in a demo often needs significant adaptation for real-world constraints like latency, cost, or edge cases.\n\nOne pattern that keeps coming up: the teams that spend time on evaluation and observability upfront tend to move faster in the long run. It is not the most glamorous work, but it pays off.`,
-
-    `I recently reviewed how different teams approach ${shortTopic}. The biggest difference between ones that ship successfully and ones that stall comes down to how they handle the iteration loop.\n\nThe teams that succeed treat iteration as the core workflow. They ship small, measure what happens, and adjust. The ones that struggle spend too long trying to get it right before shipping anything.`,
-
+    `The most interesting part of working with ${shortTopic} has been seeing where assumptions break down in practice. What looks good in a demo often needs significant adaptation for real-world constraints like latency, cost, or edge cases.\n\nTeams that invest in evaluation and observability upfront tend to move faster in the long run. It is not the most glamorous work, but it pays off.`,
+    `I recently reviewed how different teams approach ${shortTopic}. The biggest difference between ones that ship successfully and ones that stall comes down to how they handle the iteration loop.\n\nThe teams that succeed treat iteration as the core workflow — they ship small, measure what happens, and adjust. The ones that struggle spend too long trying to get it right before shipping anything.`,
     `Something that does not get enough attention with ${shortTopic}: the integration details matter more than the core technology choice. The adapters, the error handling, the data transformations — that is where most of the real work lives.\n\nA clean API matters less than robust error recovery. Choose tools that fail gracefully.`,
   ]
 
-  const hashtags = [
-    `#${shortTopic.replace(/\s+/g, '')} #SoftwareEngineering`,
-    `#${shortTopic.replace(/\s+/g, '')} #Tech`,
-    `#BuildingInPublic #${shortTopic.replace(/\s+/g, '')}`,
-  ]
-
-  const hook = hooks[Math.floor(Math.random() * hooks.length)]
   const body = bodies[Math.floor(Math.random() * bodies.length)]
-  const tags = hashtags[Math.floor(Math.random() * hashtags.length)]
+  const tag = shortTopic.replace(/\s+/g, '')
 
-  return `${hook}\n\n${body}\n\n${tags}`
+  return body + `\n\nKey takeaways:\n- Start small, iterate fast\n- Measure what matters\n- Invest in observability early\n\n#${tag} #CloudComputing #DevOps #SoftwareEngineering #TechTrends`
 }

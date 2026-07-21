@@ -21,6 +21,7 @@ import json
 import time
 import uuid
 import shutil
+import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple
@@ -428,9 +429,54 @@ def analyze_task_complexity(content: str) -> Dict[str, Any]:
 # LINKEDIN POST GENERATION
 # =============================================================================
 
+def _run_node_unified_generator(topic: str, platforms: list = None) -> Optional[Dict[str, Any]]:
+    """
+    Call the Node unified generator (research + one core narrative, adapted per
+    platform) via the CLI bridge. Returns the parsed result, or None on any
+    failure so the caller can fall back to static templates.
+    """
+    platforms = platforms or ["linkedin"]
+    cli = BASE_DIR / "vault-control" / "server" / "services" / "generate-cli.js"
+    if not cli.exists():
+        logger.warning(f"Node generator bridge not found at {cli} — falling back to templates")
+        return None
+
+    try:
+        proc = subprocess.run(
+            ["node", str(cli), "--topic", topic, "--platforms", ",".join(platforms)],
+            cwd=str(cli.parent),
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        logger.warning(f"Node generator invocation failed ({type(e).__name__}: {e}) — falling back to templates")
+        return None
+
+    if proc.returncode != 0:
+        logger.warning(f"Node generator exited {proc.returncode}: {proc.stderr[-300:] if proc.stderr else ''} — falling back")
+        return None
+
+    try:
+        result = json.loads(proc.stdout.strip())
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning(f"Could not parse Node generator output ({e}) — falling back to templates")
+        return None
+
+    if not isinstance(result, dict) or result.get("error") or "posts" not in result:
+        logger.warning(f"Node generator returned no usable posts ({result.get('error') if isinstance(result, dict) else 'bad shape'}) — falling back")
+        return None
+
+    return result
+
+
 def generate_linkedin_post(content: str, filename: str) -> Dict[str, Any]:
     """
     Generate a professional LinkedIn post from trigger content.
+
+    Primary path: the Node unified generator (real web research + one AI-written
+    core narrative adapted per platform, mentions woven naturally into the text).
+    Falls back to the legacy static-template generator if Node is unavailable.
 
     Args:
         content: Trigger file content describing the post request
@@ -438,6 +484,53 @@ def generate_linkedin_post(content: str, filename: str) -> Dict[str, Any]:
 
     Returns:
         Dictionary with post content, hashtags, and metadata
+    """
+    now = datetime.now()
+    topic = extract_topic_from_content(content)
+
+    node_result = _run_node_unified_generator(topic, ["linkedin"])
+    if node_result:
+        li = node_result["posts"].get("linkedin") or {}
+        full_post = (li.get("content") or "").strip()
+        hashtags = li.get("hashtags") or node_result.get("research", {}).get("best_hashtags", [])
+        mentions_list = li.get("mentions") or node_result.get("mentions", [])
+        if full_post:
+            logger.success(
+                f"✨ LinkedIn post generated via Node unified pipeline "
+                f"({node_result.get('verifiedSourceCount', 0)} verified sources, "
+                f"{len(mentions_list)} woven mentions)"
+            )
+            return {
+                "topic": node_result.get("topic", topic),
+                "full_post": full_post,
+                "hook": full_post.split("\n", 1)[0],
+                "body": full_post,
+                "cta": "",
+                "mentions": " ".join(mentions_list),
+                "mentions_list": mentions_list,
+                "hashtags": hashtags,
+                "word_count": len(full_post.split()),
+                "char_count": len(full_post),
+                "emoji_count": sum(1 for c in full_post if c in "🚀🎯💡📈✅🔥👇💼🤖⚡🌐✨"),
+                "hashtag_count": len(hashtags),
+                "mention_count": len(mentions_list),
+                "estimated_reach": calculate_estimated_reach(hashtags),
+                "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "optimal_post_time": "Tue-Thu, 10:00 AM - 12:00 PM",
+                "generator": "node_unified",
+                "sources": node_result.get("sources", []),
+                "verified_source_count": node_result.get("verifiedSourceCount", 0),
+            }
+        logger.warning("Node pipeline returned empty LinkedIn content — falling back to templates")
+
+    logger.info("Using static-template LinkedIn generator (fallback path)")
+    return _generate_linkedin_post_static(content, filename)
+
+
+def _generate_linkedin_post_static(content: str, filename: str) -> Dict[str, Any]:
+    """
+    LEGACY fallback: static keyword→template LinkedIn post generator.
+    Retained only as a safety net when the Node unified pipeline is unavailable.
     """
     now = datetime.now()
 
@@ -456,17 +549,17 @@ def generate_linkedin_post(content: str, filename: str) -> Dict[str, Any]:
     # Generate hashtags (mandatory + topic-specific)
     hashtags = generate_linkedin_hashtags(topic)
 
-    # Generate mandatory mentions for maximum impressions
+    # Generate inline mention sentence for natural weaving
     mentions = generate_linkedin_mentions()
 
-    # Assemble full post with mentions at the end for 10000+ impressions
+    # Assemble full post with mentions woven naturally into the body
     full_post = f"""{hook}
 
 {body}
 
-{cta}
-
 {mentions}
+
+{cta}
 
 {" ".join(hashtags)}"""
 
@@ -659,27 +752,8 @@ def generate_linkedin_hashtags(topic: str) -> list:
 
 
 def generate_linkedin_mentions() -> str:
-    """Generate mandatory @mentions for every LinkedIn post for maximum impressions."""
-    # MANDATORY MENTIONS - Har post mein ye tags hona chahiye
-    mandatory_mentions = [
-        "Ameen Alam",
-        "Zia Khan",
-        "Asharib Ali",
-    ]
-
-    # Additional mentions for extra impressions
-    additional_mentions = [
-        "@TalentPop",
-        "@App",
-        "@Talent",
-        "@Worx",
-        "@LinkedIn",
-        "@Solutions",
-    ]
-
-    # Combine all mentions
-    all_mentions = mandatory_mentions + additional_mentions
-    return " ".join(all_mentions)
+    """Generate a natural inline mention sentence woven into the post body."""
+    return "Huge respect to @Ameen Alam, @Zia Khan, and @Asharib Ali for driving this vision forward."
 
 
 def calculate_estimated_reach(hashtags: list) -> Dict[str, Any]:
@@ -750,6 +824,21 @@ def create_linkedin_approval_file(post_data: Dict[str, Any], original_filename: 
         reach = hashtag_info.get(tag, "50K+ posts")
         hashtag_table += f"| {tag} | Broad/Niche | {reach} |\n"
 
+    # Mentions section — reflect the mentions ACTUALLY woven into the post text
+    # (Node unified pipeline), not a hardcoded trailing dump. Empty is valid:
+    # when no mention fit naturally, none were added.
+    woven_mentions = post_data.get("mentions_list") or []
+    if woven_mentions:
+        mentions_section = "## Mentions Woven Into Post\n\n"
+        mentions_section += "| Mention | Placement |\n|---------|----------|\n"
+        for m in woven_mentions:
+            mentions_section += f"| {m} | Referenced naturally in body |\n"
+    else:
+        mentions_section = (
+            "## Mentions\n\n"
+            "_No mentions were woven into this post — none fit the topic naturally._\n"
+        )
+
     approval_content = f"""---
 type: linkedin_post_draft
 status: pending_approval
@@ -768,21 +857,7 @@ original_trigger: {original_filename}
 
 ---
 
-## Mandatory Mentions (Maximum Impressions)
-
-| Mention | Type | Purpose |
-|---------|------|---------|
-| Ameen Alam | Person | Leadership/Team |
-| Zia Khan | Person | Leadership/Team |
-| Asharib Ali | Person | Leadership/Team |
-| @Panaversity | Company | Education/Training |
-| @TalentPop | Company | Talent/Recruitment |
-| @App | Company | Technology |
-| @Talent | Company | Talent/Recruitment |
-| @Worx | Company | Work/Products |
-| @LinkedIn | Platform | Platform Visibility |
-| @Solutions | Company | Solutions/Services |
-
+{mentions_section}
 ---
 
 ## Hashtags
@@ -802,7 +877,7 @@ original_trigger: {original_filename}
 | **Expected Comments** | {post_data["estimated_reach"]["expected_comments"]} | Low |
 | **Expected Shares** | {post_data["estimated_reach"]["expected_shares"]} | Low |
 
-*Estimates based on hashtag reach + mandatory mentions for 10000+ impressions*
+*Estimates based on hashtag reach + naturally woven mentions*
 
 ---
 
@@ -813,7 +888,7 @@ original_trigger: {original_filename}
 | **Word Count** | {post_data["word_count"]} / 300 words |
 | **Character Count** | {post_data["char_count"]} / 2,800 characters |
 | **Hashtag Count** | {post_data["hashtag_count"]} / 5 hashtags |
-| **Mention Count** | {post_data["mention_count"]} / 11 mentions |
+| **Mention Count** | {post_data["mention_count"]} woven mentions |
 | **Emoji Count** | {post_data["emoji_count"]} / 5 emojis |
 | **Readability Score** | Easy (short paragraphs, bullet points) |
 | **Optimal Post Time** | {post_data["optimal_post_time"]} |

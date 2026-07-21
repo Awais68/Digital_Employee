@@ -344,10 +344,12 @@ class WhatsAppWatcher:
         dest_dir: Path = NEEDS_ACTION_DIR,
         check_interval: int = CHECK_INTERVAL,
         headless: bool = False,
+        force_visible: bool = False,
     ):
         self.dest_dir = dest_dir
         self.check_interval = check_interval
         self.force_headless = headless
+        self.force_visible = force_visible
         self.session_manager = WhatsAppSessionManager()
         self.dedup = DeduplicationManager()
         
@@ -379,6 +381,9 @@ class WhatsAppWatcher:
         - If no session or first-run → headless=False (show QR)
         - If force_headless is set → respect it (for debugging)
         """
+        if self.force_visible:
+            logger.info("📱 --first-run: forcing visible browser for QR scan")
+            return False
         if self.force_headless:
             logger.info("🔧 Force headless mode enabled")
             return True
@@ -1276,7 +1281,7 @@ Utilities:
     else:
         headless = args.headless or (not args.first_run)
         logger.info("WhatsApp Watcher v2.0 — single run")
-        watcher = WhatsAppWatcher(headless=headless)
+        watcher = WhatsAppWatcher(headless=headless, force_visible=args.first_run)
         stats = asyncio.run(watcher.run_single())
         print(f"\nDone — Scanned: {stats['messages_scanned']}, "
               f"Flagged: {stats['messages_flagged']}, "

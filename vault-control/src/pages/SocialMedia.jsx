@@ -194,8 +194,8 @@ export default function SocialMedia() {
       const res = await axios.post('/api/posts/generate-image', {
         topic: content.substring(0, 100),
         style: 'professional'
-      })
-      
+      }, { timeout: 300000 })
+
       if (res.data.imageUrl) {
         // Download the generated image
         const imgRes = await fetch(res.data.imageUrl)
@@ -231,13 +231,23 @@ export default function SocialMedia() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const insertMentionsInline = (text, mentions) => {
+    const missingMentions = mentions.filter(m => !text.toLowerCase().includes(m.toLowerCase()))
+    if (!missingMentions.length) return text
+    const hashtagIndex = text.search(/#\w/)
+    const insertionPoint = hashtagIndex > 50 ? hashtagIndex : text.length
+    const mentionText = missingMentions.map(m => `@${m}`).join(', ')
+    const sentence = `\n\nShoutout to ${mentionText} for their incredible work in this space!`
+    return text.slice(0, insertionPoint).trimEnd() + sentence + '\n\n' + text.slice(insertionPoint).trimStart()
+  }
+
   const handlePost = async () => {
-    // Add mandatory mentions if not present
+    // Add mandatory mentions inline if not present
     let finalContent = content
     const contentLower = finalContent.toLowerCase()
     const hasMentions = MANDATORY_MENTIONS.some(m => contentLower.includes(m.toLowerCase()))
     if (!hasMentions) {
-      finalContent = `${finalContent.trimEnd()}\n\n${MANDATORY_MENTIONS.join(' ')}`
+      finalContent = insertMentionsInline(finalContent, MANDATORY_MENTIONS)
     }
     
     // STRICT VALIDATION - check both imageFile and imagePreview
@@ -426,9 +436,10 @@ export default function SocialMedia() {
     try {
       const res = await axios.post('/api/posts/generate', {
         topic: topic.trim(),
-        platforms: ['linkedin', 'twitter', 'facebook', 'instagram'],
+        // Twitter intentionally excluded (disabled platform — see `platforms` config above).
+        platforms: ['linkedin', 'facebook', 'instagram'],
         count: 2,
-      }, { timeout: 120000 })
+      }, { timeout: 300000 })
       if (res.data.success) {
         if (res.data.posts) {
           setGeneratedPosts(res.data.posts)
@@ -459,7 +470,7 @@ export default function SocialMedia() {
               const imgRes = await axios.post('/api/posts/generate-image', {
                 topic: topic.trim(),
                 style: 'professional'
-              })
+              }, { timeout: 300000 })
               if (imgRes.data.imageUrl) {
                 setImagePreview(imgRes.data.imageUrl)
                 // Convert URL to File for publishing

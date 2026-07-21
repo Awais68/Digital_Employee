@@ -1,0 +1,27 @@
+[
+  {
+    "title": "Amazon Web Services",
+    "url": "https://en.wikipedia.org/wiki/Amazon%20Web%20Services",
+    "verified": true
+  },
+  {
+    "title": "Google Cloud Platform",
+    "url": "https://en.wikipedia.org/wiki/Google%20Cloud%20Platform",
+    "verified": true
+  },
+  {
+    "title": "New Relic",
+    "url": "https://en.wikipedia.org/wiki/New%20Relic",
+    "verified": true
+  },
+  {
+    "title": "Wiz, Inc.",
+    "url": "https://en.wikipedia.org/wiki/Wiz%2C%20Inc.",
+    "verified": true
+  },
+  {
+    "title": "Virtual assistant",
+    "url": "https://en.wikipedia.org/wiki/Virtual%20assistant",
+    "verified": true
+  }
+]

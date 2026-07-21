@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, TrendingUp, AlertCircle, Loader2 } from 'lucide-react'
+import { RefreshCw, TrendingUp, AlertCircle, Loader2, Info } from 'lucide-react'
 import axios from 'axios'
+import { useAuth } from '../context/AuthContext'
 
 export default function Accounting() {
+  const { isAdmin } = useAuth()
   const [selectedPeriod, setSelectedPeriod] = useState('month')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -25,7 +27,7 @@ export default function Accounting() {
       setTransactions(transRes.data.transactions || [])
     } catch (err) {
       console.error('Failed to fetch Odoo data:', err)
-      setError('Failed to connect to Odoo server. Please ensure the Odoo MCP is running.')
+      setError('Live ledger is offline right now — showing cached figures. It will reconnect automatically.')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -54,9 +56,16 @@ export default function Accounting() {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg flex items-center gap-3 text-red-400">
-          <AlertCircle size={20} />
+        <div className="bg-amber-500/10 border border-amber-500/40 p-4 rounded-lg flex items-center gap-3 text-amber-500 dark:text-amber-400">
+          <Info size={20} />
           <p className="text-sm font-medium">{error}</p>
+        </div>
+      )}
+
+      {!isAdmin && (
+        <div className="bg-blue-500/10 border border-blue-500/40 p-3 rounded-lg flex items-center gap-3 text-blue-500 dark:text-blue-400">
+          <Info size={18} />
+          <p className="text-sm font-medium">Caution: Only an Admin can send or approve transactions. You have read-only access.</p>
         </div>
       )}
 
@@ -66,9 +75,9 @@ export default function Accounting() {
           <div>
             <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 mb-2">Odoo Server</h3>
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full animate-pulse ${error ? 'bg-red-500' : 'bg-green-500'}`} />
-              <span className={`text-sm ${error ? 'text-red-400' : 'text-green-400'}`}>
-                {error ? 'Connection Failed' : 'Running'}
+              <div className={`w-2 h-2 rounded-full animate-pulse ${error ? 'bg-amber-500' : 'bg-green-500'}`} />
+              <span className={`text-sm ${error ? 'text-amber-500 dark:text-amber-400' : 'text-green-400'}`}>
+                {error ? 'Reconnecting…' : 'Running'}
               </span>
               <span className="text-xs dark:text-[#7A7A85] text-gray-500 ml-4">
                 Last sync: {new Date().toLocaleTimeString()}

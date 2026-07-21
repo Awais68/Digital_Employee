@@ -29,6 +29,7 @@ Author: Digital Employee System
 Tier: Gold v5.0
 """
 
+import re
 import sys
 import json
 import time
@@ -311,9 +312,12 @@ def post_to_facebook(
             else:
                 # Personal timeline posting (existing flow)
                 composer_buttons = [
-                    page.get_by_role("button", name="What's on your mind?"),
-                    page.get_by_role("button", name="what's on your mind"),
-                    page.locator('[aria-label*="post" i]'),
+                    page.get_by_role("button", name=re.compile(r"What'?s on your mind", re.IGNORECASE)),
+                    page.locator('[aria-label*="What\'s on your mind"]'),
+                    page.get_by_placeholder(re.compile(r"What'?s on your mind", re.IGNORECASE)),
+                    page.locator('[aria-label*="Create a post" i]'),
+                    page.locator('[aria-label*="create post" i]'),
+                    page.locator('[role="button"]:has-text("on your mind")'),
                     page.locator('div[role="button"]:has-text("What")'),
                     page.locator('div[role="button"]:has-text("what")'),
                 ]

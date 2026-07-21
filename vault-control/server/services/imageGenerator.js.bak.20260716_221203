@@ -1,0 +1,854 @@
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { spawnSync } from 'child_process'
+import { callAI } from './aiProvider.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const GENERATED_DIR = path.resolve(__dirname, '../../public/generated')
+
+// ─── Brand logo — embedded once as base64 for the header lockup ───────────
+// The ASNEXA brand mark sits on the right of the header. A generic file
+// loader is used so any image (png/jpeg) can be embedded as a data URI.
+const LOGO_PATH = path.resolve(__dirname, '../../public/uploads/logoBig.png')
+const BRAND_LOGO_PATH = path.resolve(__dirname, '../../public/uploads/logoAsNexa.jpeg')
+
+const _logoCache = {} // path -> dataUri | '' (attempted & failed)
+function loadImageDataUri(filePath) {
+  if (filePath in _logoCache) return _logoCache[filePath] || null
+  try {
+    const buf = fs.readFileSync(filePath)
+    const ext = path.extname(filePath).toLowerCase()
+    const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.svg' ? 'image/svg+xml' : 'image/png'
+    _logoCache[filePath] = `data:${mime};base64,${buf.toString('base64')}`
+    console.log(`[ImageGen] Logo loaded: ${path.basename(filePath)} (${(buf.length / 1024).toFixed(0)}KB)`)
+  } catch (e) {
+    console.warn(`[ImageGen] Logo not found at ${filePath}: ${e.message}`)
+    _logoCache[filePath] = ''
+  }
+  return _logoCache[filePath] || null
+}
+function getLogoDataUri() {
+  return loadImageDataUri(LOGO_PATH)
+}
+function getBrandLogoDataUri() {
+  return loadImageDataUri(BRAND_LOGO_PATH)
+}
+
+// ─── Emoji stripping — librsvg has no color-emoji fallback in many deploy ─
+// environments and renders emoji as tofu (□) boxes. All text overlays are
+// stripped and stat icons are drawn as vectors, so glyph coverage never
+// affects the exported image.
+const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE00}-\u{FE0F}\u{200D}\u{2049}\u{203C}]/gu
+function stripEmoji(s) {
+  return typeof s === 'string' ? s.replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim() : s
+}
+
+// One-time observability: log whether a color-emoji font is present on the
+// host. Purely informational — rendering does not depend on it.
+let _emojiFontLogged = false
+function logEmojiFontStatus() {
+  if (_emojiFontLogged) return
+  _emojiFontLogged = true
+  try {
+    const out = spawnSync('fc-list', [':charset=1f600'], { encoding: 'utf-8', timeout: 3000 })
+    const has = !!(out.stdout && out.stdout.trim().length > 0)
+    console.log(`[ImageGen] Color-emoji font on host: ${has ? 'yes' : 'NO'} (emoji stripped from render regardless)`)
+  } catch { /* fc-list unavailable — irrelevant since emoji are stripped */ }
+}
+
+// ─── Validation constants ──────────────────────────────────────────────
+const FORBIDDEN_FRAGMENTS = [
+  'visual for:', 'editorial style', '(like Forbes', 'TechCrunch,', 'HBR covers',
+  'Requirements:', 'Core message:', 'Key data/stats to visually emphasize',
+  'Professional marketing visual', '1080x1350', 'NO human faces', 'NO text',
+  'Style keywords:', 'markdown', '```json', '```',
+  'Resolution:', 'production quality', 'premium, editorial',
+]
+const MAX_HEADLINE_CHARS = 65
+const MAX_BULLET_CHARS = 95
+const MAX_CTA_CHARS = 50
+const MAX_STAT_LABEL_CHARS = 28
+const TEMPLATE_SYNTAX_RE = /\$\{.*?\}/
+
+function getOpenRouterKey() {
+  return (
+    process.env.OPENROUTER_API_KEY ||
+    (process.env.OPENAI_API_KEY?.startsWith('sk-or-') ? process.env.OPENAI_API_KEY : null)
+  )
+}
+
+// ─── Content Validation ──────────────────────────────────────────────────
+function validateStructuredContent(content) {
+  if (!content || typeof content !== 'object') {
+    return { valid: false, error: 'Content is not an object', content }
+  }
+  if (typeof content.headline !== 'string' || content.headline.length === 0) {
+    return { valid: false, error: 'Headline missing or empty', content }
+  }
+  if (content.headline.length > MAX_HEADLINE_CHARS) {
+    console.warn(`[ImageGen] Headline truncated from ${content.headline.length} to ${MAX_HEADLINE_CHARS} chars`)
+    content.headline = content.headline.substring(0, MAX_HEADLINE_CHARS)
+  }
+  if (!Array.isArray(content.bullets)) {
+    content.bullets = []
+  }
+  if (!Array.isArray(content.stats)) {
+    content.stats = []
+  }
+  if (typeof content.cta !== 'string') {
+    content.cta = ''
+  }
+
+  const allText = JSON.stringify(content).toLowerCase()
+  for (const frag of FORBIDDEN_FRAGMENTS) {
+    if (allText.includes(frag.toLowerCase())) {
+      return { valid: false, error: `Forbidden fragment detected: "${frag}"`, content }
+    }
+  }
+  if (TEMPLATE_SYNTAX_RE.test(allText)) {
+    return { valid: false, error: 'Unresolved template syntax detected', content }
+  }
+  return { valid: true, content }
+}
+
+// ─── Rule-based content extraction from actual post text ──────────────
+function extractContentFromPost(postContent, topic) {
+  const lines = postContent.split('\n').filter(l => l.trim())
+  const headline = (
+    lines.find(l => l.length > 10 && l.length < MAX_HEADLINE_CHARS
+      && !l.startsWith('#') && !l.startsWith('@') && !l.startsWith('http')
+      && !l.startsWith('```') && !l.match(/^\d+\.\s/))
+    || topic
+  ).replace(/^[🚀💡🔥⚡🎯📊💪🌟✅📈]\s*/, '').trim()
+
+  const statLines = lines.filter(l => /\d+%/.test(l) || /\$\d/.test(l))
+  const iconPool = ['📈', '💰', '⚡', '🎯', '📊', '🌟', '🔥', '💡']
+  const usedIcons = []
+  const stats = statLines.slice(0, 4).map(l => {
+    const num = l.match(/([\d,.]+%|\$[\d,.]+[^\s]*)/)?.[1] || l.match(/([\d,.]+%|\$[\d,.]+[^\s]*)/)?.[0] || ''
+    const label = l.replace(num, '').replace(/^[→✅📊💡🔥⚡\s]*/, '').replace(/[^\w\s-]/g, '').trim().substring(0, MAX_STAT_LABEL_CHARS) || 'Key metric'
+    const icon = iconPool.find(i => !usedIcons.includes(i)) || iconPool[0]
+    usedIcons.push(icon)
+    return { icon, value: num, label }
+  })
+
+  if (stats.length === 0) {
+    const numbers = postContent.match(/\d+%|\$[\d,.]+[kKmMbBtT]?|\b\d+[xX]\b(?!\d+)/g) || []
+    const cleanNumbers = numbers.filter(n => !/^\d+x\d+$/i.test(n))
+    if (cleanNumbers.length > 0) {
+      stats.push({ icon: '📊', value: cleanNumbers[0].trim(), label: 'Impact metric' })
+    }
+  }
+
+  const bullets = lines
+    .filter(l => l.match(/^[→✅📊💡🔥⚡\d️⃣]|^- /))
+    .slice(0, 4)
+    .map(l => l.replace(/^[→✅📊💡🔥⚡\d️⃣\-]+/, '').replace(/^\s+/, '').trim())
+    .filter(l => l.length > 5 && l.length < MAX_BULLET_CHARS)
+    .map(l => l.length > MAX_BULLET_CHARS ? l.substring(0, MAX_BULLET_CHARS) + '…' : l)
+
+  const cta = (
+    lines.find(l => l.includes('?') || l.includes('👇') || l.includes('↓')
+      || /share|comment|thoughts?|think|discuss|drop|join/i.test(l))
+    || 'What are your thoughts? 👇'
+  ).replace(/^[🚀💡🔥⚡🎯📊💪🌟✅📈]\s*/, '').trim().substring(0, MAX_CTA_CHARS)
+
+  return { headline, bullets, stats, cta }
+}
+
+// ─── AI-based content extraction with JSON schema + retry ─────────────
+async function extractContentViaAI(postContent, topic) {
+  const systemPrompt = 'You extract structured image-overlay content from marketing posts. Return ONLY valid JSON — no markdown, no code fences.'
+
+  const prompt = `Extract image overlay content from the marketing post below for a branded social media image.
+
+Return ONLY valid JSON (no markdown, no code fences) with this exact schema:
+{
+  "headline": "Short compelling headline (MAX 6 WORDS, attention-grabbing, no quotes)",
+  "bullets": ["3-4 key takeaways from the post's bullet list, each under 50 chars"],
+  "stats": [
+    {"icon": "📊", "value": "exact number like 78%", "label": "short label under 25 chars"}
+  ],
+  "cta": "Short call to action (max 5 words)"
+}
+
+STRICT RULES:
+- Headline: max 6 words, must be compelling, no instruction text
+- Stats: extract real numbers/percentages from the post content. Max 4.
+  If the post has no clear numbers, use an empty array [].
+- Bullets: concrete takeaways from the post content.
+- CTA: short action prompt from the post end.
+- NEVER include instruction text, prompt text, or meta commentary.
+- The content is for a SOCIAL MEDIA IMAGE overlay — make it punchy.
+
+MARKETING POST:
+${postContent.substring(0, 1500)}`
+
+  let lastError = null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const raw = await callAI(systemPrompt, prompt, 800)
+      const cleaned = raw.replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(cleaned)
+
+      const validation = validateStructuredContent(parsed)
+      if (validation.valid) {
+        console.log(`[ImageGen] AI content extraction succeeded (attempt ${attempt + 1})`)
+        return validation.content
+      }
+      lastError = validation.error
+      console.warn(`[ImageGen] AI extraction attempt ${attempt + 1} validation failed:`,
+        lastError, '- raw:', raw.substring(0, 120))
+    } catch (e) {
+      lastError = e.message
+      console.warn(`[ImageGen] AI extraction attempt ${attempt + 1} parse failed:`, e.message)
+    }
+  }
+  throw new Error(`AI content extraction failed after 2 attempts: ${lastError}`)
+}
+
+// ─── Combined extraction: AI first, rule-based fallback ───────────────
+async function extractImageContent(postContent, topic) {
+  if (!postContent || postContent.trim().length === 0) {
+    console.warn('[ImageGen] No post content — extracting from topic only')
+    const content = extractContentFromPost(topic || 'Insights', topic)
+    const validation = validateStructuredContent(content)
+    if (validation.valid) return validation.content
+    return { headline: topic || 'Insights', bullets: [], stats: [], cta: '' }
+  }
+  try {
+    const cleaned = postContent.replace(/```[\s\S]*?```/g, '').trim()
+    const aiContent = await extractContentViaAI(cleaned, topic)
+    return aiContent
+  } catch (e) {
+    console.warn('[ImageGen] Falling back to rule-based extraction:', e.message)
+    const ruleContent = extractContentFromPost(postContent, topic)
+    return ruleContent
+  }
+}
+
+// ─── Pre-render sanitization: returns { safe, reason } ────────────────
+function isContentSafeForRendering(content) {
+  const allText = (content.headline + ' ' + content.cta + ' ' +
+    content.bullets.join(' ') + ' ' + JSON.stringify(content.stats)).toLowerCase()
+
+  for (const frag of FORBIDDEN_FRAGMENTS) {
+    if (allText.includes(frag.toLowerCase())) {
+      return { safe: false, reason: `Forbidden content: "${frag}"` }
+    }
+  }
+  if (TEMPLATE_SYNTAX_RE.test(allText)) {
+    return { safe: false, reason: 'Unresolved template syntax' }
+  }
+  if (!content.headline || content.headline.trim().length === 0) {
+    return { safe: false, reason: 'Empty headline' }
+  }
+  return { safe: true }
+}
+
+// ─── Wikipedia image — primary (topic-relevant, free, no API key) ──────────
+async function generateViaWikipedia(topic, width = 1080, height = 1350) {
+  // Step 1: Search Wikipedia for the topic
+  const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(topic)}&format=json&srlimit=3`;
+  const searchResp = await fetch(searchUrl, { signal: AbortSignal.timeout(8000) });
+  if (!searchResp.ok) throw new Error(`Wikipedia search: ${searchResp.status}`);
+  const searchData = await searchResp.json();
+  const firstTitle = searchData?.query?.search?.[0]?.title;
+  if (!firstTitle) throw new Error('No Wikipedia results');
+
+  // Step 2: Get page summary with thumbnail
+  const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(firstTitle)}`;
+  const summaryResp = await fetch(summaryUrl, { signal: AbortSignal.timeout(8000) });
+  if (!summaryResp.ok) throw new Error(`Wikipedia summary: ${summaryResp.status}`);
+  const summaryData = await summaryResp.json();
+
+  // Step 3: Get the thumbnail URL
+  const thumbUrl = summaryData?.thumbnail?.source || summaryData?.originalimage?.source;
+  if (!thumbUrl) throw new Error('No Wikipedia image available');
+
+  // Step 4: Download and resize
+  fs.mkdirSync(GENERATED_DIR, { recursive: true });
+  const imgResp = await fetch(thumbUrl, { signal: AbortSignal.timeout(10000) });
+  if (!imgResp.ok) throw new Error(`Wikipedia image download: ${imgResp.status}`);
+  const imgBuf = Buffer.from(await imgResp.arrayBuffer());
+
+  const filename = `wiki_${Date.now()}.jpg`;
+  const destPath = path.join(GENERATED_DIR, filename);
+  fs.writeFileSync(destPath, imgBuf);
+
+  const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const url = `${base}/generated/${filename}`;
+  console.log(`[ImageGen] Wikipedia image saved: ${filename} (from "${firstTitle}")`);
+  return url;
+}
+
+// ─── Branded Template Image with Structured Content ──────────────────────
+async function generateCanvaStyleImage(topic, postContent = '', width = 1080, height = 1350) {
+  const LINKEDIN_BLUE = '#0A66C2'
+  const ELECTRIC_TEAL = '#00C9A7'
+  const DARK_NAVY = '#0D1B2A'
+  const DARKER = '#061220'
+  const WHITE = '#FFFFFF'
+  const LIGHT = 'rgba(255,255,255,0.75)'
+  const DIM = 'rgba(255,255,255,0.4)'
+  const CARD_BG = 'rgba(10,102,194,0.12)'
+  const CARD_BORDER = 'rgba(10,102,194,0.25)'
+
+  // ── Step 1: Extract structured content from post body ────────────────
+  let content
+  if (typeof postContent === 'object' && postContent !== null && postContent.headline) {
+    content = postContent
+  } else if (typeof postContent === 'string') {
+    const cleanBody = postContent.replace(/```[\s\S]*?```/g, '').trim()
+    content = await extractImageContent(cleanBody, topic)
+  } else {
+    content = { headline: topic, bullets: [], stats: [], cta: '' }
+  }
+
+  // ── Step 2: Pre-render validation ────────────────────────────────────
+  const validation = validateStructuredContent(content)
+  if (!validation.valid) {
+    console.warn(`[ImageGen] Content validation failed: ${validation.error} — falling back to Pollinations`)
+    throw new Error(`Content validation: ${validation.error}`)
+  }
+
+  const safety = isContentSafeForRendering(content)
+  if (!safety.safe) {
+    console.warn(`[ImageGen] Content unsafe for rendering: ${safety.reason} — falling back to Pollinations`)
+    throw new Error(`Content safety: ${safety.reason}`)
+  }
+
+  // ── Step 3: Build branded template SVG (adaptive vertical flow) ───────
+  // librsvg has no color-emoji fallback, so all emoji are stripped from text
+  // and stat icons are drawn as vectors. Content blocks flow from a single
+  // cursor and the whole group is centred between header and footer, so an
+  // empty stats/bullets set never leaves a dead vertical gap.
+  logEmojiFontStatus()
+  const headline = stripEmoji(content.headline) || topic
+  const cta = stripEmoji(content.cta || '')
+  const bullets = (content.bullets || []).map(b => stripEmoji(b)).filter(Boolean)
+  const stats = (content.stats || [])
+    .map(s => ({ value: stripEmoji(s.value || ''), label: stripEmoji(s.label || '') }))
+    .filter(s => s.value)
+  const logoUri = getLogoDataUri()
+  const brandLogoUri = getBrandLogoDataUri()
+
+  // Layout bounds: content flows between the header and the footer bar.
+  const HEADER_BOTTOM = 130
+  const FOOTER_TOP = height - 110
+  const AVAILABLE = FOOTER_TOP - HEADER_BOTTOM
+  const BLOCK_GAP = 44
+
+  // Headline → centered, full-width word-wrap with small side padding.
+  // Fills the usable width (minus padding) instead of a fixed 2-line split so
+  // the text reads large and balanced regardless of length.
+  const H_PAD = 50                         // side padding (both sides)
+  const H_USABLE = width - 2 * H_PAD        // available headline width
+  const hFontSize = Math.min(60, Math.max(38, Math.floor(680 / Math.sqrt(headline.length + 1)) + 8))
+  const H_CHAR_W = hFontSize * 0.56         // approx glyph advance for Poppins bold
+  const hMaxChars = Math.max(8, Math.floor(H_USABLE / H_CHAR_W))
+  // Greedy word-wrap into lines that fit hMaxChars.
+  const hLines = []
+  {
+    let line = ''
+    for (const w of headline.split(/\s+/)) {
+      const candidate = line ? `${line} ${w}` : w
+      if (candidate.length > hMaxChars && line) { hLines.push(line); line = w }
+      else line = candidate
+    }
+    if (line) hLines.push(line)
+  }
+  const H_LINE_H = Math.floor(hFontSize * 1.15)
+  const headlineH = hLines.length * H_LINE_H
+
+  // Stats grid geometry.
+  const statCardW = 280, statCardH = 150, statGap = 30
+  const statCols = Math.max(1, Math.min(stats.length, 3))
+  const statRows = stats.length ? Math.ceil(stats.length / statCols) : 0
+  const statTotalW = statCols * statCardW + (statCols - 1) * statGap
+  const statStartX = (width - statTotalW) / 2
+  const statsH = statRows ? statRows * statCardH + (statRows - 1) * statGap : 0
+
+  const bulletGap = 52
+  const bulletHeaderH = bullets.length ? 44 : 0
+  const bulletsH = bullets.length ? bulletHeaderH + bullets.length * bulletGap : 0
+  const avatarH = 118        // circle r56 + breathing room
+  const dividerH = 3
+  const ctaH = cta ? 54 : 0
+
+  // Assemble the ordered list of present blocks with their measured heights.
+  const blocks = []
+  blocks.push({ kind: 'avatar', h: avatarH })
+  blocks.push({ kind: 'headline', h: headlineH })
+  blocks.push({ kind: 'divider', h: dividerH })
+  if (statsH) blocks.push({ kind: 'stats', h: statsH })
+  if (bulletsH) blocks.push({ kind: 'bullets', h: bulletsH })
+  if (ctaH) blocks.push({ kind: 'cta', h: ctaH })
+
+  const totalH = blocks.reduce((a, b) => a + b.h, 0) + BLOCK_GAP * (blocks.length - 1)
+  let cursorY = HEADER_BOTTOM + Math.max(0, (AVAILABLE - totalH) / 2)
+
+  // Render each block relative to the flowing cursor.
+  const parts = []
+  for (const block of blocks) {
+    const cx = width / 2
+    if (block.kind === 'avatar') {
+      const acx = cx, acy = cursorY + avatarH / 2, r = 56
+      if (logoUri) {
+        parts.push(`<g filter="url(#cardShadow)">
+    <circle cx="${acx}" cy="${acy}" r="${r}" fill="${DARK_NAVY}"/>
+    <clipPath id="avatarClip"><circle cx="${acx}" cy="${acy}" r="${r - 3}"/></clipPath>
+    <image href="${logoUri}" xlink:href="${logoUri}" x="${acx - (r - 3)}" y="${acy - (r - 3)}" width="${2 * (r - 3)}" height="${2 * (r - 3)}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
+    <circle cx="${acx}" cy="${acy}" r="${r}" stroke="${ELECTRIC_TEAL}" stroke-width="2" fill="none"/>
+  </g>`)
+      } else {
+        // Fallback: solid branded initials (no dashed 'loading' ring).
+        parts.push(`<g>
+    <circle cx="${acx}" cy="${acy}" r="${r}" fill="rgba(10,102,194,0.25)"/>
+    <circle cx="${acx}" cy="${acy}" r="${r}" stroke="${ELECTRIC_TEAL}" stroke-width="2" fill="none"/>
+    <text x="${acx}" y="${acy + 12}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="32" font-weight="700" text-anchor="middle">DE</text>
+  </g>`)
+      }
+    } else if (block.kind === 'headline') {
+      // Centered, full-width headline with subtle shadow (no heavy glow).
+      const lines = hLines.map((ln, i) =>
+        `<text x="${cx}" y="${cursorY + hFontSize + i * H_LINE_H}" fill="${WHITE}" font-family="'Poppins','Inter',sans-serif" font-size="${hFontSize}" font-weight="700" letter-spacing="-0.5" text-anchor="middle">${escapeXml(ln)}</text>`
+      ).join('\n    ')
+      parts.push(`<g filter="url(#glow)">
+    ${lines}
+  </g>`)
+    } else if (block.kind === 'divider') {
+      parts.push(`<rect x="${cx - 40}" y="${cursorY}" width="80" height="3" rx="1.5" fill="${ELECTRIC_TEAL}"/>`)
+    } else if (block.kind === 'stats') {
+      parts.push(stats.map((stat, i) => {
+        const col = i % statCols, row = Math.floor(i / statCols)
+        const sx = statStartX + col * (statCardW + statGap)
+        const sy = cursorY + row * (statCardH + statGap)
+        const icx = sx + statCardW / 2, icy = sy + 42
+        // Drawn vector "mini-chart" icon — no emoji, always renders.
+        const bars = [14, 22, 30].map((bh, bi) =>
+          `<rect x="${icx - 15 + bi * 12}" y="${icy + 12 - bh}" width="8" height="${bh}" rx="2" fill="${ELECTRIC_TEAL}"/>`
+        ).join('')
+        return `<g filter="url(#cardShadow)">
+      <rect x="${sx}" y="${sy}" width="${statCardW}" height="${statCardH}" rx="18" fill="url(#metricFill)"/>
+      <rect x="${sx}" y="${sy}" width="${statCardW}" height="${statCardH}" rx="18" stroke="${ELECTRIC_TEAL}" stroke-width="1.5" stroke-opacity="0.5" fill="none"/>
+      <rect x="${sx}" y="${sy}" width="6" height="${statCardH}" rx="3" fill="${ELECTRIC_TEAL}"/>
+      <circle cx="${icx}" cy="${icy}" r="24" fill="rgba(0,201,167,0.15)"/>
+      ${bars}
+      <text x="${icx}" y="${sy + 100}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="30" font-weight="700" text-anchor="middle">${escapeXml(stat.value || '—')}</text>
+      <text x="${icx}" y="${sy + 128}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="14" letter-spacing="0.3" text-anchor="middle">${escapeXml(stat.label || '')}</text>
+    </g>`
+      }).join('\n    '))
+    } else if (block.kind === 'bullets') {
+      const bx = cx - 300
+      // Section label so the takeaways read as a deliberate "key points" block.
+      const label = `<text x="${bx}" y="${cursorY + 24}" fill="${ELECTRIC_TEAL}" font-family="'Poppins',sans-serif" font-size="18" font-weight="700" letter-spacing="1.5">KEY TAKEAWAYS</text>`
+      const items = bullets.map((point, i) => {
+        const by = cursorY + bulletHeaderH + i * bulletGap + 18
+        return `<circle cx="${bx + 7}" cy="${by - 7}" r="6" fill="${ELECTRIC_TEAL}"/>
+    <text x="${bx + 28}" y="${by}" fill="${WHITE}" font-family="'Inter',sans-serif" font-size="24" font-weight="500">${escapeXml(point.substring(0, MAX_BULLET_CHARS))}</text>`
+      }).join('\n    ')
+      parts.push(label + '\n    ' + items)
+    } else if (block.kind === 'cta') {
+      parts.push(`<rect x="${cx - 180}" y="${cursorY}" width="360" height="54" rx="27" fill="${ELECTRIC_TEAL}"/>
+    <text x="${cx}" y="${cursorY + 34}" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="18" font-weight="600" text-anchor="middle">${escapeXml(cta)}</text>`)
+    }
+    cursorY += block.h + BLOCK_GAP
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${DARK_NAVY}"/>
+      <stop offset="50%" stop-color="#0C2340"/>
+      <stop offset="100%" stop-color="${DARKER}"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="30%" cy="25%">
+      <stop offset="0%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="70%" cy="70%">
+      <stop offset="0%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
+      <stop offset="50%" stop-color="${ELECTRIC_TEAL}"/>
+      <stop offset="100%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Eye-catching top bar: blue → teal → violet sweep -->
+    <linearGradient id="topbar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${LINKEDIN_BLUE}"/>
+      <stop offset="50%" stop-color="${ELECTRIC_TEAL}"/>
+      <stop offset="100%" stop-color="#7C4DFF"/>
+    </linearGradient>
+    <!-- Metric box: subtle brand gradient fill -->
+    <linearGradient id="metricFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(10,102,194,0.28)"/>
+      <stop offset="100%" stop-color="rgba(0,201,167,0.14)"/>
+    </linearGradient>
+    <!-- Softer headline shadow (replaces heavy blur glow) -->
+    <filter id="glow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="2" stdDeviation="1.4" flood-color="${DARKER}" flood-opacity="0.55"/></filter>
+    <filter id="cardShadow"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="${DARKER}" flood-opacity="0.4"/></filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="${width}" height="${height}" fill="url(#bg)"/>
+  <rect width="${width}" height="${height}" fill="url(#glow1)"/>
+  <rect width="${width}" height="${height}" fill="url(#glow2)"/>
+
+  <!-- Top bar — eye-catching gradient accent -->
+  <rect x="0" y="0" width="${width}" height="8" fill="url(#topbar)"/>
+
+  <!-- Header: "Digital FTE" wordmark on LEFT ────────────────────────────── -->
+  <rect x="60" y="42" width="34" height="34" rx="9" fill="${ELECTRIC_TEAL}"/>
+  <text x="77" y="66" fill="${DARK_NAVY}" font-family="'Poppins',sans-serif" font-size="18" font-weight="700" text-anchor="middle">D</text>
+  <text x="106" y="65" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="17" font-weight="600">Digital FTE</text>
+
+  <!-- Header: ASNEXA brand logo on RIGHT ───────────────────────────────── -->
+  ${brandLogoUri
+    ? `<image href="${brandLogoUri}" xlink:href="${brandLogoUri}" x="${width - 132}" y="30" width="72" height="72" preserveAspectRatio="xMidYMid meet"/>`
+    : `<text x="${width - 60}" y="65" fill="${DIM}" font-family="'Poppins',sans-serif" font-size="13" font-weight="600" text-anchor="end" letter-spacing="2">ASNEXA</text>`
+  }
+
+  <!-- Flowing content -->
+  ${parts.join('\n  ')}
+
+  <!-- Bottom bar -->
+  <rect x="0" y="${height - 90}" width="${width}" height="90" fill="${DARKER}" fill-opacity="0.5"/>
+  <rect x="60" y="${height - 85}" width="120" height="3" rx="1.5" fill="url(#accent)"/>
+  <text x="60" y="${height - 50}" fill="${WHITE}" font-family="'Poppins',sans-serif" font-size="16" font-weight="600">Follow for more</text>
+  <text x="60" y="${height - 30}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="12">Digital Transformation • AI • Innovation</text>
+  <text x="${width - 60}" y="${height - 50}" fill="${DIM}" font-family="'Inter',sans-serif" font-size="11" text-anchor="end">Digital FTE Insights</text>
+
+  <!-- Corner brackets -->
+  <g stroke="${ELECTRIC_TEAL}" stroke-width="1.5" fill="none" opacity="0.25">
+    <path d="M 40 40 L 40 70 M 40 40 L 70 40"/>
+    <path d="M ${width-40} 40 L ${width-40} 70 M ${width-40} 40 L ${width-70} 40"/>
+    <path d="M 40 ${height-40} L 40 ${height-70} M 40 ${height-40} L 70 ${height-40}"/>
+    <path d="M ${width-40} ${height-40} L ${width-40} ${height-70} M ${width-40} ${height-40} L ${width-70} ${height-40}"/>
+  </g>
+</svg>`
+
+  fs.mkdirSync(GENERATED_DIR, { recursive: true })
+  const filename = `branded_${Date.now()}.png`
+  const destPath = path.join(GENERATED_DIR, filename)
+
+  try {
+    const { default: sharp } = await import('sharp')
+    await sharp(Buffer.from(svg))
+      .resize(width, height, { fit: 'cover', kernel: sharp.kernel.lanczos3 })
+      .png({ quality: 98 })
+      .toFile(destPath)
+    console.log(`[ImageGen] Branded template image: ${filename}`)
+  } catch (e) {
+    const svgPath = path.join(GENERATED_DIR, `branded_${Date.now()}.svg`)
+    fs.writeFileSync(svgPath, svg, 'utf-8')
+    const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`
+    return `${base}/generated/${path.basename(svgPath)}`
+  }
+
+  const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`
+  return `${base}/generated/${filename}`
+}
+
+// ─── Premium LinkedIn Design System Image (Gemini-style) ──────────────────
+async function generatePremiumDesignImage(topic, width = 1080, height = 1350) {
+  // Design System Colors
+  const LINKEDIN_BLUE = '#0A66C2'
+  const ELECTRIC_TEAL = '#00C9A7'
+  const DARK_NAVY = '#0D1B2A'
+  const DARKER_NAVY = '#061220'
+  const PURE_WHITE = '#FFFFFF'
+  const LIGHT_GRAY = 'rgba(255,255,255,0.7)'
+  const WATERMARK = 'rgba(255,255,255,0.35)'
+
+  // Smart text splitting
+  const words = topic.split(/\s+/)
+  const mid = Math.ceil(words.length / 2)
+  const headlineWords = words.slice(0, mid)
+  const subtextWords = words.slice(mid)
+
+  // Word wrap functions
+  const wrapLine = (wordsArr, maxLen) => wordsArr.reduce((acc, word) => {
+    const last = acc[acc.length - 1]
+    if (!last || (last + ' ' + word).length > maxLen) acc.push(word)
+    else acc[acc.length - 1] = last + ' ' + word
+    return acc
+  }, [])
+
+  const headlineLines = wrapLine(headlineWords, 18)
+  const subtextLines = wrapLine(subtextWords, 28)
+
+  // Dynamic sizing
+  const maxLen = Math.max(...headlineLines.map(l => l.length))
+  const hFont = Math.min(64, Math.max(48, Math.floor(800 / (maxLen + 1))))
+  const sFont = 26
+  const totalH = (headlineLines.length * hFont * 1.25) + 40 + (subtextLines.length * sFont * 1.5)
+  const startY = (height - totalH) / 2 + 20
+
+  // Generate decorative elements based on topic
+  const seed = Math.abs(topic.split('').reduce((a, c) => a + c.charCodeAt(0), 0))
+  const orbX1 = 150 + (seed % 200)
+  const orbY1 = 300 + (seed % 150)
+  const orbX2 = width - 200 - (seed % 180)
+  const orbY2 = height - 400 + (seed % 200)
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${DARK_NAVY}"/>
+      <stop offset="40%" stop-color="#0F2847"/>
+      <stop offset="100%" stop-color="${DARKER_NAVY}"/>
+    </linearGradient>
+    <radialGradient id="orb1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0.25"/>
+      <stop offset="60%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0.2"/>
+      <stop offset="60%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
+      <stop offset="50%" stop-color="${ELECTRIC_TEAL}" stop-opacity="1"/>
+      <stop offset="100%" stop-color="${ELECTRIC_TEAL}" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="blueLine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0"/>
+      <stop offset="50%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="${LINKEDIN_BLUE}" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="dots" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="20" r="0.8" fill="${ELECTRIC_TEAL}" opacity="0.12"/>
+    </pattern>
+    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="${width}" height="${height}" fill="url(#bg)"/>
+  <rect width="${width}" height="${height}" fill="url(#dots)"/>
+
+  <!-- Ambient orbs -->
+  <ellipse cx="${orbX1}" cy="${orbY1}" rx="350" ry="280" fill="url(#orb1)"/>
+  <ellipse cx="${orbX2}" cy="${orbY2}" rx="280" ry="220" fill="url(#orb2)"/>
+
+  <!-- Top decorative line -->
+  <rect x="${width/2 - 200}" y="90" width="400" height="2" rx="1" fill="url(#blueLine)"/>
+  <circle cx="${width/2 - 80}" cy="91" r="3" fill="${ELECTRIC_TEAL}" opacity="0.5"/>
+  <circle cx="${width/2}" cy="91" r="4" fill="${ELECTRIC_TEAL}" opacity="0.7"/>
+  <circle cx="${width/2 + 80}" cy="91" r="3" fill="${ELECTRIC_TEAL}" opacity="0.5"/>
+
+  <!-- Headline -->
+  <g filter="url(#glow)">
+    ${headlineLines.map((line, i) =>
+      `<text x="${width/2}" y="${startY + i * (hFont * 1.25)}" fill="${PURE_WHITE}" font-family="'Poppins','Inter',system-ui,sans-serif" font-size="${hFont}" font-weight="700" letter-spacing="-1" text-anchor="middle">${escapeXml(line)}</text>`
+    ).join('\n    ')}
+  </g>
+
+  <!-- Teal accent divider -->
+  <rect x="${width/2 - 50}" y="${startY + headlineLines.length * (hFont * 1.25) + 15}" width="100" height="3" rx="1.5" fill="url(#lineGrad)"/>
+
+  <!-- Subtext -->
+  <g filter="url(#soft)">
+    ${subtextLines.map((line, i) =>
+      `<text x="${width/2}" y="${startY + headlineLines.length * (hFont * 1.25) + 60 + i * (sFont * 1.5)}" fill="${LIGHT_GRAY}" font-family="'Inter','Poppins',system-ui,sans-serif" font-size="${sFont}" font-weight="400" letter-spacing="0.5" text-anchor="middle">${escapeXml(line)}</text>`
+    ).join('\n    ')}
+  </g>
+
+  <!-- Bottom accent -->
+  <rect x="${width/2 - 200}" y="${height - 150}" width="400" height="2" rx="1" fill="url(#blueLine)"/>
+
+  <!-- Watermark -->
+  <text x="${width/2}" y="${height - 100}" fill="${WATERMARK}" font-family="'Inter','Poppins',system-ui,sans-serif" font-size="14" font-weight="300" letter-spacing="6" text-anchor="middle">DIGITAL FTE</text>
+
+  <!-- Corner brackets -->
+  <g stroke="${ELECTRIC_TEAL}" stroke-width="1.5" fill="none" opacity="0.35">
+    <path d="M 70 70 L 70 110 M 70 70 L 110 70"/>
+    <path d="M ${width-70} 70 L ${width-70} 110 M ${width-70} 70 L ${width-110} 70"/>
+    <path d="M 70 ${height-70} L 70 ${height-110} M 70 ${height-70} L 110 ${height-70}"/>
+    <path d="M ${width-70} ${height-70} L ${width-70} ${height-110} M ${width-70} ${height-70} L ${width-110} ${height-70}"/>
+  </g>
+
+  <!-- Side accent lines -->
+  <line x1="40" y1="${height/2 - 100}" x2="40" y2="${height/2 + 100}" stroke="${LINKEDIN_BLUE}" stroke-width="2" opacity="0.2"/>
+  <line x1="${width-40}" y1="${height/2 - 100}" x2="${width-40}" y2="${height/2 + 100}" stroke="${LINKEDIN_BLUE}" stroke-width="2" opacity="0.2"/>
+</svg>`
+
+  fs.mkdirSync(GENERATED_DIR, { recursive: true })
+
+  // Convert SVG to high-quality PNG
+  const filename = `design_${Date.now()}.png`
+  const destPath = path.join(GENERATED_DIR, filename)
+
+  try {
+    const { default: sharp } = await import('sharp')
+    const svgBuf = Buffer.from(svg)
+    await sharp(svgBuf)
+      .resize(width, height, { fit: 'cover', kernel: sharp.kernel.lanczos3 })
+      .png({ quality: 98 })
+      .toFile(destPath)
+    console.log(`[ImageGen] Premium design PNG: ${filename}`)
+  } catch (e) {
+    // Fallback to SVG
+    const svgPath = path.join(GENERATED_DIR, `design_${Date.now()}.svg`)
+    fs.writeFileSync(svgPath, svg, 'utf-8')
+    console.log(`[ImageGen] Premium design SVG: ${path.basename(svgPath)}`)
+    const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`
+    return `${base}/generated/${path.basename(svgPath)}`
+  }
+
+  const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`
+  return `${base}/generated/${filename}`
+}
+
+function escapeXml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+// ─── Generate AI image via Pollinations + Upscale to HD ─────────────────────
+async function generateViaPollinations(topic, width = 1080, height = 1350) {
+  // Create cinematic, photorealistic prompt
+  const prompt = `Professional photograph of ${topic}, cinematic lighting, shallow depth of field, bokeh background, photorealistic, award winning photography, 8k resolution, ultra detailed, shot on Canon EOS R5, natural colors, editorial quality`
+  const encodedPrompt = encodeURIComponent(prompt)
+  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&model=flux&nologo=true&enhance=true&safe=false&seed=${Date.now()}`
+
+  console.log(`[ImageGen] Pollinations: Generating cinematic image...`)
+  const imgResp = await fetch(pollinationsUrl, {
+    redirect: 'follow',
+    signal: AbortSignal.timeout(90000) // 90s timeout
+  })
+
+  if (!imgResp.ok) throw new Error(`Pollinations: ${imgResp.status}`)
+
+  const imgBuf = Buffer.from(await imgResp.arrayBuffer())
+  if (imgBuf.length < 5000) throw new Error('Pollinations: Image too small')
+
+  fs.mkdirSync(GENERATED_DIR, { recursive: true })
+
+  // Upscale to target resolution with sharp
+  const filename = `ai_${Date.now()}.jpg`
+  const destPath = path.join(GENERATED_DIR, filename)
+
+  try {
+    const { default: sharp } = await import('sharp')
+
+    // Upscale + enhance quality
+    await sharp(imgBuf)
+      .resize(width, height, {
+        fit: 'cover',
+        position: 'centre',
+        kernel: sharp.kernel.lanczos3
+      })
+      .sharpen({ sigma: 0.8 })
+      .modulate({ brightness: 1.05, contrast: 1.1 })
+      .jpeg({ quality: 95, mozjpeg: true })
+      .toFile(destPath)
+
+    console.log(`[ImageGen] Upscaled to ${width}x${height}`)
+  } catch (e) {
+    // Fallback: save original
+    fs.writeFileSync(destPath, imgBuf)
+    console.log(`[ImageGen] Saved original (sharp failed: ${e.message})`)
+  }
+
+  const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`
+  console.log(`[ImageGen] AI image saved: ${filename} (${(fs.statSync(destPath).size/1024).toFixed(0)}KB)`)
+  return `${base}/generated/${filename}`
+}
+
+export async function generatePostImage(topic, style = 'professional', aspectRatio = '4:5', postContent = '') {
+  // 1. Branded template with structured content from post body
+  if (postContent) {
+    try {
+      return await generateCanvaStyleImage(topic, postContent)
+    } catch (e) {
+      console.warn(`[ImageGen] Branded template skipped: ${e.message} — falling through to photo modes`)
+    }
+  }
+
+  // 2. Premium LinkedIn Design (no content, just topic)
+  try {
+    return await generatePremiumDesignImage(topic)
+  } catch (e) {
+    console.warn('[ImageGen] Premium design failed:', e.message)
+  }
+
+  // 3. Pollinations AI — topic-relevant photo images
+  try {
+    console.log('[ImageGen] Falling back to Pollinations AI photo mode')
+    return await generateViaPollinations(topic)
+  } catch (e) {
+    console.warn('[ImageGen] Pollinations failed:', e.message)
+  }
+
+  // 4. Try Wikipedia image (topic-relevant, free)
+  try {
+    return await generateViaWikipedia(topic)
+  } catch (e) {
+    console.warn('[ImageGen] Wikipedia failed:', e.message)
+  }
+
+  // 5. Try OpenRouter Gemini image (if key has credits)
+  try {
+    const key = getOpenRouterKey()
+    if (key) {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://digitalfte.online',
+          'X-Title': 'Digital FTE',
+        },
+        body: JSON.stringify({
+          model: process.env.OPENROUTER_IMAGE_MODEL || 'google/gemini-2.5-flash-image',
+          max_tokens: 500,
+          messages: [{ role: 'user', content: `${topic}, professional social media image, premium quality, ${style}` }],
+          modalities: ['image', 'text'],
+          image_config: { aspect_ratio: aspectRatio },
+        }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(`OpenRouter ${data.error.code}: ${data.error.message}`)
+      const msg = data.choices?.[0]?.message
+      let imageUrl = null
+      if (msg?.images?.[0]) {
+        imageUrl = msg.images[0].image_url?.url || msg.images[0].imageUrl?.url || (typeof msg.images[0].image_url === 'string' ? msg.images[0].image_url : null)
+      }
+      if (!imageUrl && Array.isArray(msg?.content)) {
+        for (const part of msg.content) {
+          if (part?.type === 'image_url') { imageUrl = part.image_url?.url || (typeof part.image_url === 'string' ? part.image_url : null); if (imageUrl) break }
+        }
+      }
+      if (imageUrl) {
+        fs.mkdirSync(GENERATED_DIR, { recursive: true })
+        const filename = `or_img_${Date.now()}.png`
+        const destPath = path.join(GENERATED_DIR, filename)
+        if (imageUrl.startsWith('data:')) {
+          fs.writeFileSync(destPath, Buffer.from(imageUrl.split(',')[1], 'base64'))
+        } else {
+          const img = await fetch(imageUrl)
+          if (!img.ok) throw new Error(`Download failed: ${img.status}`)
+          fs.writeFileSync(destPath, Buffer.from(await img.arrayBuffer()))
+        }
+        const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`
+        console.log('[ImageGen] OpenRouter image saved:', filename)
+        return `${base}/generated/${filename}`
+      }
+    }
+  } catch (e) {
+    console.warn('[ImageGen] OpenRouter failed:', e.message)
+  }
+
+  // 6. Basic SVG fallback
+  return generateSVGImage(topic)
+}
+
+export async function generateImage(prompt) {
+  return generatePostImage(prompt)
+}

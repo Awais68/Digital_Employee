@@ -12,10 +12,12 @@ import {
   MessageSquare,
   Wifi,
   WifiOff,
+  Trash2,
 } from "lucide-react";
 import axios from "axios";
 import { useToast } from "../context/ToastContext";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 
 export default function WhatsApp() {
   const [conversations, setConversations] = useState([]);
@@ -43,6 +45,7 @@ export default function WhatsApp() {
     scrollToBottom();
   }, [messages]);
   const { success, error: toastError } = useToast();
+  const { isAdmin } = useAuth();
 
   const filteredConversations = conversations.filter(c =>
     !searchQuery || c.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -148,6 +151,17 @@ export default function WhatsApp() {
   const handleSendReply = async () => {
     if (!draftReply.trim() || !selectedConversation) return;
 
+    // Non-admins can never send directly — queue the reply for admin approval.
+    const queueForApproval = async (note) => {
+      const fallbackId = selectedConversation.phone || selectedConversation.name;
+      await axios.post("/api/whatsapp/reply", {
+        to: fallbackId,
+        content: draftReply,
+      });
+      success(note);
+      setDraftReply("");
+    };
+
     setSending(true);
     try {
       const to = selectedConversation.id; // use full _serialized ID (e.g. "227581844562009@lid")
@@ -160,28 +174,46 @@ export default function WhatsApp() {
         setDraftReply("");
         fetchMessages(selectedConversation.id);
       } else {
-        const fallbackId = selectedConversation.phone || selectedConversation.name;
-        await axios.post("/api/whatsapp/reply", {
-          to: fallbackId,
-          content: draftReply,
-        });
-        success("Reply submitted for approval (offline mode)");
-        setDraftReply("");
+        // Client online but send rejected (e.g. chat offline) — queue instead.
+        await queueForApproval("WhatsApp is offline — reply queued for approval.");
       }
-    } catch {
+    } catch (err) {
+      const status = err.response?.status;
+      if (status === 401 || status === 403) {
+        // Read-only user: send is admin-only. Save it so an admin can approve.
+        try {
+          await queueForApproval("Caution: Only an Admin can send. Your reply was queued — approve it from the Approvals page.");
+        } catch {
+          toastError("Caution: Only an Admin can send or approve WhatsApp replies.");
+        }
+        return;
+      }
+      // Admin, but the send failed (WhatsApp client not connected) — fall back to approval queue.
       try {
-        const fallbackId = selectedConversation.phone || selectedConversation.name;
-        await axios.post("/api/whatsapp/reply", {
-          to: fallbackId,
-          content: draftReply,
-        });
-        success("Reply saved for approval (whatsapp offline)");
-        setDraftReply("");
+        await queueForApproval("WhatsApp client is offline — reply queued. Reconnect WhatsApp to send, or approve from the Approvals page.");
       } catch {
-        toastError("Failed to send message");
+        toastError("Could not send: WhatsApp is offline and the reply couldn't be queued. Try again.");
       }
     } finally {
       setSending(false);
+    }
+  };
+
+  // Admin-only: delete a message row from the DB (history), not from WhatsApp itself.
+  const handleDeleteMessage = async (msgId) => {
+    if (!msgId) return;
+    if (!window.confirm("Delete this message from history? This cannot be undone.")) return;
+    try {
+      await axios.delete(`/api/whatsapp/messages/${encodeURIComponent(msgId)}`);
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+      success("Message deleted");
+    } catch (err) {
+      const s = err.response?.status;
+      toastError(
+        s === 401 || s === 403
+          ? "Admin only: you don't have permission to delete."
+          : "Failed to delete message.",
+      );
     }
   };
 
@@ -233,8 +265,17 @@ export default function WhatsApp() {
               messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex ${msg.sender === "Me" || msg.type === "outgoing" ? "justify-end" : "justify-start"}`}
+                  className={`group flex items-center gap-2 ${msg.sender === "Me" || msg.type === "outgoing" ? "justify-end" : "justify-start"}`}
                 >
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDeleteMessage(msg.id)}
+                      title="Delete message"
+                      className="order-first opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-red-400 hover:text-red-300"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                   <div
                     className={`
                     max-w-[85%] px-4 py-2 rounded-lg
@@ -272,12 +313,13 @@ export default function WhatsApp() {
                 value={draftReply}
                 onChange={(e) => setDraftReply(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSendReply()}
-                placeholder="Type a reply..."
+                placeholder={isAdmin ? "Type a reply..." : "Type a reply (queued for approval)..."}
                 className="flex-1 px-4 py-2 rounded-full dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-sm"
               />
               <button
                 onClick={handleSendReply}
                 disabled={sending || !draftReply.trim()}
+                title={isAdmin ? "Send message" : "Only admins can send directly — this will be queued for approval"}
                 className="p-2 rounded-full bg-[#00FF88] text-[#0F1A2E] disabled:opacity-50"
               >
                 {sending ? (
@@ -768,8 +810,17 @@ export default function WhatsApp() {
                   messages.map((msg) => (
                     <div
                       key={msg.id}
-                      className={`flex ${msg.sender === "Me" || msg.type === "outgoing" ? "justify-end" : "justify-start"}`}
+                      className={`group flex items-center gap-2 ${msg.sender === "Me" || msg.type === "outgoing" ? "justify-end" : "justify-start"}`}
                     >
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          title="Delete message"
+                          className="order-first opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-red-400 hover:text-red-300"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                       <div
                         className={`
                       max-w-md px-4 py-2 rounded-lg
@@ -817,12 +868,13 @@ export default function WhatsApp() {
                     value={draftReply}
                     onChange={(e) => setDraftReply(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && handleSendReply()}
-                    placeholder="Type a reply..."
+                    placeholder={isAdmin ? "Type a reply..." : "Type a reply (will be queued for admin approval)..."}
                     className="flex-1 px-4 py-2 rounded-full dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-sm"
                   />
                   <button
                     onClick={handleSendReply}
                     disabled={sending || !draftReply.trim()}
+                    title={isAdmin ? "Send message" : "Only admins can send directly — this will be queued for approval"}
                     className="p-2 rounded-full bg-[#00FF88] text-[#0F1A2E] disabled:opacity-50 hover:opacity-90 transition-opacity"
                   >
                     {sending ? (
@@ -832,6 +884,11 @@ export default function WhatsApp() {
                     )}
                   </button>
                 </div>
+                {!isAdmin && (
+                  <p className="text-[10px] dark:text-[#7A7A85] text-gray-500 mt-1.5 px-2">
+                    Read-only role: replies are queued for admin approval, not sent directly.
+                  </p>
+                )}
               </div>
             </>
           ) : (

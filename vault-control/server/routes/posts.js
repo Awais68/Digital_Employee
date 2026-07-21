@@ -43,6 +43,21 @@ const STRICT_RULES = {
   }
 }
 
+// Insert missing @mentions inline instead of dumping at the end
+function insertMentionsInline(content, mentions) {
+  const missingMentions = mentions.filter(m => !content.toLowerCase().includes(m.toLowerCase()))
+  if (!missingMentions.length) return content
+
+  // Find the last paragraph break before hashtags start, or use last sentence end
+  const hashtagIndex = content.search(/#\w/)
+  const insertionPoint = hashtagIndex > 50 ? hashtagIndex : content.length
+
+  const mentionText = missingMentions.map(m => `@${m}`).join(', ')
+  const inlineSentence = `\n\nShoutout to ${mentionText} for their incredible work in this space!`
+
+  return content.slice(0, insertionPoint).trimEnd() + inlineSentence + '\n\n' + content.slice(insertionPoint).trimStart()
+}
+
 // STRICT VALIDATION FUNCTION
 function validatePostStrict(content, platforms, hasImage) {
   const errors = []
@@ -99,7 +114,7 @@ function validatePostStrict(content, platforms, hasImage) {
   // Emoji validation (reduced to 1 minimum)
   if (STRICT_RULES.requireEmojis) {
     const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{24C2}-\u{1F251}]/gu
-    const emojis = content.match(emojiRegex) || []
+    const emojis = (content.match(emojiRegex) || []).filter(m => m.codePointAt(0) !== 0xFE0F)
     if (emojis.length < 1) {
       errors.push(`No emojis found - add at least 1 for engagement`)
     }
@@ -353,13 +368,12 @@ router.post('/publish-now', requireAdmin, memoryUpload.single('image'), async (r
     console.log('[PublishNow] Platforms:', platformList)
     console.log('[PublishNow] Has image:', !!imageBuffer, imageBuffer ? req.file.size + ' bytes' : '')
 
-    // AUTO-ADD MENTIONS if missing (case-insensitive check)
-    const mentionsText = '\n\nAmeen Alam, Zia Khan, Asharib Ali'
+    // AUTO-ADD MENTIONS inline if missing (case-insensitive check)
     const contentLower = (content || '').toLowerCase()
     const hasMentions = STRICT_RULES.mandatoryMentions.some(m => contentLower.includes(m.toLowerCase()))
     if (!hasMentions && content) {
-      content = content.trimEnd() + mentionsText
-      console.log('[PublishNow] Auto-added mandatory mentions')
+      content = insertMentionsInline(content, STRICT_RULES.mandatoryMentions)
+      console.log('[PublishNow] Auto-added mandatory mentions inline')
     }
 
     // STRICT VALIDATION

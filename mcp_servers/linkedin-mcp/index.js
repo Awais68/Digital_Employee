@@ -23,6 +23,15 @@ try {
   console.error(`LinkedIn config file not found at ${configPath}: ${error.message}`)
 }
 
+// Load mention config (name → URN mappings)
+const mentionConfigPath = path.join(__dirname, '../../config/linkedin_mentions.json');
+let MENTION_CONFIG = {};
+try {
+  MENTION_CONFIG = JSON.parse(fs.readFileSync(mentionConfigPath, 'utf8'));
+} catch (error) {
+  console.error(`LinkedIn mention config not found at ${mentionConfigPath}: ${error.message}`)
+}
+
 if (!ACCESS_TOKEN || ACCESS_TOKEN === 'your-linkedin-access-token') {
   console.error('LinkedIn MCP: LINKEDIN_ACCESS_TOKEN not set — post_to_linkedin will return 401')
 }
@@ -41,6 +50,43 @@ function linkedinHeaders() {
 function makeUrn(urn) {
   if (urn.startsWith('urn:li:person:')) return urn;
   return `urn:li:person:${urn}`;
+}
+
+// Build attributes array for hashtags and mention annotations in UGC Posts
+function buildAttributes(text) {
+  const attributes = [];
+
+  // Find hashtags
+  const hashtagRe = /#(\w+)/g;
+  let match;
+  while ((match = hashtagRe.exec(text)) !== null) {
+    attributes.push({
+      start: match.index,
+      length: match[0].length,
+      entityType: 'HASHTAG',
+      hashtag: { tag: match[1] },
+    });
+  }
+
+  // Find @mentions and resolve via config
+  const mentionRe = /@(\w+(?:\s+\w+)?)/g;
+  while ((match = mentionRe.exec(text)) !== null) {
+    const name = match[1];
+    const entry = Object.entries(MENTION_CONFIG).find(
+      ([key]) => key.toLowerCase() === name.toLowerCase()
+    );
+    if (entry) {
+      const [, data] = entry;
+      attributes.push({
+        start: match.index,
+        length: match[0].length,
+        entityType: 'MEMBER',
+        member: { urn: data.urn },
+      });
+    }
+  }
+
+  return attributes.length ? attributes : undefined;
 }
 
 // MCP Server
@@ -89,6 +135,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const author = makeUrn(USER_URN);
         const headers = linkedinHeaders();
 
+        const shareCommentary = { text: args.text };
+        const attrs = buildAttributes(args.text);
+        if (attrs) shareCommentary.attributes = attrs;
+
         if (!args.image_url) {
           // Text-only post
           const data = await axios.post(`${LINKEDIN_API}/ugcPosts`, {
@@ -96,7 +146,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             lifecycleState: 'PUBLISHED',
             specificContent: {
               'com.linkedin.ugc.ShareContent': {
-                shareCommentary: { text: args.text },
+                shareCommentary,
                 shareMediaCategory: 'NONE',
               },
             },
@@ -153,7 +203,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           lifecycleState: 'PUBLISHED',
           specificContent: {
             'com.linkedin.ugc.ShareContent': {
-              shareCommentary: { text: args.text },
+              shareCommentary,
               shareMediaCategory: 'IMAGE',
               media: [{
                 status: 'READY',

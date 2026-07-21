@@ -1,18 +1,18 @@
 {
-  "timestamp": "2026-07-09T00:45:01.323590",
+  "timestamp": "2026-07-22T01:30:01.643960",
   "status": {
-    "odoo_local": false,
-    "dashboard": true,
+    "odoo_local": true,
+    "dashboard": false,
     "gmail_watcher": false,
     "whatsapp_watcher": false,
-    "disk_usage_pct": 93,
+    "disk_usage_pct": 86,
     "needs_action_backlog": 0
   },
   "alerts": [
-    "ALERT: Odoo port 8069 not responding",
+    "ALERT: Dashboard port 3000 not responding",
     "ALERT: gmail_watcher not running!",
     "ALERT: whatsapp_watcher not running!",
-    "ALERT: Disk usage at 93%"
+    "ALERT: Disk usage at 86%"
   ],
   "overall": "DEGRADED"
 }
