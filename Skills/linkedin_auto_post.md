@@ -181,7 +181,7 @@ expires: 2026-04-09
 - **Word Count:** XXX / 300 words
 - **Character Count:** XXXX / 2800 characters
 - **Hashtag Count:** X / 5 hashtags
-- **Emoji Count:** X / 5 emojis
+- **Emojis:** Optional
 
 ## Media Assets
 - [ ] Image: `/Assets/LinkedIn/[filename].png`

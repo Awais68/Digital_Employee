@@ -94,6 +94,76 @@ async function handleCheckEmails(action) {
   return { success: true, emails: result.rows, filter };
 }
 
+async function handleCreateInvoice(action, eventBus) {
+  // Creates a pending invoice + approval request. Human must approve.
+  const db = await getDb();
+  const customer = action.customer || "Unknown Customer";
+  const amount = action.amount || 0;
+  const description = action.description || "";
+  const customerEmail = action.customerEmail || "";
+
+  // 1. Create a todo for the invoice
+  const todoResult = await db.query(
+    `INSERT INTO todos (title, description, priority, status, source)
+     VALUES ($1, $2, 'high', 'pending', 'chatbot')
+     RETURNING id, title, priority, status, created_at`,
+    [`Invoice: ${customer} - $${amount}`, description],
+  );
+  const todo = todoResult.rows[0];
+  eventBus?.emit("todo:created", todo);
+
+  // 2. Create approval file in Pending_Approval/
+  const vaultPath = process.env.VAULT_PATH || ".";
+  const approvalDir = path.join(vaultPath, "Pending_Approval");
+  fs.mkdirSync(approvalDir, { recursive: true });
+
+  const approvalFile = path.join(
+    approvalDir,
+    `INVOICE_${Date.now()}_${customer.replace(/[^a-zA-Z0-9]/g, "_")}.md`,
+  );
+
+  const lineItems = action.lineItems
+    ? action.lineItems
+        .map((li) => `| ${li.description || "Service"} | ${li.quantity || 1} | $${li.price || amount} |`)
+        .join("\n")
+    : `| ${description || "Service"} | 1 | $${amount} |`;
+
+  const approvalContent = `---
+type: invoice
+customer: ${customer}
+amount: ${amount}
+description: ${description}
+customer_email: ${customerEmail}
+status: pending_approval
+created: ${new Date().toISOString()}
+action: send_invoice
+todo_id: ${todo.id}
+---
+
+## Invoice: ${customer}
+
+| Item | Qty | Price |
+|------|-----|-------|
+${lineItems}
+
+**Total: $${amount}**
+
+Move to /Approved/ to send this invoice.
+`;
+
+  fs.writeFileSync(approvalFile, approvalContent, "utf-8");
+  console.log(`[chatbotRouter] Invoice approval file created: ${approvalFile}`);
+
+  // 3. Broadcast
+  global.wsBroadcast?.({
+    type: "invoice:created",
+    invoice: { customer, amount, description, todo_id: todo.id, file: approvalFile },
+  });
+  eventBus?.emit("invoice:created", { customer, amount, todo, file: approvalFile });
+
+  return { success: true, todo, file: approvalFile };
+}
+
 async function handleSendWhatsApp(action, eventBus) {
   // WhatsApp send — eventBus se handle hota hai (whatsappService)
   eventBus?.emit("chatbot:send_whatsapp", {
@@ -116,6 +186,8 @@ async function executeAction(action, eventBus) {
         return await handleApproveDraft(action, eventBus);
       case "CHECK_EMAILS":
         return await handleCheckEmails(action);
+      case "CREATE_INVOICE":
+        return await handleCreateInvoice(action, eventBus);
       case "SEND_WHATSAPP":
         return await handleSendWhatsApp(action, eventBus);
       default:
@@ -194,6 +266,11 @@ router.post("/chat/stream", async (req, res) => {
       // Draft created → frontend update
       if (action.type === "CREATE_DRAFT" && result?.success) {
         send({ type: "draft_created", post: result.post });
+      }
+
+      // Invoice created → frontend update
+      if (action.type === "CREATE_INVOICE" && result?.success) {
+        send({ type: "invoice_created", invoice: result });
       }
     }
 

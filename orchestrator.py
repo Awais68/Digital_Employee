@@ -157,7 +157,7 @@ Best regards,
 # Task type patterns for auto-routing
 TASK_PATTERNS = {
     "email": ["email", "gmail", "message", "inbox", "send", "reply"],
-    "linkedin": ["linkedin", "post", "connection", "message", "network"],
+    "linkedin": ["linkedin", "connection", "network"],
     "whatsapp": ["whatsapp", "type: whatsapp"],
     "document": ["document", "doc", "report", "summary", "write", "create"],
     "calendar": ["calendar", "meeting", "schedule", "event", "appointment"],
@@ -511,7 +511,6 @@ def generate_linkedin_post(content: str, filename: str) -> Dict[str, Any]:
                 "hashtags": hashtags,
                 "word_count": len(full_post.split()),
                 "char_count": len(full_post),
-                "emoji_count": sum(1 for c in full_post if c in "🚀🎯💡📈✅🔥👇💼🤖⚡🌐✨"),
                 "hashtag_count": len(hashtags),
                 "mention_count": len(mentions_list),
                 "estimated_reach": calculate_estimated_reach(hashtags),
@@ -566,7 +565,6 @@ def _generate_linkedin_post_static(content: str, filename: str) -> Dict[str, Any
     # Calculate metrics
     word_count = len(full_post.split())
     char_count = len(full_post)
-    emoji_count = sum(1 for c in full_post if c in '🚀🎯💡📈✅🔥👇💼🤖⚡')
     hashtag_count = len(hashtags)
     mention_count = 11  # 5 mandatory + 6 additional mentions
 
@@ -583,7 +581,6 @@ def _generate_linkedin_post_static(content: str, filename: str) -> Dict[str, Any
         "hashtags": hashtags,
         "word_count": word_count,
         "char_count": char_count,
-        "emoji_count": emoji_count,
         "hashtag_count": hashtag_count,
         "mention_count": mention_count,
         "estimated_reach": estimated_reach,
@@ -889,7 +886,6 @@ original_trigger: {original_filename}
 | **Character Count** | {post_data["char_count"]} / 2,800 characters |
 | **Hashtag Count** | {post_data["hashtag_count"]} / 5 hashtags |
 | **Mention Count** | {post_data["mention_count"]} woven mentions |
-| **Emoji Count** | {post_data["emoji_count"]} / 5 emojis |
 | **Readability Score** | Easy (short paragraphs, bullet points) |
 | **Optimal Post Time** | {post_data["optimal_post_time"]} |
 
@@ -2402,6 +2398,7 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
 
                 logger.success(f"✅ Created LinkedIn post draft: {approval_filename}")
                 logger.info(f"📍 Saved to: /Pending_Approval/{approval_filename}")
+                logger.warning("⚠️  Post NOT published yet — move the draft to /Approved/ to publish")
                 linkedin_posts_generated += 1
                 approvals_created += 1
 
@@ -2411,7 +2408,7 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
                     processed_count += 1
                     duration = (datetime.now() - start_time).total_seconds()
                     metrics.record_file_processed(task_type, duration)
-                    logger.success(f"✓ Completed: {file_path.name} ({duration:.2f}s)")
+                    logger.success(f"✓ Draft created: {file_path.name} ({duration:.2f}s)")
                 else:
                     metrics.record_error(f"Failed to move: {file_path.name}", "FileMoveError")
                     logger.error(f"✗ Failed to move: {file_path.name}")
@@ -2495,19 +2492,65 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
                 if email_data:
                     logger.info(f"📧 Email detected: {email_data.get('subject', 'N/A')}")
 
+            # ── SMART EMAIL FILTER: skip no-reply, promotional, informational ──
+            skip_reply_draft = False
+            if email_data:
+                sender = (email_data.get('from', email_data.get('sender', ''))).lower()
+                subject = email_data.get('subject', '').lower()
+                body = email_data.get('body', '').lower()
+
+                no_reply_patterns = ['noreply', 'no-reply', 'no_reply', 'donotreply', 'do-not-reply',
+                                     'do_not_reply', 'noreply@', 'no-reply@', 'donotreply@',
+                                     'notification@', 'notifications@', 'alert@', 'alerts@',
+                                     'mailer-daemon', 'postmaster@']
+                is_no_reply = any(p in sender for p in no_reply_patterns)
+
+                promo_patterns = ['newsletter', 'unsubscribe', 'marketing', 'promotion', 'promo',
+                                  'weekly digest', 'monthly digest', 'special offer', 'limited time',
+                                  'coupon', 'discount', 'recommended for you', 'trending', 'popular']
+                is_promotional = any(p in subject for p in promo_patterns) or any(p in body for p in promo_patterns)
+
+                info_patterns = ['your login', 'password changed', 'account update', 'verification code',
+                                 'otp:', 'one-time pin', '2fa', 'two-factor', 'email changed',
+                                 'welcome to', 'get started', 'onboarding', 'thanks for signing',
+                                 'receipt', 'order confirmation', 'subscription confirmed',
+                                 'weekly report', 'monthly statement', 'your statement']
+                is_informational = any(p in subject for p in info_patterns) or any(p in body for p in info_patterns)
+
+                if is_no_reply:
+                    logger.info(f"⏭️  No-reply email detected: {email_data.get('subject', 'N/A')} — skipping entirely")
+                    # Move to Done — no plan, no draft
+                    destination_path = FOLDERS["done"] / file_path.name
+                    if move_file(file_path, destination_path):
+                        processed_count += 1
+                        logger.success(f"✓ Skipped no-reply: {file_path.name}")
+                    continue
+
+                if is_promotional or is_informational:
+                    tag = 'promotional' if is_promotional else 'informational'
+                    logger.info(f"⏭️  {tag.title()} email detected: {email_data.get('subject', 'N/A')} — will create plan but skip draft")
+                    skip_reply_draft = True
+
             # Create plan with reply draft
             plan_filename = f"PLAN_{file_path.name}"
             plan_path = FOLDERS["plans"] / plan_filename
-            plan_content, reply_draft = create_plan_content(
-                original_content, file_path.name, email_data
-            )
+
+            if skip_reply_draft:
+                # Still create a plan but without reply draft
+                plan_content, _ = create_plan_content(
+                    original_content, file_path.name, email_data=None
+                )
+            else:
+                plan_content, reply_draft = create_plan_content(
+                    original_content, file_path.name, email_data
+                )
 
             with open(plan_path, "w", encoding="utf-8") as f:
                 f.write(plan_content)
             logger.success(f"✅ Created plan: {plan_filename}")
 
             # Create approval file if reply draft generated
-            if reply_draft and email_data:
+            if not skip_reply_draft and reply_draft and email_data:
                 approval_path = create_approval_file(
                     file_path.name,
                     reply_draft,
@@ -2806,7 +2849,15 @@ def extract_linkedin_post_content(content: str) -> Optional[Dict[str, str]]:
             content_lines.append(line)
 
     if content_lines:
-        post_data["content"] = "\n".join(content_lines).strip()
+        cleaned = []
+        for line in content_lines:
+            stripped = line.strip()
+            if stripped.startswith("Today's focus:") or stripped.startswith("Today focus:"):
+                continue
+            if stripped.startswith("Create and prepare") and "LinkedIn" in stripped:
+                continue
+            cleaned.append(line)
+        post_data["content"] = "\n".join(cleaned).strip()
     else:
         # Fallback: extract from code blocks
         in_code_block = False

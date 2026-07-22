@@ -266,6 +266,35 @@ router.post('/restart', requireAdmin, async (req, res) => {
   }
 })
 
+// POST /scan-qr — force QR regeneration (destroy session, restart client)
+router.post('/scan-qr', requireAdmin, async (req, res) => {
+  try {
+    const ws = await import('../services/whatsappService.js')
+    await ws.forceQRRegen()
+    res.json({ success: true, message: 'QR regeneration initiated. Scan the new QR code.' })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// DELETE /chat/:chatId — delete an entire conversation (all messages for that chat from DB)
+router.delete('/chat/:chatId', requireAdmin, async (req, res) => {
+  const { chatId } = req.params
+  try {
+    const phone = chatId.replace(/@c\.us|@g\.us|@lid|@broadcast/g, '')
+    const result = await query(
+      `DELETE FROM whatsapp_messages WHERE from_number LIKE $1 OR to_number LIKE $1 RETURNING id`,
+      [`%${phone}%`]
+    )
+    const deletedCount = result.rowCount || 0
+    console.log(`[WhatsApp] Deleted conversation ${chatId}: ${deletedCount} messages removed`)
+    res.json({ success: true, deletedCount, message: `Deleted ${deletedCount} message(s) from conversation` })
+  } catch (e) {
+    console.error('[WhatsApp] delete chat error:', e.message)
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
 // ── ADD before: export default router ─────────────────────────
 
 // GET /live-chats — fetch from live WA session OR DB fallback

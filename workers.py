@@ -24,16 +24,14 @@ PID_FILE = BASE_DIR / ".workers.pid"
 LOG_FILE = BASE_DIR / "Logs" / "workers.log"
 LOCK_FILE = BASE_DIR / ".workers.lock"
 
+# NOTE: whatsapp_watcher removed 2026-07-23. Vault-control's embedded
+# whatsapp-web.js (LocalAuth) handles WhatsApp. The Playwright watcher
+# competed for the same phone session.
 WORKERS = {
     "orchestrator": {
         "script": "orchestrator.py",
         "enabled_env": "ENABLE_ORCHESTRATOR",
         "description": "Main orchestrator - processes approvals, manages workflows"
-    },
-    "whatsapp_watcher": {
-        "script": "whatsapp_watcher.py",
-        "enabled_env": "WHATSAPP_ENABLED",
-        "description": "WhatsApp watcher - monitors for new messages"
     },
     "gmail_watcher": {
         "script": "gmail_watcher.py",

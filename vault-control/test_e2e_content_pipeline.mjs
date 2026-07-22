@@ -7,7 +7,7 @@
  *   ✓ One shared master post per run, not 3 independent generations
  *   ✓ Every post traces to ≥2 concrete points from live research
  *   ✓ Zero instances of banned generic filler phrasing
- *   ✓ Exactly 1–2 emojis per post
+ *   ✓ Emojis optional — no minimum requirement
  *   ✓ Mentions rendered as proper inline mentions, not trailing name-dump
  *   ✓ Image: logo and headline visibly larger, no dead space, dynamic CTA question, trending badge
  *   ✓ All 4 previously known image bugs remain fixed
@@ -211,9 +211,7 @@ check(linkedinWords <= 300, 'Word count ≤300', `${linkedinWords} words`);
 check(linkedinHashtags.length >= 3, 'Hashtags ≥3', `${linkedinHashtags.length} tags`);
 check(linkedinHashtags.length <= 5, 'Hashtags ≤5', `${linkedinHashtags.length} tags`);
 
-// Emojis (exactly 1-2)
-check(linkedinEmojiCount >= 1, 'Emojis ≥1', `${linkedinEmojiCount} found`);
-check(linkedinEmojiCount <= 2, 'Emojis ≤2', `${linkedinEmojiCount} found`);
+// Emojis (optional — removed compulsory requirement)
 
 // Banned patterns
 check(!containsBannedPatterns(linkedinContent), 'No banned filler phrases',
@@ -439,8 +437,7 @@ const igPost = unified.posts.instagram;
 
 if (fbPost) {
   const fbEmoji = countEmojis(fbPost.content);
-  check(fbEmoji >= 1, 'Facebook: ≥1 emoji', `${fbEmoji} found`);
-  check(fbEmoji <= 2, 'Facebook: ≤2 emojis', `${fbEmoji} found`);
+  // Emojis optional — removed compulsory requirement
   check(!containsBannedPatterns(fbPost.content), 'Facebook: no banned patterns', '');
   const fbWords = fbPost.content.split(/\s+/).filter(Boolean).length;
   check(fbWords >= 50, 'Facebook: word count ≥50', `${fbWords} words`);
@@ -449,8 +446,7 @@ if (fbPost) {
 
 if (igPost) {
   const igEmoji = countEmojis(igPost.content);
-  check(igEmoji >= 1, 'Instagram: ≥1 emoji', `${igEmoji} found`);
-  check(igEmoji <= 2, 'Instagram: ≤2 emojis', `${igEmoji} found`);
+  // Emojis optional — removed compulsory requirement
   check(!containsBannedPatterns(igPost.content), 'Instagram: no banned patterns', '');
 }
 

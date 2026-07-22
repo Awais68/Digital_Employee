@@ -36,7 +36,7 @@ Looking ahead, we're excited to continue building on this momentum and deliverin
 - **Word Count:** 128 / 300 words
 - **Character Count:** 892 / 2800 characters
 - **Hashtag Count:** 5 / 5 hashtags
-- **Emoji Count:** 4 / 5 emojis
+- **Emojis:** Optional
 
 ## Media Assets
 - [ ] Image: `/Assets/LinkedIn/team_milestone.png`

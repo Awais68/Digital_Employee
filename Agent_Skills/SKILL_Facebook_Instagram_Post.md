@@ -165,7 +165,7 @@ Use this skill when:
 - Exceed 2,200 characters
 - Use irrelevant or banned hashtags
 - Post without high-quality visuals
-- Overuse emojis (keep to 3-5 max)
+- Overuse emojis (keep optional, use sparingly if at all)
 - Include links in captions (not clickable)
 - Use "engagement bait" phrases excessively
 

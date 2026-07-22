@@ -7,31 +7,12 @@ module.exports = {
       interpreter: 'node',
       env: {
         NODE_ENV: 'production',
+        ENABLE_WHATSAPP: 'true',  // vault-control handles WhatsApp (whatsapp-web.js + LocalAuth)
       },
       max_restarts: 5,
       restart_delay: 5000,
       watch: false,
       merge_logs: true,
-    },
-    // NOTE: whatsapp-watcher (Python/Playwright) removed 2026-07-08. The embedded
-    // Node client in vault-control (whatsapp-web.js) is the single source of truth
-    // for WhatsApp — the two competed for the same phone session. Toggle it via
-    // ENABLE_WHATSAPP in .env, not here.
-    {
-      name: 'gmail-watcher',
-      script: 'gmail_watcher.py',
-      args: '--continuous',
-      cwd: __dirname,
-      interpreter: 'python3',
-      max_restarts: 5,
-      restart_delay: 5000,
-      watch: false,
-      merge_logs: true,
-      env: {
-        DRY_RUN: process.env.DRY_RUN || 'true',
-      },
-      error_file: 'Logs/gmail-watcher-error.log',
-      out_file: 'Logs/gmail-watcher-out.log',
     },
     {
       name: 'email-mcp',

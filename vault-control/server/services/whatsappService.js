@@ -106,6 +106,7 @@ export async function initWhatsApp() {
       }
 
       await saveMessageToDB(msgData)
+      createWhatsAppTaskFile(msgData)
 
       chatsCache = null
 
@@ -141,6 +142,53 @@ export async function initWhatsApp() {
     console.error('[WhatsApp] Init failed:', err.message)
     waStatus = 'error'
     notify('error', 'WhatsApp Init Error', err.message)
+  }
+}
+
+function createWhatsAppTaskFile(msg) {
+  try {
+    const vaultPath = process.env.VAULT_PATH || '.'
+    const needsActionDir = path.resolve(vaultPath, 'Needs_Action')
+    fs.mkdirSync(needsActionDir, { recursive: true })
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)
+    const safeName = (msg.contact || 'whatsapp').replace(/[^\w\s-]/g, '').substring(0, 30)
+    const safeBody = msg.body.replace(/[^\w\s-]/g, '_').substring(0, 40)
+    const filename = `${timestamp}_whatsapp_${safeName}_${safeBody}.md`
+    const filePath = path.join(needsActionDir, filename)
+
+    if (fs.existsSync(filePath)) return
+
+    const content = `---
+type: whatsapp
+from: ${msg.contact || msg.from}
+body: ${msg.body}
+received: ${msg.timestamp}
+status: pending
+is_group: ${msg.isGroup}
+msg_id: ${msg.id}
+---
+
+# WhatsApp Message from ${msg.contact || msg.from}
+
+| Field | Value |
+|-------|-------|
+| **From** | ${msg.contact || msg.from} |
+| **Received** | ${msg.timestamp} |
+| **Type** | ${msg.isGroup ? 'Group' : 'Personal'} |
+
+## Message
+
+${msg.body}
+
+---
+
+*Processed by vault-control WhatsApp service*
+`
+    fs.writeFileSync(filePath, content, 'utf-8')
+    console.log(`[WhatsApp] Task file created: ${filename}`)
+  } catch (err) {
+    console.error('[WhatsApp] Error creating task file:', err.message)
   }
 }
 
@@ -221,6 +269,35 @@ export async function getLiveChatMessages(chatId, limit = 50) {
     console.error('[WhatsApp] getLiveChatMessages error:', e.message)
     return []
   }
+}
+
+export async function forceQRRegen() {
+  console.log('[WhatsApp] Force QR regeneration requested — clearing session...')
+  if (waClient) {
+    try { waClient.destroy() } catch {}
+    waClient = null
+  }
+  waStatus = 'disconnected'
+  qrData = null
+  initTried = false
+
+  // Clear saved auth session files so a fresh QR is generated
+  const authDir = path.join(SESSION_DIR, '.wwebjs_auth')
+  if (fs.existsSync(authDir)) {
+    fs.rmSync(authDir, { recursive: true, force: true })
+    console.log('[WhatsApp] Cleared .wwebjs_auth session folder')
+  }
+  const sessionFile = path.join(SESSION_DIR, 'ai-employee.json')
+  if (fs.existsSync(sessionFile)) {
+    fs.rmSync(sessionFile, { force: true })
+    console.log('[WhatsApp] Cleared session file: ai-employee.json')
+  }
+
+  broadcast('whatsapp:status', { status: 'disconnected', reason: 'qr_regen' })
+
+  // Restart after a brief delay
+  setTimeout(() => initWhatsApp(), 1000)
+  return { success: true }
 }
 
 export function getStatus() { return waStatus }

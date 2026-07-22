@@ -13,6 +13,8 @@ import {
   Wifi,
   WifiOff,
   Trash2,
+  QrCode,
+  XCircle,
 } from "lucide-react";
 import axios from "axios";
 import { useToast } from "../context/ToastContext";
@@ -119,6 +121,35 @@ export default function WhatsApp() {
       setMessages([]);
     } finally {
       setMessagesLoading(false);
+    }
+  };
+
+  const handleScanQR = async () => {
+    try {
+      await axios.post("/api/whatsapp/scan-qr");
+      success("QR regeneration initiated — scan the new code when it appears.");
+    } catch (err) {
+      toastError("Failed to regenerate QR code.");
+    }
+  };
+
+  const handleDeleteChat = async (conv) => {
+    if (!conv?.id) return;
+    if (!window.confirm(`Delete entire conversation with "${conv.name}"? All messages will be removed from history. This cannot be undone.`)) return;
+    try {
+      await axios.delete(`/api/whatsapp/chat/${encodeURIComponent(conv.id)}`);
+      setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+      if (selectedConversation?.id === conv.id) {
+        setSelectedConversation(null);
+        setMessages([]);
+      }
+      success(`Conversation with "${conv.name}" deleted.`);
+    } catch (err) {
+      toastError(
+        err.response?.status === 401 || err.response?.status === 403
+          ? "Admin only: you don't have permission to delete conversations."
+          : "Failed to delete conversation.",
+      );
     }
   };
 
@@ -436,12 +467,24 @@ export default function WhatsApp() {
                 : "Disconnected"}
           </span>
         </div>
-        <button
-          onClick={fetchConversations}
-          className="text-xs dark:text-[#7A7A85] underline"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {(waStatus === "disconnected" || waStatus === "qr_pending") && (
+            <button
+              onClick={handleScanQR}
+              title="Generate new QR code"
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded dark:bg-yellow-500/20 dark:text-yellow-400 bg-yellow-100 text-yellow-700 hover:dark:bg-yellow-500/30 transition-colors"
+            >
+              <QrCode size={12} />
+              Scan QR
+            </button>
+          )}
+          <button
+            onClick={fetchConversations}
+            className="text-xs dark:text-[#7A7A85] underline"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* QR Code Scanner Panel */}
@@ -461,6 +504,13 @@ export default function WhatsApp() {
           <p className="text-[10px] dark:text-[#7A7A85] mt-4 animate-pulse">
             Waiting for scan...
           </p>
+          <button
+            onClick={handleScanQR}
+            className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 rounded-lg text-xs font-medium dark:bg-yellow-500/20 dark:text-yellow-400 bg-yellow-100 text-yellow-700 hover:dark:bg-yellow-500/30 transition-colors"
+          >
+            <QrCode size={14} />
+            Regenerate QR Code
+          </button>
         </div>
       )}
 
@@ -797,6 +847,15 @@ export default function WhatsApp() {
                   <button className="p-2 rounded-full dark:bg-[#1A1A24] hover:dark:bg-[#2A3E5F] transition-colors">
                     <Phone size={18} className="dark:text-[#00FF88]" />
                   </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDeleteChat(selectedConversation)}
+                      title="Delete entire conversation"
+                      className="p-2 rounded-full dark:bg-red-500/10 hover:dark:bg-red-500/20 transition-colors"
+                    >
+                      <XCircle size={18} className="text-red-400" />
+                    </button>
+                  )}
                 </div>
               </div>
 

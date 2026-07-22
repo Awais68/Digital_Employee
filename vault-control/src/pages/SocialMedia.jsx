@@ -21,7 +21,7 @@ const MANDATORY_MENTIONS = ['Ameen Alam', 'Zia Khan', 'Asharib Ali']
 const STRICT_RULES = {
   requireImage: true,
   requireHashtags: true,
-  requireEmojis: true,
+  requireEmojis: false,
   requireMentions: true,
   minHashtags: 1,
   maxHashtags: 5,
@@ -112,14 +112,6 @@ export default function SocialMedia() {
       }
     }
     
-    // Emoji validation
-    if (STRICT_RULES.requireEmojis) {
-      const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{24C2}-\u{1F251}]/gu
-      const emojis = text.match(emojiRegex) || []
-      if (emojis.length < 1) {
-        errors.push(`No emojis found - add at least 1 for engagement`)
-      }
-    }
     
     // Spam detection
     const lowerContent = text.toLowerCase()

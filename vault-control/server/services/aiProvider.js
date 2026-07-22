@@ -121,13 +121,13 @@ function generateSmartMock(topic) {
   const shortTopic = cleanTopic.split(' ').slice(0, 5).join(' ')
 
   const bodies = [
-    `The most interesting part of working with ${shortTopic} has been seeing where assumptions break down in practice. What looks good in a demo often needs significant adaptation for real-world constraints like latency, cost, or edge cases.\n\nTeams that invest in evaluation and observability upfront tend to move faster in the long run. It is not the most glamorous work, but it pays off.`,
-    `I recently reviewed how different teams approach ${shortTopic}. The biggest difference between ones that ship successfully and ones that stall comes down to how they handle the iteration loop.\n\nThe teams that succeed treat iteration as the core workflow — they ship small, measure what happens, and adjust. The ones that struggle spend too long trying to get it right before shipping anything.`,
-    `Something that does not get enough attention with ${shortTopic}: the integration details matter more than the core technology choice. The adapters, the error handling, the data transformations — that is where most of the real work lives.\n\nA clean API matters less than robust error recovery. Choose tools that fail gracefully.`,
+    `${shortTopic} is transforming how teams operate — but success depends on the right strategy and execution. Whether you are exploring or already scaling, having the right partner makes all the difference.\n\n👉 DM me to discuss how this applies to your workflow.\n👉 Book a free consultation: https://calendly.com/digital-employee/strategy\n👉 Visit https://digitalemployee.ai`,
+    `I have seen teams achieve 3x velocity by applying the right approach to ${shortTopic}. The results speak for themselves — faster iterations, lower costs, better outcomes.\n\n✅ Get the starter kit: https://digitalemployee.ai/start\n✅ Schedule a demo: https://calendly.com/digital-employee/demo\n✅ Contact our team: hello@digitalemployee.ai`,
+    `Struggling with ${shortTopic}? You are not alone. Most teams face the same challenges — integration complexity, scaling bottlenecks, and measurement gaps. We help teams navigate exactly these problems every day.\n\n📅 Book a strategy session: https://calendly.com/digital-employee/strategy\n📧 Email us: hello@digitalemployee.ai\n🌐 Learn more: https://digitalemployee.ai`,
   ]
 
   const body = bodies[Math.floor(Math.random() * bodies.length)]
   const tag = shortTopic.replace(/\s+/g, '')
 
-  return body + `\n\nKey takeaways:\n- Start small, iterate fast\n- Measure what matters\n- Invest in observability early\n\n#${tag} #CloudComputing #DevOps #SoftwareEngineering #TechTrends`
+  return body + `\n\n#${tag} #DigitalEmployee #AI #Automation #FutureOfWork`
 }

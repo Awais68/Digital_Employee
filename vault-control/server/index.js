@@ -197,6 +197,60 @@ app.post('/api/internal/process-email', express.json(), async (req, res) => {
   const { subject, sender, body, priority, email_id, thread_id } = req.body
   console.log(`[AI Email] Processing: "${subject?.substring(0, 60)}" from ${sender} [${priority}]${email_id ? ` id=${email_id}` : ''}`)
 
+  // ── STRICT FILTER LAYER 1: No-reply — absolutely ZERO processing ──
+  // Must run before DB insert AND before task file creation.
+  const senderLower = (sender || '').toLowerCase()
+  const subjectLower = (subject || '').toLowerCase()
+  const bodyLower = (body || '').toLowerCase()
+
+  const noReplyPatterns = [
+    'noreply', 'no-reply', 'no_reply', 'donotreply', 'do-not-reply',
+    'do_not_reply', 'noreply@', 'no-reply@', 'donotreply@',
+    'notification@', 'notifications@', 'alert@', 'alerts@',
+    'mailer-daemon', 'mailer-daemon@', 'postmaster@',
+  ]
+  if (noReplyPatterns.some(p => senderLower.includes(p))) {
+    console.log(`[AI Email] STRICT REJECT (no-reply): ${subject?.substring(0, 60)} from ${sender} — zero processing`)
+    return
+  }
+
+  const promoPatterns = [
+    'newsletter', 'unsubscribe', 'marketing', 'promotion', 'promo',
+    'weekly digest', 'monthly digest', 'you received', 'you have a new',
+    'special offer', 'limited time', 'coupon', 'discount',
+    'recommended for you', 'trending', 'popular',
+  ]
+  const isPromotional = promoPatterns.some(p => subjectLower.includes(p) || bodyLower.includes(p))
+
+  const infoPatterns = [
+    'your login', 'password changed', 'account update', 'verification code',
+    'otp:', 'one-time pin', '2fa', 'two-factor', 'email changed',
+    'welcome to', 'get started', 'onboarding', 'thanks for signing',
+    'receipt', 'order confirmation', 'subscription confirmed',
+    'weekly report', 'monthly statement', 'your statement',
+  ]
+  const isInformational = infoPatterns.some(p => subjectLower.includes(p) || bodyLower.includes(p))
+
+  // ── STRICT FILTER LAYER 2: Promotional / Informational — DB dedup only, no task file, no AI ──
+  if (isPromotional || isInformational) {
+    const tag = isPromotional ? 'promotional' : 'informational'
+    console.log(`[AI Email] STRICT REJECT (${tag}): ${subject?.substring(0, 60)} from ${sender} — DB entry only`)
+    // DB insert for dedup tracking (so we never fetch it again)
+    if (email_id) _recentlyProcessedEmailIds.add(email_id)
+    try {
+      const { query } = await import('./database/connection.js')
+      await query(
+        `INSERT INTO emails(msg_id, from_address, subject, body, status, received_at, thread_id)
+         VALUES($1, $2, $3, $4, 'skipped', NOW(), $5)
+         ON CONFLICT(msg_id) DO NOTHING`,
+        [email_id || `skipped-${Date.now()}`, sender || 'unknown', subject || '', body || '', thread_id || '']
+      )
+    } catch (dbErr) {
+      console.warn(`[AI Email] DB skip for ${tag} email failed:`, dbErr.message)
+    }
+    return
+  }
+
   // ── LAYER 1: In-memory dedup (fast path) ──
   if (email_id && _recentlyProcessedEmailIds.has(email_id)) {
     console.log(`[AI Email] Dedup (memory): Already processed email ${email_id} — skipping`)
@@ -224,7 +278,7 @@ app.post('/api/internal/process-email', express.json(), async (req, res) => {
 
   if (email_id) _recentlyProcessedEmailIds.add(email_id)
 
-  // ── Create Needs_Action/ task file (server-side, atomic with processing) ──
+  // ── Create Needs_Action/ task file (only for actionable work emails) ──
   try {
     const fs = await import('fs')
     const path = await import('path')
@@ -237,7 +291,6 @@ app.post('/api/internal/process-email', express.json(), async (req, res) => {
     const filename = `${timestamp.replace(/[T]/g, '_')}_email_${safeSubject}.md`
     const taskPath = path.join(needsActionDir, filename)
 
-    // Skip if file already exists (belt-and-suspenders)
     if (!fs.existsSync(taskPath)) {
       const taskContent = `---
 type: email
@@ -277,7 +330,6 @@ ${body || ''}
       console.log(`[AI Email] Task file already exists: ${filename}`)
     }
 
-    // Broadcast to dashboard via WebSocket
     try {
       if (typeof global.wsBroadcast === 'function') {
         global.wsBroadcast({

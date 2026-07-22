@@ -1277,6 +1277,21 @@ Utilities:
     if args.continuous:
         logger.info(f"WhatsApp Watcher v2.0 — continuous mode ({args.interval}s)")
         watcher = WhatsAppWatcher(check_interval=args.interval, headless=True)
+        asyncio.run(watcher.ared. Launching browser for QR scan...")
+        watcher = WhatsAppWatcher(force_visible=True)
+        stats = asyncio.run(watcher.run_single())
+        print(f"\nDone — Scan the QR code to connect WhatsApp.")
+        return
+
+    # ── enabled check ──
+    if not WHATSAPP_ENABLED:
+        print("ℹ️  WhatsApp watcher is disabled (WHATSAPP_ENABLED=false in .env)")
+        return
+
+    # ── run modes ──
+    if args.continuous:
+        logger.info(f"WhatsApp Watcher v2.0 — continuous mode ({args.interval}s)")
+        watcher = WhatsAppWatcher(check_interval=args.interval, headless=True)
         asyncio.run(watcher.run_continuous())
     else:
         headless = args.headless or (not args.first_run)

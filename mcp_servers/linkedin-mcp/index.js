@@ -52,43 +52,6 @@ function makeUrn(urn) {
   return `urn:li:person:${urn}`;
 }
 
-// Build attributes array for hashtags and mention annotations in UGC Posts
-function buildAttributes(text) {
-  const attributes = [];
-
-  // Find hashtags
-  const hashtagRe = /#(\w+)/g;
-  let match;
-  while ((match = hashtagRe.exec(text)) !== null) {
-    attributes.push({
-      start: match.index,
-      length: match[0].length,
-      entityType: 'HASHTAG',
-      hashtag: { tag: match[1] },
-    });
-  }
-
-  // Find @mentions and resolve via config
-  const mentionRe = /@(\w+(?:\s+\w+)?)/g;
-  while ((match = mentionRe.exec(text)) !== null) {
-    const name = match[1];
-    const entry = Object.entries(MENTION_CONFIG).find(
-      ([key]) => key.toLowerCase() === name.toLowerCase()
-    );
-    if (entry) {
-      const [, data] = entry;
-      attributes.push({
-        start: match.index,
-        length: match[0].length,
-        entityType: 'MEMBER',
-        member: { urn: data.urn },
-      });
-    }
-  }
-
-  return attributes.length ? attributes : undefined;
-}
-
 // MCP Server
 const server = new Server(
   {
@@ -136,8 +99,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const headers = linkedinHeaders();
 
         const shareCommentary = { text: args.text };
-        const attrs = buildAttributes(args.text);
-        if (attrs) shareCommentary.attributes = attrs;
+        // NOTE: Attributes (hashtag/mention entities) intentionally omitted.
+        // LinkedIn's UGC API v2 'value' field requires a scope our token lacks.
+        // Hashtags and @mentions show as plain text in the post.
 
         if (!args.image_url) {
           // Text-only post

@@ -383,23 +383,27 @@ class LinkedInMCP:
             logger.info("🔍 DRY_RUN mode enabled - posts will be logged but not published")
 
     def _get_author(self) -> str:
-        """Get the author URN for posts (person or organization)."""
+        """Get the author URN for posts (person or organization).
+        
+        LinkedIn UGC Posts API v2 expects:
+        - Person: urn:li:person:{id}
+        - Organization: urn:li:organization:{org_id}
+        """
         if self.organization_id:
             return f"urn:li:organization:{self.organization_id}"
         elif self.person_urn:
-            # Convert urn:li:person:XXX to urn:li:member:XXX for UGC Posts API
             person_urn = self.person_urn
-            if person_urn.startswith("urn:li:person:"):
+            if person_urn.startswith("urn:li:member:"):
                 member_id = person_urn.split(":")[-1]
-                return f"urn:li:member:{member_id}"
+                return f"urn:li:person:{member_id}"
+            if ":" not in person_urn:
+                return f"urn:li:person:{person_urn}"
             return person_urn
         else:
-            # Try to get current user's URN
             person_urn = self._get_current_person_urn()
             if person_urn:
-                if person_urn.startswith("urn:li:person:"):
-                    member_id = person_urn.split(":")[-1]
-                    return f"urn:li:member:{member_id}"
+                if ":" not in person_urn:
+                    return f"urn:li:person:{person_urn}"
                 return person_urn
             raise ValueError("Cannot determine author URN. Configure LINKEDIN_PERSON_URN or LINKEDIN_ORGANIZATION_ID")
 
@@ -612,7 +616,8 @@ class LinkedInMCP:
                 "start": start,
                 "length": length,
                 "entityType": "HASHTAG",
-                "text": hashtag
+                "text": hashtag,
+                "full_text": content[start:start+length]
             })
 
         # Find all @mentions and resolve to URNs
@@ -635,6 +640,7 @@ class LinkedInMCP:
                     "start": start,
                     "length": length,
                     "entityType": "MEMBER",
+                    "full_text": content[start:start+length],
                     "member": {
                         "urn": matched_entry["urn"]
                     }
@@ -667,32 +673,10 @@ class LinkedInMCP:
             "text": content
         }
 
-        # Combine hashtag + mention attributes
-        all_attributes = []
-        if entities.get("hashtags"):
-            for hashtag in entities["hashtags"]:
-                all_attributes.append({
-                    "start": hashtag["start"],
-                    "length": hashtag["length"],
-                    "entityType": "HASHTAG",
-                    "hashtag": {
-                        "tag": hashtag["text"]
-                    }
-                })
-
-        if entities.get("mentions"):
-            for mention in entities["mentions"]:
-                all_attributes.append({
-                    "start": mention["start"],
-                    "length": mention["length"],
-                    "entityType": "MEMBER",
-                    "member": {
-                        "urn": mention["member"]["urn"]
-                    }
-                })
-
-        if all_attributes:
-            share_commentary["attributes"] = all_attributes
+        # NOTE: Attributes (hashtags/mentions entities) are intentionally omitted.
+        # LinkedIn's UGC API v2 requires a 'value' field in attributes that our
+        # access token scope cannot provide (403 "Field value override failed").
+        # Hashtags and @mentions still display as plain text in the post.
 
         # Build shareContent object
         share_content = {

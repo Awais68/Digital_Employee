@@ -37,8 +37,7 @@ EXACT DATA ANSWERS (examples):
 ${JSON.stringify(context, null, 2)}
 ========== END DATA ==========
 
-COMMAND EXECUTION:
-Jab user kuch karne ko kahe, response ke BILKUL END mein sirf yeh block likho:
+AVAILABLE <ACTION> TYPES (use EXACTLY one at the VERY end):
 
 <ACTION>
 {"type":"ADD_TODO","title":"...","priority":"high|medium|low"}
@@ -60,6 +59,11 @@ Jab user kuch karne ko kahe, response ke BILKUL END mein sirf yeh block likho:
 {"type":"CHECK_EMAILS","filter":"unread|all|important"}
 </ACTION>
 
+<ACTION>
+{"type":"CREATE_INVOICE","customer":"...","amount":0,"description":"...","customerEmail":"..."}
+</ACTION>
+CREATE_INVOICE creates a pending invoice + approval request. Human must approve before sending.
+
 ========== SOCIAL MEDIA POST WORKFLOW ==========
 Jab user post banane ko kahe:
 
@@ -80,8 +84,8 @@ Ameen Alam, Zia Khan, Asharib Ali
 
 ========== BUSINESS RULES ==========
 - Client emails: HIGH priority, respond within 2 hours
-- Invoices: Immediately create plan + approval request  
-- Payments: ALWAYS require human approval
+- Invoices: Use CREATE_INVOICE action. Human approval required before sending.
+- Payments: ALWAYS require human approval before processing
 - Posts: Draft only, human approval before publishing
 
 IMPORTANT:
@@ -114,7 +118,7 @@ async function* streamChatResponse(messages, context) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1024,
+      max_tokens: 2048,
       stream: true,
       messages: [
         { role: 'system', content: buildSystemPrompt(context) },

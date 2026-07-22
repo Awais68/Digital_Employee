@@ -33,20 +33,20 @@ const STRICT_PLATFORM_RULES = {
     minHashtags: 3, maxHashtags: 5,
     requireLineBreaks: true,
     tone: 'professional, insightful, specific',
-    structure: 'HOOK → RESEARCH PARAGRAPH (exactly 2 emojis) → KEY TAKEAWAYS (3-4 bullets) → HASHTAGS → CTA'
+    structure: 'HOOK → RESEARCH PARAGRAPH → KEY TAKEAWAYS (3-4 bullets) → HASHTAGS → CTA'
   },
   facebook: {
     minWords: 50, maxWords: 250,
     minHashtags: 2, maxHashtags: 5,
     tone: 'friendly, conversational, relatable',
-    structure: 'HOOK → RESEARCH PARAGRAPH (exactly 2 emojis) → KEY TAKEAWAYS (3-4 bullets) → HASHTAGS'
+    structure: 'HOOK → RESEARCH PARAGRAPH → KEY TAKEAWAYS (3-4 bullets) → HASHTAGS'
   },
   instagram: {
     minWords: 30, maxWords: 150,
     minHashtags: 10, maxHashtags: 15,
     requireLineBreaks: true,
     tone: 'casual, inspiring, authentic',
-    structure: 'HOOK → RESEARCH PARAGRAPH (exactly 2 emojis) → KEY TAKEAWAYS (3-4 bullets) → HASHTAGS (10-15)'
+    structure: 'HOOK → RESEARCH PARAGRAPH → KEY TAKEAWAYS (3-4 bullets) → HASHTAGS (10-15)'
   },
   twitter: {
     minWords: 10, maxWords: 50,
@@ -66,8 +66,8 @@ function getStrictPlatformRules(platform) {
   • Engagement-bait CTAs ("Drop your thoughts below 👇 Let's have a real conversation")
   • Emoji bullet markers (📊 📈 as list markers)
   • Vague filler ("the numbers speak for themselves", "here's what most people miss")
-- Emojis: use EXACTLY 2, both inside the research/body paragraph (never in the hook, the bullet points, or the hashtags)`
-    : `- Emojis: use EXACTLY 2, both inside the research/body paragraph (never in the hook, the bullet points, or the hashtags)`;
+- Emojis: optional — use sparingly if at all (never in the hook, the bullet points, or the hashtags)`
+    : `- Emojis: optional — use sparingly if at all (never in the hook, the bullet points, or the hashtags)`;
 
   return `Platform: ${platform}
 - Word count: ${rules.minWords}-${rules.maxWords} words (STRICT)
@@ -346,7 +346,7 @@ CONTENT REQUIREMENTS (ALL MANDATORY — a post missing any of these is rejected)
      • include exactly ONE concrete, specific data point (a number, date, version, named
        tool, or real example) drawn from the WEB RESEARCH DATA above — never invent one; if
        the research has no usable specific, state a concrete qualitative fact instead.
-     • contain EXACTLY 2 emojis, BOTH placed inside this paragraph (never in the hook, the
+     • Emojis are optional. If used, place inside this paragraph (never in the hook, the
        bullets, or the hashtags). Use relevant, meaningful emojis — do NOT use 📊 📈 📉 ✅
        ❌ 💪 🌟 as markers.
 - 3. KEY TAKEAWAYS (bullet points — MANDATORY): after the paragraph, add 3-4 bullet points
@@ -366,7 +366,7 @@ CONTENT REQUIREMENTS (ALL MANDATORY — a post missing any of these is rejected)
 Return ONLY the post text. No explanations, no intro, no markdown formatting.`;
 
   const systemMsg = IS_AUTHENTIC
-    ? `You write social media posts that sound like a real person who actually built or shipped something. You avoid all generic corporate-LinkedIn-guru language. You use specific details, first-person experience, and genuine observations. Every stat you cite must come from the provided research data — never fabricate numbers. You ALWAYS open with a topic-specific hook, ALWAYS include a "key takeaways" bullet list of 3-4 concrete points, and place EXACTLY 2 emojis in the body paragraph only.`
+    ? `You write social media posts that sound like a real person who actually built or shipped something. You avoid all generic corporate-LinkedIn-guru language. You use specific details, first-person experience, and genuine observations. Every stat you cite must come from the provided research data — never fabricate numbers. You ALWAYS open with a topic-specific hook, and ALWAYS include a "key takeaways" bullet list of 3-4 concrete points. Emojis are optional.`
     : `You are a professional marketing content creator for ${platform}. Your posts are polished, data-driven, and industry-relevant.`;
 
   let postContent = await callAI(systemMsg, postPrompt, 1400);
@@ -623,18 +623,15 @@ WEB RESEARCH DATA:
 ${webData.substring(0, 1000)}
 
 EXACT STRUCTURE (follow precisely):
-1. HOOK LINE — one sentence specific to "${topic}", starting with exactly ONE relevant emoji
-   (e.g. 🚀 💡 🔑 📌 🔥). No generic openers.
+1. HOOK LINE — one sentence specific to "${topic}". No generic openers.
 2. Blank line.
-3. 2-3 KEY POINTS — each on its own line, each beginning with ONE small emoji bullet
-   (e.g. ✅ 📌 💡 🔑), each specific and concrete, drawn from the research above.
+3. 2-3 KEY POINTS — each on its own line, each specific and concrete, drawn from the research above.
 4. Blank line.
-5. CLOSING QUESTION / CTA — one line ending in a question, with exactly ONE emoji.
+5. CLOSING QUESTION / CTA — one line ending in a question.
 6. Blank line.
-7. HASHTAGS — 5-7 hashtags on the final line, tied to "${topic}". No emojis on this line.
+7. HASHTAGS — 5-7 hashtags on the final line, tied to "${topic}".
 
-EMOJI BUDGET: 3-6 emojis TOTAL across the whole caption (1 in hook + 2-3 on bullets +
-1 in CTA). Professional but engaging — never spammy. The hashtag line has NO emojis.
+Emojis are optional. If used, keep professional and engaging — never spammy.
 
 CONTENT RULES:
 - Sound like a real practitioner, first person, no corporate-guru fluff.

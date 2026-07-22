@@ -47,7 +47,7 @@ This skill automatically generates professional LinkedIn posts when triggered by
 - Use 2-4 short paragraphs with line breaks
 - Include 1 clear call-to-action (CTA)
 - Add 3-5 relevant hashtags (mix of popular + niche)
-- Use emojis sparingly (max 3-5, context-appropriate)
+- Emojis optional — use sparingly and context-appropriately if at all
 - Keep total length 150-300 words (optimal engagement)
 
 ❌ DON'T:
@@ -258,7 +258,7 @@ skill_reference: SKILL_LinkedIn_Posting
 | **Word Count** | XXX / 300 words |
 | **Character Count** | XXXX / 2800 characters |
 | **Hashtag Count** | X / 5 hashtags |
-| **Emoji Count** | X / 5 emojis |
+| **Emojis** | Optional |
 | **Readability Score** | Easy/Medium/Hard |
 | **Optimal Post Time** | Tue-Thu, 10AM-12PM |
 

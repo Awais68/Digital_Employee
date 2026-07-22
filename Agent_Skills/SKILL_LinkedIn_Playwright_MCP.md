@@ -71,7 +71,7 @@ Every LinkedIn post MUST follow this structure:
 - Include bullet points or numbered lists
 - Share real insights, not fluff
 - Keep language conversational and professional
-- Use emojis sparingly (2-5 max)
+- Emojis optional — use sparingly if at all
 - Add whitespace between paragraphs
 
 ❌ **DON'T:**

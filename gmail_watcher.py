@@ -301,6 +301,8 @@ class GmailLabelManager:
         'Spam': 'AI/Spam',
         'Internal': 'AI/Internal',
     }
+    # Special label: applied to every processed email so Gmail-side dedup is bullet-proof
+    PROCESSED_LABEL = 'AI/Processed'
 
     def __init__(self, service):
         self.service = service
@@ -612,6 +614,8 @@ class GmailWatcher(BaseWatcher):
         """
         Fetch unread emails from Gmail using improved query.
         Also fetches recent emails to catch already-read but unprocessed emails.
+        Excludes emails that already have the 'AI/Processed' label applied
+        (bullet-proof dedup — survives local data loss).
 
         Args:
             max_results: Maximum emails to fetch per query
@@ -619,11 +623,14 @@ class GmailWatcher(BaseWatcher):
         Returns:
             List of email message dicts (deduplicated)
         """
-        # Query 1: Unread emails (excluding forums and updates, but keeping promotions and social)
-        query1 = "is:unread in:inbox -category:forums -category:updates"
+        # Exclude already-processed emails via Gmail-side label (ultimate dedup layer)
+        processed_label = '-label:AI/Processed'
+
+        # Query 1: Unread emails (excluding forums and updates, and already-processed)
+        query1 = f"is:unread in:inbox -category:forums -category:updates {processed_label}"
 
         # Query 2: Recent emails (last 24h) to catch already-read emails
-        query2 = "in:inbox newer_than:1d -category:forums"
+        query2 = f"in:inbox newer_than:1d -category:forums {processed_label}"
 
         # Fetch from both queries
         emails1 = self.fetch_emails(query1, max_results)
@@ -874,6 +881,53 @@ thread_id: {email.thread_id}
             logger.error(f"Error marking email read: {e}")
             return False
 
+    def apply_processed_label(self, email_id: str) -> bool:
+        """
+        Apply AI/Processed label to a fully-processed email.
+        This is the ultimate dedup layer — even if local dedup data is lost,
+        Gmail will not return this email in queries that exclude AI/Processed.
+
+        Returns True if successful.
+        """
+        if not self.service:
+            return False
+        try:
+            label_id = self._get_or_create_processed_label()
+            if not label_id:
+                return False
+            self.service.users().messages().modify(
+                userId='me',
+                id=email_id,
+                body={'addLabelIds': [label_id]}
+            ).execute()
+            logger.debug(f"Applied AI/Processed label to email {email_id}")
+            return True
+        except HttpError as e:
+            logger.error(f"Error applying AI/Processed label: {e}")
+            return False
+
+    def _get_or_create_processed_label(self) -> Optional[str]:
+        """Get or create the AI/Processed label. Returns label ID or None."""
+        try:
+            results = self.service.users().labels().list(userId='me').execute()
+            for label in results.get('labels', []):
+                if label['name'] == 'AI/Processed':
+                    return label['id']
+            # Create it
+            label = self.service.users().labels().create(
+                userId='me',
+                body={
+                    'name': 'AI/Processed',
+                    'labelListVisibility': 'labelShow',
+                    'messageListVisibility': 'show'
+                }
+            ).execute()
+            logger.info("Created Gmail label: AI/Processed")
+            return label['id']
+        except HttpError as e:
+            logger.error(f"Failed to get/create AI/Processed label: {e}")
+            return None
+
     def process_item(self, email: EmailData) -> bool:
         """
         Process a single email via server API.
@@ -915,6 +969,12 @@ thread_id: {email.thread_id}
                 logger.info(f"Email {email.id} marked as read")
             else:
                 logger.warning(f"Failed to mark email {email.id} as read")
+
+            # Apply AI/Processed label (bullet-proof Gmail-side dedup)
+            if self.apply_processed_label(email.id):
+                logger.info(f"Email {email.id} labeled as processed")
+            else:
+                logger.warning(f"Failed to apply AI/Processed label to email {email.id}")
 
             # ── Mark as processed locally ──
             self.processed_ids.add(email.id)
@@ -1418,3 +1478,4 @@ Examples:
 
 if __name__ == "__main__":
     main()
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             

@@ -62,25 +62,21 @@ PLATFORM_RULES = {
         'min_words': 80, 'max_words': 300,
         'min_hashtags': 3, 'max_hashtags': 5,
         'tone': 'professional, insightful, specific',
-        'emoji_count': '3-6',
     },
     'facebook': {
         'min_words': 50, 'max_words': 250,
         'min_hashtags': 2, 'max_hashtags': 5,
         'tone': 'friendly, conversational, relatable',
-        'emoji_count': '3-6',
     },
     'instagram': {
         'min_words': 30, 'max_words': 150,
         'min_hashtags': 10, 'max_hashtags': 15,
         'tone': 'casual, inspiring, authentic',
-        'emoji_count': '3-6',
     },
     'twitter': {
         'min_words': 10, 'max_words': 50,
         'min_hashtags': 1, 'max_hashtags': 3,
         'tone': 'punchy, concise, specific',
-        'emoji_count': '1',
     },
 }
 
@@ -234,18 +230,15 @@ WEB RESEARCH DATA:
 {web_data[:1000]}
 
 EXACT STRUCTURE (follow precisely):
-1. HOOK LINE — one sentence specific to "{topic}", starting with exactly ONE relevant emoji
-   (e.g. 🚀 💡 🔑 📌 🔥). No generic openers.
+1. HOOK LINE — one sentence specific to "{topic}". No generic openers.
 2. Blank line.
-3. 2-3 KEY POINTS — each on its own line, each beginning with ONE small emoji bullet
-   (e.g. ✅ 📌 💡 🔑), each specific and concrete, drawn from the research above.
+3. 2-3 KEY POINTS — each on its own line, each specific and concrete, drawn from the research above.
 4. Blank line.
-5. CLOSING QUESTION / CTA — one line ending in a question, with exactly ONE emoji.
+5. CLOSING QUESTION / CTA — one line ending in a question.
 6. Blank line.
-7. HASHTAGS — 5-7 hashtags on the final line, tied to "{topic}". No emojis on this line.
+7. HASHTAGS — 5-7 hashtags on the final line, tied to "{topic}".
 
-EMOJI BUDGET: 3-6 emojis TOTAL across the whole caption (1 in hook + 2-3 on bullets +
-1 in CTA). Professional but engaging — never spammy. Hashtag line has NO emojis.
+Emojis are optional. If used, keep professional and engaging — never spammy.
 
 CONTENT RULES:
 - Sound like a real practitioner, first person, no corporate-guru fluff.
@@ -283,7 +276,7 @@ def adapt_master_to_platform(master, platform='linkedin'):
 
     We intentionally do NOT re-generate or reshape per platform anymore. The
     master caption produced by generate_master_content() is already the final,
-    ready-to-publish text (hook + emoji bullets + CTA + hashtags), and the SAME
+    ready-to-publish text (hook + key points + CTA + hashtags), and the SAME
     caption is posted verbatim to LinkedIn, Facebook, and Instagram. This keeps
     one consistent message everywhere and avoids three divergent generations.
     """
@@ -375,23 +368,6 @@ def validate_post(content, platform):
     if len(hashtags) > max_hashtags:
         errors.append(f"Too many hashtags: {len(hashtags)} (max: {max_hashtags})")
 
-    # Unified caption: 3-6 emojis (hook + bullet markers + CTA). Count individual
-    # emoji characters, not runs, so we can enforce the real per-post budget.
-    emoji_pattern = re.compile("["
-        u"\U0001F300-\U0001F5FF"
-        u"\U0001F600-\U0001F64F"
-        u"\U0001F680-\U0001F6FF"
-        u"\U0001F700-\U0001F77F"
-        u"\U0001F900-\U0001FAFF"
-        u"\U00002600-\U000027BF"
-        u"\U0001F1E0-\U0001F1FF"
-        u"\U000024C2-\U0001F251"
-        "]", flags=re.UNICODE)
-    emoji_count = len(emoji_pattern.findall(content))
-    if emoji_count < 3:
-        errors.append(f"Too few emojis: {emoji_count} (need 3-6)")
-    if emoji_count > 6:
-        errors.append(f"Too many emojis: {emoji_count} (max: 6)")
 
     # Banned patterns check (Phase 2)
     if contains_banned_patterns(content):

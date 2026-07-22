@@ -185,5 +185,25 @@ cron.schedule('0 10 * * *', async () => {
   }
 })
 
+// ═══════════════════════════════════════════════════════════════════════════
+// WEEKLY CEO BRIEFING — Every Monday at 10:00
+// ═══════════════════════════════════════════════════════════════════════════
+cron.schedule('0 10 * * 1', async () => {
+  console.log('[Scheduler] Weekly CEO Briefing — generating and sending...')
+  try
+    const { execSync } = await import('child_process')
+    const scriptPath = process.env.VAULT_PATH
+      ? path.join(process.env.VAULT_PATH, 'weekly_ceo_briefing.py')
+      : path.join(process.cwd(), '..', 'weekly_ceo_briefing.py')
+    execSync(`python3 "${scriptPath}"`, {
+      timeout: 180000,
+      env: { ...process.env, DRY_RUN: process.env.DRY_RUN || 'false' },
+    })
+    console.log('[Scheduler] Weekly CEO Briefing sent')
+  } catch (e) {
+    console.error('[Scheduler] CEO Briefing error:', e.message)
+  }
+})
+
 console.log('[Scheduler] All cron jobs started')
 export default {}

@@ -28,7 +28,7 @@ const router = express.Router()
 const STRICT_RULES = {
   requireImage: true,
   requireHashtags: true,
-  requireEmojis: true,
+  requireEmojis: false,
   requireMentions: true,
   minHashtags: 1,
   maxHashtags: 5,
@@ -111,14 +111,6 @@ function validatePostStrict(content, platforms, hasImage) {
     }
   }
   
-  // Emoji validation (reduced to 1 minimum)
-  if (STRICT_RULES.requireEmojis) {
-    const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{24C2}-\u{1F251}]/gu
-    const emojis = (content.match(emojiRegex) || []).filter(m => m.codePointAt(0) !== 0xFE0F)
-    if (emojis.length < 1) {
-      errors.push(`No emojis found - add at least 1 for engagement`)
-    }
-  }
   
   // Spam detection
   const lowerContent = content.toLowerCase()

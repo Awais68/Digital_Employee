@@ -87,7 +87,7 @@ Tweet N/Thread: [Summary + CTA + Hashtags]
 - Keep it concise and punchy
 - Use line breaks for readability
 - Include 1-3 relevant hashtags
-- Add emojis strategically (2-4 max)
+- Emojis optional — use strategically if at all
 - Ask questions to drive engagement
 - Tag relevant accounts when appropriate
 - Use threads for longer content
