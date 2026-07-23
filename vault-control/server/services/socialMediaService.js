@@ -92,11 +92,11 @@ export async function postToFacebook(content, imageSource = null) {
 // ── Instagram (direct Graph API, no MCP) ──
 
 export async function postToInstagram(content, imageSource = null) {
-  const token   = process.env.META_SYSTEM_USER_TOKEN
+  const token   = process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_SYSTEM_USER_TOKEN
   const igAccId = process.env.INSTAGRAM_ACCOUNT_ID
 
   if (!token || !igAccId) {
-    throw new Error('Instagram: META_SYSTEM_USER_TOKEN or INSTAGRAM_ACCOUNT_ID not set')
+    throw new Error('Instagram: INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_ACCOUNT_ID not set')
   }
   if (!imageSource) {
     throw new Error('Instagram requires an image. Please provide an image.')

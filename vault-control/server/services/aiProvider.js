@@ -6,13 +6,6 @@ export function _resetMockFlag() {
   _lastCallUsedMock = false;
 }
 
-const FREE_OR_MODELS = [
-  'google/gemma-4-26b-a4b-it:free',
-  'nvidia/nemotron-3-ultra-550b-a55b:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'openai/gpt-oss-20b:free',
-];
-
 async function tryProvider(name, fn) {
   try {
     const result = await fn()
@@ -42,16 +35,26 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
   if (result) return result
 
   result = await tryProvider('OpenAI', async () => {
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.startsWith('sk-or-')) return null
+    if (!process.env.OPENAI_API_KEY) return null
+    const isOpenRouter = process.env.OPENAI_API_KEY.startsWith('sk-or-');
     const { default: OpenAI } = await import('openai');
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      ...(isOpenRouter ? {
+        baseURL: 'https://openrouter.ai/api/v1',
+        defaultHeaders: { 'HTTP-Referer': 'https://digitalfte.online', 'X-Title': 'Digital FTE' },
+      } : {}),
+    });
+    const model = isOpenRouter
+      ? (process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini')
+      : (process.env.OPENAI_MODEL || 'gpt-4o');
     const resp = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: maxTokens,
+      max_tokens: Math.min(maxTokens, 800),
     });
     return resp.choices[0].message.content;
   })
@@ -62,17 +65,31 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
     if (!orKey) return null
 
     const configuredModel = process.env.OPENROUTER_MODEL;
-    const modelsToTry = configuredModel
-      ? [configuredModel, ...FREE_OR_MODELS.filter(m => m !== configuredModel)]
-      : FREE_OR_MODELS;
+    const freeModels = [
+      'google/gemma-4-26b-a4b-it:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'openai/gpt-oss-20b:free',
+    ];
+
+    const paidModels = ['openai/gpt-4o-mini', 'openai/gpt-4o', 'anthropic/claude-3-5-haiku'];
+
+    const modelsToTry = configuredModel && !configuredModel.includes(':free')
+      ? [configuredModel, ...paidModels.filter(m => m !== configuredModel), ...freeModels]
+      : [...paidModels, ...freeModels];
 
     for (const model of modelsToTry) {
       try {
+        const tokenBudget = model.includes('gpt-4o-mini') || model.includes('haiku')
+          ? Math.min(maxTokens, 800)
+          : Math.min(maxTokens, 400);
         const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${orKey}`,
             'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://digitalfte.online',
+            'X-Title': 'Digital FTE',
           },
           body: JSON.stringify({
             model,
@@ -80,7 +97,7 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt },
             ],
-            max_tokens: maxTokens,
+            max_tokens: tokenBudget,
           }),
         });
         const data = await resp.json();

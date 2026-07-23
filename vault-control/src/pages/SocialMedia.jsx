@@ -461,7 +461,8 @@ export default function SocialMedia() {
             try {
               const imgRes = await axios.post('/api/posts/generate-image', {
                 topic: topic.trim(),
-                style: 'professional'
+                style: 'professional',
+                content: firstPost.content || topic.trim()
               }, { timeout: 300000 })
               if (imgRes.data.imageUrl) {
                 setImagePreview(imgRes.data.imageUrl)
@@ -473,6 +474,7 @@ export default function SocialMedia() {
               }
             } catch (imgErr) {
               console.error('Auto image generation failed:', imgErr)
+              // Don't block the user — image can be uploaded manually
             }
           }
         }

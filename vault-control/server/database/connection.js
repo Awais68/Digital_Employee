@@ -262,7 +262,7 @@ export async function initializeSchema() {
       `CREATE INDEX IF NOT EXISTS idx_approval_history_created ON approval_history(created_at)`,
       `CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)`,
-      `CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read)`,
+      `CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read)`,
       `CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)`,
       `CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status)`,
       `CREATE INDEX IF NOT EXISTS idx_emails_received ON emails(received_at DESC)`,

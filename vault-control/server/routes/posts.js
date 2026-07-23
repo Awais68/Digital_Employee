@@ -36,9 +36,9 @@ const STRICT_RULES = {
   mandatoryMentions: ['Ameen Alam', 'Zia Khan', 'Asharib Ali'],
   spamKeywords: ['buy now', 'click here', 'limited time', 'act fast', '100% free', 'act now', 'free money'],
   platforms: {
-    linkedin: { minWords: 50, maxWords: 500, minHashtags: 1, maxHashtags: 5 },
-    facebook: { minWords: 50, maxWords: 500, minHashtags: 1, maxHashtags: 5 },
-    instagram: { minWords: 50, maxWords: 500, minHashtags: 3, maxHashtags: 15 },
+    linkedin: { minWords: 50, maxWords: 500, minHashtags: 1, maxHashtags: 10 },
+    facebook: { minWords: 50, maxWords: 500, minHashtags: 1, maxHashtags: 10 },
+    instagram: { minWords: 30, maxWords: 2200, minHashtags: 1, maxHashtags: 30 },
     twitter: { minWords: 5, maxWords: 50, minHashtags: 1, maxHashtags: 3, disabled: true },
   }
 }
@@ -130,7 +130,7 @@ router.get('/topics', (req, res) => {
 // POST /generate-image - Auto-generate image for post
 router.post('/generate-image', requireAdmin, async (req, res) => {
   try {
-    const { topic, style } = req.body
+    const { topic, style, content } = req.body
     
     if (!topic) {
       return res.status(400).json({ error: 'Topic is required for image generation' })
@@ -139,7 +139,7 @@ router.post('/generate-image', requireAdmin, async (req, res) => {
     console.log('[ImageGen] Generating image for topic:', topic)
     
     const { generatePostImage } = await import('../services/imageGenerator.js')
-    const imageUrl = await generatePostImage(topic, style || 'professional')
+    const imageUrl = await generatePostImage(topic, style || 'professional', '4:5', content || '')
     
     console.log('[ImageGen] Generated image URL:', imageUrl)
     

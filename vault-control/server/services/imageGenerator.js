@@ -1098,6 +1098,40 @@ async function generateViaPollinations(topic, width = 1080, height = 1350) {
   return `${base}/generated/${filename}`;
 }
 
+// ─── Basic SVG fallback (last resort) ───────────────────────────────────
+async function generateSVGImage(topic, width = 1080, height = 1350) {
+  const cleanTopic = topic.replace(/[<>"]/g, "").trim() || "Digital Employee";
+  const parts = cleanTopic.split(" ").slice(0, 6).join(" ");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a23"/>
+      <stop offset="100%" style="stop-color:#1a1a4e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00c8a7"/>
+      <stop offset="100%" style="stop-color:#0077b5"/>
+    </linearGradient>
+  </defs>
+  <rect width="${width}" height="${height}" fill="url(#bg)"/>
+  <text x="${width / 2}" y="${height / 2 - 20}" fill="url(#accent)" font-family="sans-serif" font-size="48" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${escapeXml(parts)}</text>
+  <text x="${width / 2}" y="${height / 2 + 40}" fill="#888" font-family="sans-serif" font-size="20" text-anchor="middle" dominant-baseline="middle">Digital Employee</text>
+  <circle cx="80" cy="${height - 80}" r="120" fill="rgba(0,200,167,0.06)"/>
+  <circle cx="${width - 80}" cy="80" r="100" fill="rgba(0,119,181,0.06)"/>
+</svg>`;
+
+  const filename = `fallback_${Date.now()}.png`;
+  const destPath = path.join(GENERATED_DIR, filename);
+  fs.mkdirSync(GENERATED_DIR, { recursive: true });
+
+  const { default: sharp } = await import("sharp");
+  await sharp(Buffer.from(svg)).png().toFile(destPath);
+
+  const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
+  console.log("[ImageGen] SVG fallback image:", filename);
+  return `${base}/generated/${filename}`;
+}
+
 export async function generatePostImage(
   topic,
   style = "professional",
@@ -1213,7 +1247,11 @@ export async function generatePostImage(
   }
 
   // 6. Basic SVG fallback
-  return generateSVGImage(topic);
+  try {
+    return await generateSVGImage(topic);
+  } catch (e) {
+    throw new Error("All image generation methods failed, including SVG fallback: " + e.message);
+  }
 }
 
 export async function generateImage(prompt) {

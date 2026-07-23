@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import path from 'path'
 import { query } from '../database/connection.js'
 import { createNotification } from './notificationService.js'
 import { sendMessage, getStatus } from './whatsappService.js'
@@ -190,7 +191,7 @@ cron.schedule('0 10 * * *', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 cron.schedule('0 10 * * 1', async () => {
   console.log('[Scheduler] Weekly CEO Briefing — generating and sending...')
-  try
+  try {
     const { execSync } = await import('child_process')
     const scriptPath = process.env.VAULT_PATH
       ? path.join(process.env.VAULT_PATH, 'weekly_ceo_briefing.py')
