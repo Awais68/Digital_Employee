@@ -338,12 +338,12 @@ async function extractImageContent(postContent, topic) {
   }
   const ruleContent = extractContentFromPost(postContent, topic);
   const ruleValidation = validateStructuredContent(ruleContent);
-  if (ruleValidation.valid) {
+  if (ruleValidation.valid && ruleContent.bullets?.length > 0) {
     return ruleValidation.content;
   }
   try {
     console.warn(
-      "[ImageGen] Rule-based extraction insufficient — trying AI extraction",
+      "[ImageGen] Rule-based extraction insufficient (0 bullets or invalid) — trying AI extraction",
     );
     const cleaned = postContent.replace(/```[\s\S]*?```/g, "").trim();
     const aiContent = await extractContentViaAI(cleaned, topic);
