@@ -85,10 +85,12 @@ if _chromium_binary is None:
 else:
     print(f"Chromium found at {_chromium_binary}")
 
-from dotenv import load_dotenv
+try:
+    import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
+except ImportError:
+    from dotenv import load_dotenv
+    load_dotenv()
 from playwright.async_api import async_playwright
-
-load_dotenv()
 
 
 # =============================================================================

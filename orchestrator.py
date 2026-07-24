@@ -25,7 +25,10 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple
-from dotenv import load_dotenv
+try:
+    import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
+except ImportError:
+    from dotenv import load_dotenv
 
 # Gold Tier Audit Logging
 from audit_log import (
@@ -355,9 +358,13 @@ def ensure_directories() -> None:
 # =============================================================================
 
 def load_environment() -> bool:
-    """Load environment variables from .env file."""
+    """Load environment variables from .env file (base + environment overlay)."""
     if CONFIG_FILE.exists():
-        load_dotenv(CONFIG_FILE)
+        try:
+            import env_loader
+            env_loader.load_env()
+        except ImportError:
+            load_dotenv(CONFIG_FILE)
         logger.info("✅ Loaded .env file successfully")
         return True
     else:

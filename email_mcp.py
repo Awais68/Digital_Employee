@@ -31,7 +31,10 @@ from email import encoders
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Union
-from dotenv import load_dotenv
+try:
+    import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
+except ImportError:
+    from dotenv import load_dotenv
 from string import Template
 
 # Gold Tier Audit Logging
@@ -57,8 +60,11 @@ except ImportError:
 # Base directory (vault root)
 BASE_DIR = Path(__file__).resolve().parent
 
-# Load environment variables from .env file (override system env)
-load_dotenv(BASE_DIR / ".env", override=True)
+# Load environment variables (.env + overlay)
+try:
+    env_loader.load_env()
+except NameError:
+    load_dotenv(BASE_DIR / ".env", override=True)
 
 # Email configuration
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")

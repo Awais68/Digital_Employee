@@ -67,14 +67,17 @@ def with_retry(max_attempts=3, base_delay=2, max_delay=30):
         return wrapper
     return decorator
 
-# Environment loading
+# Environment loading (.env + environment overlay)
 try:
-    from dotenv import load_dotenv
-    load_dotenv()
+    import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
 except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "python-dotenv"])
-    from dotenv import load_dotenv
-    load_dotenv()
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "python-dotenv"])
+        from dotenv import load_dotenv
+        load_dotenv()
 
 # Google API imports with auto-install
 try:

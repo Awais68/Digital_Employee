@@ -22,13 +22,14 @@ import time
 import logging
 from pathlib import Path
 from typing import Optional
-from dotenv import load_dotenv
-
-# Load environment variables from .env in vault root
-BASE_DIR = Path(__file__).resolve().parent
-_env_path = BASE_DIR / ".env"
-if _env_path.exists():
-    load_dotenv(_env_path)
+try:
+    import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
+except ImportError:
+    from dotenv import load_dotenv
+    BASE_DIR = Path(__file__).resolve().parent
+    _env_path = BASE_DIR / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path)
 
 # ---------------------------------------------------------------------------
 # LiteLLM import (install via: pip install litellm)

@@ -36,7 +36,10 @@ import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, Callable, Any, Dict, List
-from dotenv import load_dotenv
+try:
+    import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
+except ImportError:
+    from dotenv import load_dotenv
 
 # ===========================================================================
 # CONFIGURATION
@@ -806,10 +809,13 @@ Examples:
     if not args.prompt and not args.file:
         parser.error("Provide either --prompt or --file")
 
-    # Load environment
-    _env_path = BASE_DIR / ".env"
-    if _env_path.exists():
-        load_dotenv(_env_path)
+    # Load environment (.env + overlay)
+    try:
+        env_loader.load_env()
+    except NameError:
+        _env_path = BASE_DIR / ".env"
+        if _env_path.exists():
+            load_dotenv(_env_path)
 
     # Read task file if provided
     prompt = args.prompt or ""

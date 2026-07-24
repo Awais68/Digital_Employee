@@ -28,7 +28,11 @@ import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
-from dotenv import load_dotenv
+
+try:
+    import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
+except ImportError:
+    from dotenv import load_dotenv
 
 # Gold Tier Audit Logging
 try:
@@ -46,9 +50,10 @@ try:
 except ImportError:
     AUDIT_AVAILABLE = False
 
-# Environment loading
+# Environment loading (.env + overlay)
 try:
-    from dotenv import load_dotenv
+    env_loader.load_env()
+except NameError:
     BASE_DIR = Path(__file__).resolve().parent
     load_dotenv(BASE_DIR / ".env", override=True)
 except ImportError:

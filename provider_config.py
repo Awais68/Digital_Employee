@@ -5,15 +5,18 @@ Priority: Claude Code CLI > Anthropic API > OpenAI > Gemini > OpenRouter
 """
 import os, shutil
 
-# Auto-load .env file
-for _env_candidate in ['.env', '../.env']:
-    if os.path.exists(_env_candidate):
-        try:
-            from dotenv import load_dotenv
-            load_dotenv(_env_candidate)
-            break
-        except ImportError:
-            pass
+# Auto-load .env (base + environment overlay via env_loader)
+try:
+    import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
+except ImportError:
+    for _env_candidate in ['.env', '../.env']:
+        if os.path.exists(_env_candidate):
+            try:
+                from dotenv import load_dotenv
+                load_dotenv(_env_candidate)
+                break
+            except ImportError:
+                pass
 
 def detect_provider():
     """
