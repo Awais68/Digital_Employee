@@ -953,6 +953,43 @@ version: 4.0.0
 """
 
 
+def update_plan_status(ref_filename: str, new_status: str) -> bool:
+    """Flip the leading-frontmatter status of the matching Plans/PLAN_*.md.
+
+    Only the first --- ... --- block is rewritten, so the embedded original
+    email's own `status:` is never touched. `ref_filename` may be the source
+    email filename or any workflow artifact (REPLY_/REJECTED_...) derived from
+    it; known prefixes are stripped to recover PLAN_<email>. Best-effort: never
+    raises, returns True only when a status line was actually changed.
+
+    This keeps a plan's own status in sync with its real lifecycle state so the
+    Ralph Stop hook does not rediscover completed/parked plans as remaining work.
+    """
+    try:
+        name = ref_filename
+        for prefix in ("REJECTED_REPLY_", "REPLY_", "REJECTED_"):
+            if name.startswith(prefix):
+                name = name[len(prefix):]
+                break
+        plan_path = FOLDERS["plans"] / f"PLAN_{name}"
+        if not plan_path.exists():
+            return False
+        text = plan_path.read_text(encoding="utf-8", errors="replace")
+        if not text.startswith("---"):
+            return False
+        end = text.find("\n---", 3)
+        if end == -1:
+            return False
+        head, rest = text[:end], text[end:]
+        new_head = re.sub(r"(?m)^status:.*$", f"status: {new_status}", head, count=1)
+        if new_head == head:
+            return False
+        plan_path.write_text(new_head + rest, encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
 def create_plan_content(original_content: str, filename: str,
                         email_data: Optional[Dict] = None) -> Tuple[str, Optional[Dict]]:
     """
@@ -2550,6 +2587,7 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
             logger.success(f"✅ Created plan: {plan_filename}")
 
             # Create approval file if reply draft generated
+            approval_created = False
             if not skip_reply_draft and reply_draft and email_data:
                 approval_path = create_approval_file(
                     file_path.name,
@@ -2558,7 +2596,17 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
                 )
                 if approval_path:
                     approvals_created += 1
+                    approval_created = True
                     logger.success(f"✅ Created approval request: {approval_path.name}")
+
+            # Reflect the plan's real state in its OWN frontmatter so the Stop
+            # hook doesn't keep rediscovering it as "remaining work". A plan
+            # awaiting human approval is gated (not stalled); one with no draft
+            # to approve is already resolved.
+            update_plan_status(
+                file_path.name,
+                "awaiting_approval" if approval_created else "done",
+            )
 
             # Move to Done
             destination_path = FOLDERS["done"] / file_path.name
@@ -2823,6 +2871,64 @@ def send_approved_email(file_path: Path, metrics: MetricsManager) -> Tuple[bool,
         return False, error_msg
 
 
+def parse_frontmatter(content: str) -> tuple:
+    """Parse YAML frontmatter from markdown content."""
+    match = re.match(r'^---\n([\s\S]*?)\n---', content)
+    if not match:
+        return {}, content
+
+    frontmatter = {}
+    for line in match.group(1).split('\n'):
+        if ':' in line:
+            key, val = line.split(':', 1)
+            val = val.strip().strip('"').strip("'").strip('[]')
+            if ',' in val:
+                val = [p.strip().strip('"').strip("'") for p in val.split(',')]
+            frontmatter[key.strip()] = val
+
+    body = content[match.end():].strip()
+    return frontmatter, body
+
+
+def resolve_image_path(image_url: str, base_dir: Optional[Path] = None) -> Optional[str]:
+    if not image_url:
+        return None
+    if os.path.exists(image_url):
+        return os.path.abspath(image_url)
+    bd = base_dir or BASE_DIR
+    filename = os.path.basename(image_url)
+    search_dirs = [
+        bd / "generated_images",
+        bd / "public" / "uploads",
+        bd / "public",
+        bd / "uploads",
+        bd / "vault-control" / "public" / "uploads",
+        bd / "vault-control" / "public" / "generated",
+        bd / "vault-control" / "public",
+    ]
+    for d in search_dirs:
+        if not d.exists():
+            continue
+        if filename:
+            candidate = d / filename
+            if candidate.exists():
+                return str(candidate.resolve())
+    if image_url.startswith(('http://', 'https://')):
+        try:
+            import urllib.request
+            from urllib.parse import urlparse
+            parsed = urlparse(image_url)
+            ext = os.path.splitext(parsed.path)[1] or '.jpg'
+            unique_name = f".temp_{uuid.uuid4().hex[:8]}{ext}"
+            dl = bd / unique_name
+            dl.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(image_url, str(dl))
+            return str(dl)
+        except Exception:
+            pass
+    return None
+
+
 def extract_linkedin_post_content(content: str) -> Optional[Dict[str, str]]:
     """
     Extract LinkedIn post content from an approval file.
@@ -2911,6 +3017,17 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
 
         post_content = post_data["content"]
 
+        # Extract image from frontmatter
+        frontmatter, _ = parse_frontmatter(content)
+        raw_image = frontmatter.get('imageUrl', frontmatter.get('image_url', None))
+        if isinstance(raw_image, list):
+            raw_image = raw_image[0] if raw_image else None
+        image_path = resolve_image_path(raw_image)
+        if image_path:
+            logger.info(f"   Image: {image_path}")
+        else:
+            logger.info("   No image found in post")
+
         logger.info("📱 Publishing LinkedIn post:")
         logger.info(f"   Content preview: {post_content[:100]}...")
 
@@ -2939,7 +3056,7 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
 
             result = post_to_linkedin(
                 content=post_content,
-                image_path=None,  # Can be extended to support images
+                image_path=image_path,
                 target="personal"
             )
 
@@ -2961,10 +3078,20 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
         if not result or not result.get("success"):
             try:
                 logger.info("   🔌 Attempt 2: Using LinkedIn API MCP...")
-                from linkedin_mcp import create_post as mcp_create_post
+                from linkedin_mcp import create_post as mcp_create_post, get_linkedin_mcp
+
+                media_urls = None
+                if image_path:
+                    logger.info(f"   📤 Uploading image to LinkedIn API...")
+                    mcp_instance = get_linkedin_mcp(dry_run=None)
+                    media_urn = mcp_instance.upload_media(image_path)
+                    if media_urn:
+                        media_urls = [media_urn]
+                        logger.info(f"   ✅ Image uploaded: {media_urn}")
 
                 result = mcp_create_post(
                     content=post_content,
+                    media_urls=media_urls,
                     dry_run=None  # Use DRY_RUN from environment
                 )
 
@@ -3075,6 +3202,73 @@ def publish_linkedin_post(file_path: Path, metrics: MetricsManager) -> Tuple[boo
         return False, error_msg
 
 
+def publish_facebook_post(file_path: Path, metrics: MetricsManager) -> Tuple[bool, str]:
+    """
+    Publish Facebook post for an approved file using Playwright MCP.
+
+    Args:
+        file_path: Path to approved Facebook post file
+        metrics: Metrics manager for tracking
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    start_time = datetime.now()
+
+    try:
+        content = read_file_content(file_path)
+
+        # Extract image from frontmatter
+        frontmatter, body = parse_frontmatter(content)
+        raw_image = frontmatter.get('imageUrl', frontmatter.get('image_url', None))
+        if isinstance(raw_image, list):
+            raw_image = raw_image[0] if raw_image else None
+        image_path = resolve_image_path(raw_image)
+
+        post_content = body if body else content
+        page_name = frontmatter.get('pageName', frontmatter.get('page_name', None))
+        if isinstance(page_name, list):
+            page_name = page_name[0] if page_name else None
+
+        logger.info("📱 Publishing Facebook post:")
+        logger.info(f"   Content preview: {post_content[:100]}...")
+        if image_path:
+            logger.info(f"   Image: {image_path}")
+        else:
+            logger.info("   No image found in post")
+
+        try:
+            from Agent_Skills.SKILL_Facebook_Instagram_Post import post_to_facebook as fb_post
+
+            result = fb_post(
+                content=post_content,
+                image_path=image_path,
+                page_name=page_name
+            )
+
+            if result.get("success"):
+                post_url = result.get("post_url", "")
+                logger.success(f"✅ Facebook post published")
+                if post_url:
+                    logger.info(f"   Post URL: {post_url}")
+                metrics.record_approval_triggered()
+                return True, f"Facebook post published - {post_url}"
+            else:
+                error_msg = result.get("message", "Unknown error")
+                logger.error(f"❌ Facebook post failed: {error_msg}")
+                return False, error_msg
+
+        except ImportError:
+            error_msg = "Facebook Playwright MCP not available"
+            logger.error(error_msg)
+            return False, error_msg
+
+    except Exception as e:
+        error_msg = f"Error publishing Facebook post: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+
+
 def handle_rejected_file(file_path: Path, metrics: MetricsManager) -> Tuple[bool, str]:
     """
     Handle a rejected approval file - move to Done with rejection note.
@@ -3117,6 +3311,10 @@ def handle_rejected_file(file_path: Path, metrics: MetricsManager) -> Tuple[bool
         with open(rejection_path, "w", encoding="utf-8") as f:
             f.write(rejection_note)
         
+        # A rejected reply is a resolved plan, not outstanding work — flip the
+        # source plan's status so the Stop hook stops counting it.
+        update_plan_status(file_path.name, "done")
+
         # Remove original from Pending_Approval
         file_path.unlink()
         
@@ -3168,6 +3366,7 @@ def process_approval_folder(metrics: MetricsManager) -> Dict[str, int]:
         "rejected": 0,
         "pending": 0,
         "linkedin_posts": 0,
+        "facebook_posts": 0,
         "errors": 0,
     }
 
@@ -3216,6 +3415,23 @@ def process_approval_folder(metrics: MetricsManager) -> Dict[str, int]:
 
                         # Log failure in Dashboard.md
                         update_dashboard_linkedin_failure(file_path.name, message)
+
+                elif "type: facebook_post" in content or "FACEBOOK_POST" in file_path.name.upper() or ("facebook" in content.lower() and "post" in content.lower()):
+                    # Process as Facebook post
+                    success, message = publish_facebook_post(file_path, metrics)
+
+                    if success:
+                        done_path = FOLDERS["done"] / file_path.name
+                        if move_file(file_path, done_path):
+                            results["facebook_posts"] += 1
+                            metrics.record_approval_triggered()
+                            update_dashboard_linkedin_success(file_path.name, message)
+                            logger.success(f"✅ Facebook post published: {file_path.name}")
+                    else:
+                        results["errors"] += 1
+                        logger.error(f"❌ Failed to publish Facebook post: {file_path.name} - {message}")
+                        update_dashboard_linkedin_failure(file_path.name, message)
+
                 elif "type: whatsapp_reply_approval" in content or "WHATSAPP_" in file_path.name.upper():
                     # ─── WHATSAPP APPROVED — NEVER AUTO-SEND ───────────────────
                     # WhatsApp replies are handled manually by the human via WhatsApp Web.
@@ -3260,6 +3476,9 @@ def process_approval_folder(metrics: MetricsManager) -> Dict[str, int]:
                         if move_file(file_path, done_path):
                             results["sent"] += 1
                             metrics.record_approval_triggered()
+
+                            # Sent: the source plan is now complete.
+                            update_plan_status(file_path.name, "done")
 
                             # Add success note to file
                             done_content = read_file_content(done_path)
@@ -3426,12 +3645,18 @@ def process_task_with_llm_routing(task_description: str, metrics: MetricsManager
             if "company" in task_description.lower():
                 target = "company"
             
-            # Extract image path if specified
             image_path = None
-            if "with image:" in task_description.lower():
+            frontmatter, _ = parse_frontmatter(task_description)
+            raw_image = frontmatter.get('imageUrl', frontmatter.get('image_url', None))
+            if isinstance(raw_image, list):
+                raw_image = raw_image[0] if raw_image else None
+            if raw_image:
+                image_path = resolve_image_path(raw_image)
+            if not image_path and "with image:" in task_description.lower():
                 parts = task_description.lower().split("with image:")
                 if len(parts) > 1:
-                    image_path = parts[1].split()[0].strip()
+                    raw_image = parts[1].split()[0].strip()
+                    image_path = resolve_image_path(raw_image)
             
             # Try Playwright MCP first (easier setup - just QR scan), fallback to API MCP
             linkedin_result = {"success": False, "message": "LinkedIn MCP not available"}
@@ -3463,11 +3688,21 @@ def process_task_with_llm_routing(task_description: str, metrics: MetricsManager
             # Attempt 2: LinkedIn API MCP (requires API tokens in .env)
             if not linkedin_result or not linkedin_result.get("success"):
                 try:
-                    from linkedin_mcp import create_post as mcp_create_post
+                    from linkedin_mcp import create_post as mcp_create_post, get_linkedin_mcp
                     logger.info("   🔌 Attempt 2: Using LinkedIn API MCP")
+
+                    media_urls = None
+                    if image_path:
+                        logger.info(f"   📤 Uploading image to LinkedIn API...")
+                        mcp_instance = get_linkedin_mcp(dry_run=None)
+                        media_urn = mcp_instance.upload_media(image_path)
+                        if media_urn:
+                            media_urls = [media_urn]
+                            logger.info(f"   ✅ Image uploaded: {media_urn}")
 
                     linkedin_result = mcp_create_post(
                         content=content,
+                        media_urls=media_urls,
                         dry_run=None
                     )
 

@@ -230,16 +230,15 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
             # Create page
             page = context.new_page()
 
-            # Navigate to LinkedIn (increased timeouts)
-            print("🌐 Navigating to LinkedIn...")
+            # Navigate directly to feed (post creation page)
+            print("🌐 Navigating to LinkedIn feed...")
             try:
-                page.goto("https://www.linkedin.com", timeout=60000, wait_until="domcontentloaded")
-                print("✅ Page loaded")
+                page.goto("https://www.linkedin.com/feed/", timeout=60000, wait_until="domcontentloaded")
+                print("✅ Feed loaded")
             except Exception as e:
-                # Even if timeout, page may have partially loaded
                 print(f"⚠️  Navigation warning: {str(e)[:100]}")
             
-            # Wait a bit for page to settle
+            # Wait for page to settle
             page.wait_for_timeout(3000)
 
             # Check if we're logged in
@@ -255,102 +254,102 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
 
             print("✅ Logged in successfully")
             
-            # Navigate to feed (post creation page)
-            print("📱 Navigating to feed...")
-            try:
-                page.goto("https://www.linkedin.com/feed/", timeout=60000, wait_until="domcontentloaded")
-                print("✅ Feed loaded")
-            except Exception as e:
-                print(f"⚠️  Feed navigation warning: {str(e)[:100]}")
-
-            # Wait for LinkedIn's JavaScript to fully load
-            print("⏳ Waiting for LinkedIn to load...")
-            page.wait_for_timeout(5000)
+            # Wait for LinkedIn's JavaScript to render the post box
+            print("⏳ Waiting for page to render...")
+            page.wait_for_timeout(10000)
             
-            # Open post editor - if image provided, use Photo button flow (opens composer with image)
-            # Otherwise use Start a post button (text-only composer)
+            # Open post editor
             print("📝 Opening post editor...")
-            create_post_clicked = False
-            image_uploaded = False
-            
-            if image_path and os.path.exists(image_path):
-                print(f"📷 Attempting Photo button upload...")
-                try:
-                    page.wait_for_timeout(2000)
-                    file_choosers = []
-                    def fc_handler(fc):
-                        file_choosers.append(fc)
-                    page.on("filechooser", fc_handler)
-                    
-                    photo_btn = page.locator('[role="button"]:has-text("Photo")').first
-                    if photo_btn.is_visible(timeout=3000):
-                        photo_btn.click()
-                        print("   Clicked Photo button...")
-                        
-                        for _ in range(20):
-                            page.wait_for_timeout(500)
-                            if len(file_choosers) > 0:
-                                file_choosers[0].set_files(image_path)
-                                image_uploaded = True
-                                create_post_clicked = True
-                                print("   ✅ Image + post editor opened via Photo button")
-                                page.wait_for_timeout(3000)
-                                break
-                        
-                        if not create_post_clicked:
-                            print("   ⚠️  File chooser didn't appear, trying Start a post approach")
-                            # Reload to clean state
-                            try:
-                                page.goto("https://www.linkedin.com/feed/", timeout=30000, wait_until="domcontentloaded")
-                                page.wait_for_timeout(5000)
-                            except:
-                                pass
-                except Exception as e:
-                    print(f"   Photo button error: {e}")
-                    try:
-                        page.goto("https://www.linkedin.com/feed/", timeout=30000, wait_until="domcontentloaded")
-                        page.wait_for_timeout(5000)
-                    except:
-                        pass
+            editor_ready = False
 
-            if not create_post_clicked:
-                selectors_to_try = [
-                    "div[role='button']:has-text('Start a post')",
-                    "button:has-text('Start a post')",
-                    "div.feed-shared-create-post__cta",
-                    "button:has-text('Start')",
-                ]
-
-                for selector in selectors_to_try:
-                    try:
-                        locator = page.locator(selector).first
-                        if locator.is_visible(timeout=5000):
-                            locator.click()
-                            create_post_clicked = True
-                            print(f"   Clicked using selector: {selector}")
-                            break
-                    except Exception:
-                        continue
-
-            if not create_post_clicked:
-                try:
-                    page.click("div:has-text('Start a post')", timeout=5000)
-                    create_post_clicked = True
-                    print("   Clicked using text match")
-                except Exception:
-                    return {
-                        "success": False,
-                        "message": "Could not find 'Start a post' element. Session may be expired. Try: python3 setup_linkedin_session.py",
-                        "post_url": None
-                    }
-
-            # Wait for post editor modal to appear
+            # Debug: check what's on the page
             try:
-                page.wait_for_selector('[role="dialog"], [role="textbox"], [contenteditable]', timeout=15000)
-                print("   ✅ Post editor dialog appeared")
-            except Exception:
-                print("   ⚠️  Dialog selector timed out, continuing...")
-            page.wait_for_timeout(3000)
+                debug_info = page.evaluate("""() => {
+                    const results = [];
+                    const candidates = document.querySelectorAll('a, div, span');
+                    for (const el of candidates) {
+                        const t = (el.textContent || '').trim().toLowerCase();
+                        if ((t.includes('start a post') || t.includes('start')) && el.offsetHeight > 0) {
+                            results.push({
+                                tag: el.tagName,
+                                text: t.substring(0, 40),
+                                cls: (el.className || '').substring(0, 30),
+                                href: el.getAttribute('href') || '',
+                                rect: el.getBoundingClientRect().top.toFixed(0),
+                                visible: el.offsetHeight > 0
+                            });
+                        }
+                        if (results.length > 10) break;
+                    }
+                    return results;
+                }""")
+                print(f"   'start' elements on page: {debug_info}")
+            except:
+                pass
+
+            # Click "Start a post" trigger - use multiple strategies
+            start_post_selectors = [
+                "a:has-text('start a post')",
+                "div:has-text('start a post')",
+                "a[href*='post']",
+                "div[role='button']:has-text('Start a post')",
+                "button:has-text('Start a post')",
+                "div.feed-shared-create-post__cta",
+                "span:has-text('Start a post')",
+                "div[data-control-name='create_post']",
+            ]
+
+            for selector in start_post_selectors:
+                try:
+                    el = page.locator(selector).first
+                    if el.count() > 0 and el.is_visible(timeout=2000):
+                        el.click()
+                        print(f"   ✅ Clicked: {selector}")
+                        page.wait_for_timeout(2000)
+                        try:
+                            page.wait_for_selector('[role="dialog"]', timeout=3000)
+                            editor_ready = True
+                            print("   ✅ Editor dialog opened")
+                        except:
+                            pass
+                        break
+                except Exception:
+                    continue
+
+            # Fallback: evaluate JS to click the anchor directly
+            if not editor_ready:
+                try:
+                    clicked = page.evaluate("""() => {
+                        const anchors = document.querySelectorAll('a');
+                        for (const a of anchors) {
+                            const t = (a.textContent || '').trim().toLowerCase();
+                            if (t.includes('start a post') && a.offsetHeight > 0) {
+                                a.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    }""")
+                    if clicked:
+                        print("   ✅ Clicked anchor via JS")
+                        page.wait_for_timeout(2000)
+                        try:
+                            page.wait_for_selector('[role="dialog"]', timeout=5000)
+                            editor_ready = True
+                            print("   ✅ Editor dialog opened via JS")
+                        except:
+                            pass
+                except Exception as e:
+                    print(f"   JS click error: {e}")
+
+            # Wait for any editor to appear
+            if not editor_ready:
+                try:
+                    page.wait_for_selector('[contenteditable="true"], [role="dialog"], [role="textbox"]', timeout=8000)
+                    editor_ready = True
+                    print("   ✅ Editor appeared")
+                except:
+                    print("   ⚠️  No editor appeared")
             
             # Find the post editor and fill content
             print("✍️  Filling post content...")
@@ -530,59 +529,122 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                     "post_url": None
                 }
 
-            # Wait after filling content - LinkedIn needs time to enable Post button
-            print("⏳ Waiting for content to register...")
-            page.wait_for_timeout(3000)  # Increased from 1000ms
-            
-            # Add image if provided (but not already uploaded via Photo button above)
-            if image_path and os.path.exists(image_path) and not image_uploaded:
+            # Add image if provided
+            if image_path and os.path.exists(image_path):
                 print(f"📷 Uploading image: {image_path}")
                 
-                # Direct file input
-                try:
-                    file_input = page.locator('input[type="file"]')
-                    if file_input.count() > 0:
-                        file_input.first.set_input_files(image_path, timeout=10000)
-                        image_uploaded = True
-                        print("   ✅ Uploaded image via direct file input")
-                except Exception:
-                    pass
+                page.wait_for_timeout(1000)
+                file_choosers = []
+                def fc_handler(fc):
+                    file_choosers.append(fc)
+                page.on("filechooser", fc_handler)
                 
-                if not image_uploaded:
-                    print("⚠️  Warning: Could not upload image, continuing with text-only post")
+                photo_clicked = False
+                for ps in [
+                    '[role="button"]:has-text("Photo")',
+                    'button:has-text("Photo")',
+                    '[data-control-name="photo-upload"]',
+                    '[aria-label*="Photo" i]',
+                    '[aria-label*="Add photo" i]',
+                    'li[data-control-name="photo-upload"]',
+                    'button[aria-label*="image" i]',
+                    'img[alt*="Photo" i]',
+                ]:
+                    try:
+                        pb = page.locator(ps).first
+                        if pb.is_visible(timeout=2000):
+                            pb.click()
+                            photo_clicked = True
+                            print(f"   Clicked: {ps}")
+                            page.wait_for_timeout(1000)
+                            break
+                    except Exception:
+                        continue
                 
-                page.wait_for_timeout(3000)
+                if not photo_clicked:
+                    try:
+                        result = page.evaluate("""() => {
+                            const btns = document.querySelectorAll('button, div[role="button"], li, span');
+                            for (const b of btns) {
+                                const t = b.textContent.trim().toLowerCase();
+                                if ((t === 'photo' || t.includes('photo') || t.includes('image') || t.includes('add media')) && b.offsetHeight > 0) {
+                                    b.click(); return true;
+                                }
+                            }
+                            return false;
+                        }""")
+                        if result:
+                            photo_clicked = True
+                            print("   Clicked Photo via JS")
+                            page.wait_for_timeout(1000)
+                    except Exception:
+                        pass
+                
+                ul_ok = False
+                for _ in range(20):
+                    page.wait_for_timeout(500)
+                    if len(file_choosers) > 0:
+                        try:
+                            file_choosers[0].set_files(image_path)
+                            ul_ok = True
+                            print("   ✅ Image uploaded via file chooser")
+                            break
+                        except Exception as e:
+                            print(f"   File chooser error: {e}")
+                            break
+                
+                if not ul_ok:
+                    try:
+                        fi = page.locator('input[type="file"]')
+                        if fi.count() > 0:
+                            fi.first.set_input_files(image_path, timeout=10000)
+                            ul_ok = True
+                            print("   ✅ Image uploaded via direct file input")
+                    except Exception as e:
+                        print(f"   Direct file input error: {e}")
+                
+                if ul_ok:
+                    page.wait_for_timeout(3000)
+                else:
+                    print("⚠️  Could not upload image, continuing text-only")
+            
+            page.wait_for_timeout(3000)
             
             # Find and click the Post button
             print("🚀 Publishing post...")
             post_clicked = False
             post_button_selectors = [
-                "button.share-actions__primary-action",  # Most reliable selector
+                "button.share-actions__primary-action",
+                "button.artdeco-button--primary",
+                "button.share-actions__primary-action:not([disabled])",
+                "div.share-box_actions--primary button",
                 "div.share-box_actions button",
                 "button[aria-label='Post']",
                 "button[aria-label='Post now']",
+                "button[aria-label*='Post']",
+                "button[data-control-name='post']",
+                "div[data-control-name='post']",
                 "button:has-text('Post')",
                 "div[role='button']:has-text('Post')",
+                "button:has(span:has-text('Post'))",
             ]
 
             for selector in post_button_selectors:
                 try:
                     btn = page.locator(selector).first
-                    # Wait for button to be visible
-                    if btn.is_visible(timeout=8000):  # Increased wait for button to appear
-                        # Check if button is not disabled
+                    if btn.is_visible(timeout=5000):
                         is_disabled = btn.get_attribute('disabled')
                         is_aria_disabled = btn.get_attribute('aria-disabled')
-                        
                         if is_disabled or is_aria_disabled == 'true':
-                            print("   ⏳ Button is disabled, waiting more... (3s)")
+                            print(f"   ⏳ Button disabled ({selector}), waiting 3s...")
                             page.wait_for_timeout(3000)
-                            # Try again
-                            if btn.is_visible(timeout=5000):
-                                btn.click()
+                            try:
+                                btn.click(force=True)
                                 post_clicked = True
-                                print(f"   ✅ Clicked Post button using: {selector}")
+                                print(f"   ✅ Force-clicked Post button using: {selector}")
                                 break
+                            except Exception:
+                                continue
                         else:
                             btn.click()
                             post_clicked = True
@@ -590,7 +652,76 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                             break
                 except Exception:
                     continue
-            
+
+            if not post_clicked:
+                print("   ⚠️  Selectors failed, trying JavaScript fallback...")
+                try:
+                    post_clicked = page.evaluate("""
+                        () => {
+                            const strategies = [
+                                () => {
+                                    const btns = document.querySelectorAll('button');
+                                    for (const b of btns) {
+                                        if (b.textContent.trim() === 'Post' && b.offsetHeight > 0 && !b.disabled) {
+                                            b.click(); return true;
+                                        }
+                                    } return false;
+                                },
+                                () => {
+                                    const divs = document.querySelectorAll('div[role="button"]');
+                                    for (const d of divs) {
+                                        if (d.textContent.trim() === 'Post' && d.offsetHeight > 0) {
+                                            d.click(); return true;
+                                        }
+                                    } return false;
+                                },
+                                () => {
+                                    const el = document.querySelector('.share-actions__primary-action');
+                                    if (el && el.offsetHeight > 0) { el.click(); return true; }
+                                    return false;
+                                },
+                                () => {
+                                    const spans = document.querySelectorAll('span');
+                                    for (const s of spans) {
+                                        if (s.textContent.trim() === 'Post') {
+                                            const btn = s.closest('button');
+                                            if (btn && !btn.disabled) { btn.click(); return true; }
+                                            const roleDiv = s.closest('div[role="button"]');
+                                            if (roleDiv) { roleDiv.click(); return true; }
+                                        }
+                                    } return false;
+                                },
+                                () => {
+                                    const all = document.querySelectorAll('button:not([disabled])');
+                                    for (const b of all) {
+                                        if (b.offsetHeight > 0 && b.offsetWidth > 0 && b.textContent.trim().includes('Post')) {
+                                            b.click(); return true;
+                                        }
+                                    } return false;
+                                },
+                            ];
+                            for (const fn of strategies) {
+                                try { if (fn()) return true; } catch (e) { }
+                            }
+                            return false;
+                        }
+                    """)
+                    if post_clicked:
+                        print("   ✅ Clicked Post button via JavaScript fallback")
+                except Exception as js_err:
+                    print(f"   ⚠️  JavaScript fallback error: {js_err}")
+
+            if not post_clicked:
+                print("   ⚠️  Trying page.get_by_text as last resort...")
+                try:
+                    post_btn = page.get_by_text("Post", exact=True).first
+                    if post_btn.is_visible(timeout=3000):
+                        post_btn.click()
+                        post_clicked = True
+                        print("   ✅ Clicked Post button via get_by_text")
+                except Exception:
+                    pass
+
             if not post_clicked:
                 return {
                     "success": False,

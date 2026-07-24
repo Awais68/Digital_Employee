@@ -1,14 +1,15 @@
 {
-  "timestamp": "2026-07-23T00:25:01.596655",
+  "timestamp": "2026-07-24T20:00:02.158947",
   "status": {
     "odoo_local": true,
     "dashboard": true,
-    "gmail_watcher": true,
+    "gmail_watcher": false,
     "whatsapp_watcher": false,
     "disk_usage_pct": 87,
     "needs_action_backlog": 0
   },
   "alerts": [
+    "ALERT: gmail_watcher not running!",
     "ALERT: whatsapp_watcher not running!",
     "ALERT: Disk usage at 87%"
   ],

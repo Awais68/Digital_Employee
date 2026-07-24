@@ -9,23 +9,33 @@ LOG_FILE = VAULT / 'Logs' / 'ralph_wiggum_loop.log'
 # Persist the iteration counter to disk: each Stop-hook invocation is a fresh
 # process, so mutating os.environ (as the old version did) never carried across
 # runs — MAX_ITER could never trip and the loop ran forever. This file is the
-# durable counter instead.
+# durable counter instead. It is scoped per conversation/session so a brand-new
+# turn starts from 0 rather than inheriting a stale count left over from a prior
+# turn (e.g. a value stuck at 9 after a runaway would otherwise near-instantly
+# re-trip MAX_ITER on the next unrelated turn).
 ITER_FILE = VAULT / 'Logs' / '.ralph_iteration'
 
-def read_iter():
+def read_iter(session_id):
+    """Return the persisted iteration for THIS session only.
+
+    State file schema: {"session_id": ..., "iteration": N}. When the stored
+    session differs from the current one (a genuinely new turn/conversation),
+    the counter resets to 0 instead of carrying a stale value forward.
+    """
     try:
-        return int(ITER_FILE.read_text().strip())
+        data = json.loads(ITER_FILE.read_text())
+        if data.get("session_id") == session_id:
+            return int(data.get("iteration", 0))
+        return 0
     except Exception:
         return 0
 
-def write_iter(n):
+def write_iter(session_id, n):
     try:
         ITER_FILE.parent.mkdir(parents=True, exist_ok=True)
-        ITER_FILE.write_text(str(n))
+        ITER_FILE.write_text(json.dumps({"session_id": session_id, "iteration": n}))
     except Exception:
         pass
-
-CURR_ITER = read_iter()
 
 def log(msg):
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -50,6 +60,34 @@ def frontmatter_status(text):
             return line.split(':', 1)[1].strip().lower()
     return None
 
+# Statuses that mean "this plan is deliberately parked waiting on a human", not
+# "unprocessed work". Kept lowercase; frontmatter_status() already lowercases.
+GATE_STATUSES = {'awaiting_approval', 'needs_approval', 'blocked', 'on_hold'}
+# Frontmatter keys whose truthy value marks a plan as human-gated.
+GATE_KEYS = ('requires_approval', 'human_gate', 'gated')
+_TRUTHY = {'true', 'yes', '1', 'on'}
+
+def is_approval_gated(text):
+    """True if a plan's OWN leading frontmatter marks it as gated on human
+    approval — either an approval-wait status or a truthy gate key. Such a plan
+    is blocked on user input, not stalled, so it must NOT count as remaining
+    work that forces the loop to keep re-firing."""
+    if not text.startswith('---'):
+        return False
+    end = text.find('\n---', 3)
+    fm = text[:end] if end != -1 else text
+    for line in fm.split('\n'):
+        line = line.strip()
+        if not line or ':' not in line:
+            continue
+        key, val = line.split(':', 1)
+        key = key.strip().lower(); val = val.strip().lower()
+        if key == 'status' and val in GATE_STATUSES:
+            return True
+        if key in GATE_KEYS and val in _TRUTHY:
+            return True
+    return False
+
 def get_pending():
     """FLAT vault: check Needs_Action/ at root level"""
     needs_action = VAULT / 'Needs_Action'
@@ -59,10 +97,16 @@ def get_pending():
     if plans.exists():
         for f in plans.glob('*.md'):
             try:
-                status = frontmatter_status(f.read_text(encoding='utf-8', errors='replace'))
+                text = f.read_text(encoding='utf-8', errors='replace')
             except Exception:
                 continue
+            status = frontmatter_status(text)
             if status in ('pending', 'in_progress', 'in progress'):
+                # Skip plans deliberately parked on a human-approval gate — they
+                # are waiting on the user, not stalled, so counting them would
+                # keep the loop re-firing forever against work it cannot finish.
+                if is_approval_gated(text):
+                    continue
                 unexecuted_plans.append(f)
     return pending, unexecuted_plans
 
@@ -73,24 +117,37 @@ def main():
     except:
         input_data = {}
 
+    session_id = input_data.get("session_id", "")
+    curr_iter = read_iter(session_id)
+
+    # A Stop hook is already active for this turn (e.g. Claude is legitimately
+    # paused waiting on typed human approval, not idling). Re-blocking here just
+    # fights the CLI and spins the iteration counter, which is exactly the
+    # runaway this hook must avoid. Approve immediately and reset the counter.
+    if input_data.get("stop_hook_active"):
+        log("stop_hook_active=true — approving exit without re-blocking")
+        write_iter(session_id, 0)
+        print(json.dumps({"decision": "approve"}))
+        sys.exit(0)
+
     pending, unexecuted = get_pending()
     total_work = len(pending) + len(unexecuted)
 
-    log(f"Iter {CURR_ITER}/{MAX_ITER} | Needs_Action: {len(pending)} | Unexecuted plans: {len(unexecuted)}")
+    log(f"Iter {curr_iter}/{MAX_ITER} | Needs_Action: {len(pending)} | Unexecuted plans: {len(unexecuted)}")
 
     if total_work == 0:
         log("All tasks complete — allowing Claude to exit")
-        write_iter(0)  # reset so the next real run starts fresh
+        write_iter(session_id, 0)  # reset so the next real run starts fresh
         print(json.dumps({"decision": "approve"}))
         sys.exit(0)
 
-    if CURR_ITER >= MAX_ITER:
+    if curr_iter >= MAX_ITER:
         log(f"Max iterations ({MAX_ITER}) reached — forcing exit to prevent infinite loop")
-        write_iter(0)  # reset the counter for the next run
+        write_iter(session_id, 0)  # reset the counter for the next run
         print(json.dumps({"decision": "approve"}))
         sys.exit(0)
 
-    next_iter = CURR_ITER + 1
+    next_iter = curr_iter + 1
 
     pending_list = '\n'.join([f"  - {f.name}" for f in pending[:5]])
     if len(pending) > 5:
@@ -115,7 +172,7 @@ YOUR TASK:
 DO NOT STOP until Needs_Action/ is empty or you write TASK_COMPLETE.
 """
 
-    write_iter(next_iter)  # persist across processes; env vars do not survive
+    write_iter(session_id, next_iter)  # persist across processes; env vars do not survive
 
     result = {
         "decision": "block",

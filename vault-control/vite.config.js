@@ -5,6 +5,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    watch: {
+      ignored: [
+        "**/odoo-docker/**",
+        "**/odoo19-venv/**",
+        "**/node_modules/**",
+        "**/.git/**",
+      ],
+    },
     proxy: {
       "/api": {
         target: "http://localhost:3000",
@@ -29,12 +37,5 @@ export default defineConfig({
       }
     },
     chunkSizeWarningLimit: 1000,
-  },
-  watch: {
-    ignored: [
-      "**/odoo-docker/**",
-      "**/node_modules/**",
-      "**/.git/**",
-    ],
   },
 });

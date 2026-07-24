@@ -1,6 +1,6 @@
 # 🎛️ Digital Employee Control Panel
 
-*Last Updated: 2026-07-23 00:26:02* | **Status:** 🟢 All Clear
+*Last Updated: 2026-07-24 20:03:01* | **Status:** 🟡 Action Required
 
 ---
 
@@ -8,7 +8,7 @@
 
 | 🔴 Needs Action | 🟠 Pending Approval | 🟡 Sent Today | 🟢 Completed Today |
 |:---------------:|:-------------------:|:-------------:|:------------------:|
-| **0** | **0** | **2** | **8** |
+| **0** | **3** | **4** | **1** |
 
 ---
 
@@ -16,8 +16,8 @@
 
 | Metric | Count | Visual Status |
 |--------|-------|---------------|
-| **Emails Sent** | 2 | 🟢 Active |
-| **Pending Review** | 0 | 🟢 Clear |
+| **Emails Sent** | 4 | 🟢 Active |
+| **Pending Review** | 3 | 🟡 Waiting |
 | **Rejected** | 0 | 🟢 None |
 | **Dry Run Mode** | 0 | ✅ Live |
 
@@ -31,19 +31,42 @@
 
 ## 🟠 Pending Approvals - Human Review Required
 
-✅ **All clear!** No pending approvals
+**Move files to `/Approved/` to execute:**
+
+| # | Type | File | Since | Quick Action |
+|---|------|------|-------|-------------|
+| 1 | 📧 | `DASHBOARD_TEST_POST_20260723.md` | 23:53 | → `/Approved/` |
+| 2 | 📧 | `REPLY_2026-07-23_19-17-53_email__comprehensive_test_report_erm_solutions_geneva.md` | 00:18 | → `/Approved/` |
+| 3 | 📱 | `LINKEDIN_POST_20260723_235144.md` | 23:51 | → `/Approved/` |
+
+**Total (Email + LinkedIn):** 3 file(s) awaiting your decision
+
+**Quick Commands:**
+```
+# Approve: mv Pending_Approval/<file> Approved/
+# Reject: mv Pending_Approval/<file> Rejected/
+```
 
 ---
 
 ## 🔵 LinkedIn Pending Posts
 
-✅ **No LinkedIn posts in queue**
+**LinkedIn Post Queue:** 1 pending, 0 approved, 0 posted
 
-**To create a post:**
+### 🟡 Awaiting Human Review
+
+| # | File | Topic | Since | Action |
+|---|------|-------|-------|--------|
+| 1 | `LINKEDIN_POST_20260723_235144.md` | LinkedIn Post | 23:51 | Review → `/Approved/` |
+
+**1 post(s)** awaiting your review
+
+**Quick Commands:**
 ```
-python3 orchestrator.py tasks "Post on LinkedIn: Your content here"
+# Approve post: mv Pending_Approval/LINKEDIN_POST_* Approved/
+# Reject post: mv Pending_Approval/LINKEDIN_POST_* Rejected/
+# Create new post request: echo 'topic' > Needs_Action/LINKEDIN_DAILY_POST.md
 ```
-Or place a file in `/Needs_Action/LINKEDIN_DAILY_POST.md`
 
 ---
 
@@ -51,14 +74,7 @@ Or place a file in `/Needs_Action/LINKEDIN_DAILY_POST.md`
 
 **Successfully processed today:**
 
-- ❌ `REJECTED_REPLY_2026-07-22_19-02-45_email__comprehensive_test_report_erm_solutions_geneva.md` `[00:18]`
-- ❌ `REJECTED_REPLY_2026-07-22_19-02-44_email_the_router_picks_the_model_now_kimi_k3_kat_coder_v.md` `[00:18]`
-- ❌ `REJECTED_REPLY_2026-07-22_19-02-43_email_jahangir_khan_posted_agar_my_mar_gai_to_tum_kya_ka.md` `[00:18]`
-- 📧 `REPLY_2026-07-22_19-02-43_email_digital_fte_is_required_urgent.md` `[00:17]`
-- 📧 `2026-07-22_19-02-45_email__comprehensive_test_report_erm_solutions_geneva.md` `[00:02]`
-- 📧 `2026-07-22_19-02-43_email_jahangir_khan_posted_agar_my_mar_gai_to_tum_kya_ka.md` `[00:02]`
-- 📧 `2026-07-22_19-02-43_email_digital_fte_is_required_urgent.md` `[00:02]`
-- 📧 `2026-07-22_19-02-44_email_the_router_picks_the_model_now_kimi_k3_kat_coder_v.md` `[00:02]`
+- 📧 `2026-07-23_19-17-53_email__comprehensive_test_report_erm_solutions_geneva.md` `[00:17]`
 
 ---
 
@@ -115,4 +131,4 @@ WantedBy=multi-user.target
 
 ---
 
-*🤖 Silver Tier Orchestrator v4.0 | 🟢 All Clear*
+*🤖 Silver Tier Orchestrator v4.0 | 🟡 Action Required*

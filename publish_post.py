@@ -147,6 +147,8 @@ def validate_content_strict(content, platform):
     
     if len(hashtags) < min_hashtags:
         errors.append(f"Too few hashtags: {len(hashtags)} (min: {min_hashtags})")
+    if len(hashtags) > max_hashtags:
+        errors.append(f"Too many hashtags: {len(hashtags)} (max: {max_hashtags})")
     
     # Spam detection
     spam_keywords = content_rules.get('spam_keywords', [])
@@ -159,11 +161,20 @@ def validate_content_strict(content, platform):
     return is_valid, errors
 
 def post_to_linkedin(content, image_path=None):
-    """Post content to LinkedIn."""
+    """Post content to LinkedIn via API."""
     try:
         sys.path.insert(0, str(BASE_DIR))
-        from Agent_Skills.SKILL_LInkedin_Playwright_MCP import post_to_linkedin as _post
-        return _post(content, image_path=image_path)
+        from linkedin_mcp import create_post as _api_post
+        # LinkedIn API needs media registered as URN - skip local file paths
+        media_urls = None
+        if image_path and image_path.startswith("http"):
+            media_urls = [image_path]
+        result = _api_post(content, media_urls=media_urls, dry_run=False)
+        return {
+            "success": result.get("success", False),
+            "message": result.get("message", ""),
+            "post_url": result.get("post_url") or result.get("post_id", "")
+        }
     except Exception as e:
         return {"success": False, "message": f"LinkedIn error: {str(e)}", "post_url": None}
 
@@ -195,12 +206,13 @@ def main():
         sys.exit(1)
     
     file_path = sys.argv[1]
-    # Clean platform names: strip quotes, brackets, convert to lowercase
+    # Clean platform names: strip quotes, brackets, convert to lowercase, split on comma
     platforms = []
     for p in sys.argv[2:]:
-        cleaned = p.lower().strip().strip('"').strip("'").strip('[]')
-        if cleaned:
-            platforms.append(cleaned)
+        for part in p.lower().strip().strip('"').strip("'").strip('[]').split(','):
+            cleaned = part.strip()
+            if cleaned:
+                platforms.append(cleaned)
     
     if not os.path.exists(file_path):
         print(json.dumps({"success": False, "message": f"File not found: {file_path}"}))
