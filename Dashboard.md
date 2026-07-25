@@ -1,6 +1,6 @@
 # 🎛️ Digital Employee Control Panel
 
-*Last Updated: 2026-07-25 00:06:01* | **Status:** 🟡 Action Required
+*Last Updated: 2026-07-25 06:06:01* | **Status:** 🟡 Action Required
 
 ---
 
@@ -8,7 +8,7 @@
 
 | 🔴 Needs Action | 🟠 Pending Approval | 🟡 Sent Today | 🟢 Completed Today |
 |:---------------:|:-------------------:|:-------------:|:------------------:|
-| **0** | **3** | **0** | **0** |
+| **0** | **4** | **0** | **1** |
 
 ---
 
@@ -17,7 +17,7 @@
 | Metric | Count | Visual Status |
 |--------|-------|---------------|
 | **Emails Sent** | 0 | ⚪ None |
-| **Pending Review** | 3 | 🟡 Waiting |
+| **Pending Review** | 4 | 🟡 Waiting |
 | **Rejected** | 0 | 🟢 None |
 | **Dry Run Mode** | 0 | ✅ Live |
 
@@ -30,6 +30,16 @@
 ---
 
 ## 🟠 Pending Approvals - Human Review Required
+
+### 💬 WhatsApp Replies — Manual Approval Required
+
+> ⚠️ **WhatsApp replies are NEVER auto-sent. Human must approve and send manually.**
+
+| # | File | Sender | Since | Action |
+|---|------|--------|-------|--------|
+| 1 | 💬 `WHATSAPP_20260725_024531_awais_own.md` | 20260725 | 02:45 | Review → `/Approved/` |
+
+**WhatsApp:** 1 reply(ies) awaiting your review
 
 **Move files to `/Approved/` to execute:**
 
@@ -72,7 +82,9 @@
 
 ## 🟡 Today's Completed Tasks
 
-- ⏳ No tasks completed yet today
+**Successfully processed today:**
+
+- ✅ `20260725_024331_whatsapp_awais_own.md` `[02:43]`
 
 ---
 

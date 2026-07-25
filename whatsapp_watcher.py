@@ -421,7 +421,7 @@ class WhatsAppWatcher:
                 viewport={"width": 1280, "height": 800},
                 user_agent=(
                     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+                    "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
                 ),
                 locale="en-US",
                 ignore_https_errors=True,
@@ -676,9 +676,9 @@ class WhatsAppWatcher:
         try:
             # Wait for chat list to be ready
             await self.page.wait_for_selector("div[role='grid']", timeout=5000)
-            
+
             # Get all chat items
-            items = await self.page.query_selector_all("div[role='griditem']")
+            items = await self.page.query_selector_all("div[role='row']")
             logger.debug(f"Found {len(items)} chat items")
 
             for item in items:
@@ -722,7 +722,7 @@ class WhatsAppWatcher:
     async def _open_chat(self, chat_name: str) -> bool:
         """Click a chat in the sidebar to open it."""
         try:
-            items = await self.page.query_selector_all("div[role='griditem']")
+            items = await self.page.query_selector_all("div[role='row']")
             for item in items:
                 try:
                     el = await item.query_selector("span[title]")
@@ -1269,19 +1269,6 @@ Utilities:
         session_mgr = WhatsAppSessionManager()
         session_mgr.reset_session()
         return
-
-    # ── enabled check ──
-    if not WHATSAPP_ENABLED:
-        print("ℹ️  WhatsApp watcher is disabled (WHATSAPP_ENABLED=false in .env)")
-        return
-
-    # ── run modes ──
-    if args.continuous:
-        logger.info(f"WhatsApp Watcher v2.0 — continuous mode ({args.interval}s)")
-        watcher = WhatsAppWatcher(check_interval=args.interval, headless=True)
-        asyncio.run(watcher.ared. Launching browser for QR scan...")
-        watcher = WhatsAppWatcher(force_visible=True)
-        stats = asyncio.run(watcher.run_single())
         print(f"\nDone — Scan the QR code to connect WhatsApp.")
         return
 
