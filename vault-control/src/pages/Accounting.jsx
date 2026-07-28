@@ -96,29 +96,29 @@ export default function Accounting() {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="card p-4 text-center">
           <p className="text-xs dark:text-[#7A7A85] text-gray-500 mb-2">Total Receivable</p>
-          <p className="text-3xl font-bold dark:text-green-400 text-green-600">
+          <p className="text-xl md:text-3xl font-bold dark:text-green-400 text-green-600">
             ${summary?.total_receivable?.toLocaleString() || '0.00'}
           </p>
         </div>
         <div className="card p-4 text-center">
           <p className="text-xs dark:text-[#7A7A85] text-gray-500 mb-2">Total Payable</p>
-          <p className="text-3xl font-bold dark:text-red-400 text-red-600">
+          <p className="text-xl md:text-3xl font-bold dark:text-red-400 text-red-600">
             ${summary?.total_payable?.toLocaleString() || '0.00'}
           </p>
         </div>
         <div className="card p-4 text-center">
           <p className="text-xs dark:text-[#7A7A85] text-gray-500 mb-2">Bank Balance</p>
-          <p className="text-3xl font-bold dark:text-[#00FF88] text-blue-600">
+          <p className="text-xl md:text-3xl font-bold dark:text-[#00FF88] text-blue-600">
             ${summary?.bank_balance?.toLocaleString() || '0.00'}
           </p>
         </div>
       </div>
 
       {/* Period Filter */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         {['week', 'month', 'quarter', 'year'].map(period => (
           <button
             key={period}
@@ -180,7 +180,7 @@ export default function Accounting() {
           </button>
         </div>
         
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <h4 className="font-semibold dark:text-[#E0E0E6] text-gray-900 mb-3 flex items-center gap-2">
               <AlertCircle size={16} />

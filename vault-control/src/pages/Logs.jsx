@@ -84,7 +84,7 @@ export default function Logs() {
   return (
     <div className="space-y-6">
       {/* Filters */}
-      <div className="card p-4 grid grid-cols-4 gap-4">
+      <div className="card p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
         <div>
           <label className="block text-xs dark:text-[#7A7A85] text-gray-600 mb-2 font-semibold">SERVICE</label>
           <select
@@ -234,7 +234,7 @@ export default function Logs() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="text-sm dark:text-[#7A7A85] text-gray-600">
           Showing {page * limit + 1} - {Math.min((page + 1) * limit, totalLogs)} of {totalLogs} logs
         </div>

@@ -281,14 +281,14 @@ export default function Approvals() {
       )}
 
       {/* Tabs + Bulk Actions */}
-      <div className="flex items-center justify-between border-b dark:border-[#1A1A24] border-gray-200">
-        <div className="flex gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-2 border-b dark:border-[#1A1A24] border-gray-200">
+        <div className="flex gap-2 flex-wrap">
           {TABS.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`
-                px-4 py-3 font-medium text-sm transition-all border-b-2 capitalize
+                shrink-0 px-3 md:px-4 py-3 font-medium text-xs md:text-sm transition-all border-b-2 capitalize
                 ${activeTab === tab
                   ? 'dark:border-[#00FF88] dark:text-[#00FF88] border-blue-500 text-blue-600'
                   : 'dark:border-transparent dark:text-[#7A7A85] border-transparent text-gray-500 hover:dark:text-[#E0E0E6] hover:text-gray-700'
