@@ -137,3 +137,9 @@ Logs/
 .secrets.enc
 .vercel
 .env*
+*.bak.*
+Logs/*.log
+Metrics/*.json
+Signals/*.json
+processed_messages.json
+Dashboard.md
