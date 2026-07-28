@@ -153,6 +153,14 @@ export default function WhatsApp() {
     }
   };
 
+  // Responsive: toggle mobile view below 768px
+  useEffect(() => {
+    const checkMobile = () => setMobileView(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Safety: force loading off after 8s no matter what
   useEffect(() => {
     const t = setTimeout(() => {
@@ -658,7 +666,7 @@ export default function WhatsApp() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4 h-[calc(100vh-140px)]">
+      <div className="hidden md:grid grid-cols-3 gap-4 h-[calc(100vh-140px)]">
         {/* Left: Conversation List */}
         <div className="col-span-1 card flex flex-col border-r dark:border-[#1A1A24] border-gray-200 overflow-hidden">
           {/* Header */}
@@ -800,7 +808,7 @@ export default function WhatsApp() {
                     <p>WhatsApp client is not connected.</p>
                     <p className="mt-2">To set up WhatsApp:</p>
                     <ol className="list-decimal list-inside mt-1 space-y-0.5">
-                      <li>Set <code className="dark:bg-[#1A1A24] bg-gray-200 px-1 rounded">WHATSAPP_SESSION_PATH</code> in .env</li>
+                      <li>Set <code className="dark:bg-[#1A1A24] bg-gray-200 px-1 rounded break-all">WHATSAPP_SESSION_PATH</code> in .env</li>
                       <li>Restart the server to generate a QR code</li>
                       <li>Scan QR with WhatsApp → Linked Devices</li>
                     </ol>

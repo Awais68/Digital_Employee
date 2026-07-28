@@ -266,7 +266,7 @@ function AppContent() {
           />
 
           <main className="flex-1 overflow-auto">
-            <div className="p-6">
+            <div className="p-3 md:p-6">
               <Suspense fallback={<PageLoader />}>
                 {renderPage()}
               </Suspense>

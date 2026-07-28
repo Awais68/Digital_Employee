@@ -279,65 +279,84 @@ export default function Emails() {
     .filter(e => categoryFilter === 'All' || (e.category || 'Uncategorized') === categoryFilter)
 
   return (
-    <div className="grid grid-cols-4 gap-4 h-[calc(100vh-140px)]">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:h-[calc(100vh-140px)]">
       {/* Left: Folders */}
-      <div className="col-span-1 space-y-2 border-r dark:border-[#1A1A24] pr-4">
-        <h3 className="text-xs font-black dark:text-[#7A7A85] px-4 py-2 uppercase tracking-widest font-mono">MAILBOX</h3>
-        {folders.map(folder => (
-          <button
-            key={folder}
-            onClick={() => {setSelectedFolder(folder); setSelectedEmail(null); setShowReply(false)}}
-            className={`
-              w-full text-left px-4 py-2 rounded font-bold text-sm transition-all flex justify-between items-center
-              ${selectedFolder === folder
-                ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
-                : 'dark:text-[#7A7A85] text-gray-600 hover:dark:bg-[#1A1A24] hover:bg-gray-50'
-              }
-            `}
-          >
-            {folder.replace('_', ' ')}
-          </button>
-        ))}
-
-        {/* Quick Templates */}
-        <div className="pt-4 border-t dark:border-[#1A1A24]">
-          <h3 className="text-xs font-black dark:text-[#7A7A85] px-4 py-2 uppercase tracking-widest font-mono flex items-center gap-2">
-            <Sparkles size={14} />
-            QUICK TEMPLATES
-          </h3>
-          {replyTemplates.map(template => (
+      <div className="md:col-span-1">
+        {/* Mobile: horizontal scroll folder pills */}
+        <div className="flex md:hidden gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+          {folders.map(folder => (
             <button
-              key={template.name}
-              onClick={() => {
-                if (selectedEmail) {
-                  applyTemplate(template)
-                } else {
-                  setReplySubject(template.subject.replace('{subject}', 'Your Inquiry').replace('{sender}', 'Valued Customer'))
-                  setReplyBody(template.body.replace(/\{subject\}/g, 'Your Inquiry').replace(/\{sender\}/g, 'Valued Customer'))
-                  setSelectedTemplate(template.name)
-                  setShowReply(true)
-                }
-              }}
-              className="w-full text-left px-4 py-1.5 text-xs dark:text-[#B0C4FF] text-gray-600 hover:dark:bg-[#1A1A24] hover:bg-gray-50 transition-colors"
+              key={folder}
+              onClick={() => {setSelectedFolder(folder); setSelectedEmail(null); setShowReply(false)}}
+              className={`shrink-0 px-3 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${
+                selectedFolder === folder
+                  ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
+                  : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] bg-gray-100 text-gray-600'
+              }`}
             >
-              {template.name}
+              {folder.replace('_', ' ')}
             </button>
           ))}
+        </div>
+        {/* Desktop: vertical folder list */}
+        <div className="hidden md:block space-y-2 border-r dark:border-[#1A1A24] pr-4">
+          <h3 className="text-xs font-black dark:text-[#7A7A85] px-4 py-2 uppercase tracking-widest font-mono">MAILBOX</h3>
+          {folders.map(folder => (
+            <button
+              key={folder}
+              onClick={() => {setSelectedFolder(folder); setSelectedEmail(null); setShowReply(false)}}
+              className={`
+                w-full text-left px-4 py-2 rounded font-bold text-sm transition-all flex justify-between items-center
+                ${selectedFolder === folder
+                  ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
+                  : 'dark:text-[#7A7A85] text-gray-600 hover:dark:bg-[#1A1A24] hover:bg-gray-50'
+                }
+              `}
+            >
+              {folder.replace('_', ' ')}
+            </button>
+          ))}
+
+          {/* Quick Templates */}
+          <div className="pt-4 border-t dark:border-[#1A1A24]">
+            <h3 className="text-xs font-black dark:text-[#7A7A85] px-4 py-2 uppercase tracking-widest font-mono flex items-center gap-2">
+              <Sparkles size={14} />
+              QUICK TEMPLATES
+            </h3>
+            {replyTemplates.map(template => (
+              <button
+                key={template.name}
+                onClick={() => {
+                  if (selectedEmail) {
+                    applyTemplate(template)
+                  } else {
+                    setReplySubject(template.subject.replace('{subject}', 'Your Inquiry').replace('{sender}', 'Valued Customer'))
+                    setReplyBody(template.body.replace(/\{subject\}/g, 'Your Inquiry').replace(/\{sender\}/g, 'Valued Customer'))
+                    setSelectedTemplate(template.name)
+                    setShowReply(true)
+                  }
+                }}
+                className="w-full text-left px-4 py-1.5 text-xs dark:text-[#B0C4FF] text-gray-600 hover:dark:bg-[#1A1A24] hover:bg-gray-50 transition-colors"
+              >
+                {template.name}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
        {/* Middle: Email List */}
-       <div className="col-span-1 border-r dark:border-[#1A1A24] flex flex-col">
+       <div className="md:col-span-1 md:border-r dark:border-[#1A1A24] flex flex-col">
          {/* Priority Filter Bar */}
           <div className="p-3 border-b dark:border-[#1A1A24] space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black dark:text-[#7A7A85] uppercase tracking-widest font-mono">📧 {selectedFolder.replace('_', ' ')}</h3>
-              <div className="flex gap-1 text-[9px] font-mono">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-black dark:text-[#7A7A85] uppercase tracking-widest font-mono shrink-0">📧 {selectedFolder.replace('_', ' ')}</h3>
+              <div className="flex gap-1 text-[9px] font-mono overflow-x-auto">
                 {['IMMEDIATE', 'URGENT', 'NORMAL', 'INFO'].map(p => (
                   <button
                     key={p}
                     onClick={() => setPriorityFilter(priorityFilter === p ? 'All' : p)}
-                    className={`px-1.5 py-0.5 rounded font-bold transition-colors ${
+                    className={`shrink-0 px-1.5 py-0.5 rounded font-bold transition-colors ${
                       priorityFilter === p
                         ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-blue-500 text-white'
                         : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] hover:dark:bg-[#2A2A3A]'
@@ -349,11 +368,11 @@ export default function Emails() {
               </div>
             </div>
             <div className="flex items-center gap-2 text-[10px] font-mono">
-              <span className="dark:text-[#7A7A85] text-[9px] uppercase tracking-wider">Cat:</span>
-              <div className="flex gap-1 flex-wrap">
-                {CATEGORIES.map(c => (
+              <span className="dark:text-[#7A7A85] text-[9px] uppercase tracking-wider shrink-0">Cat:</span>
+              <div className="flex gap-1 overflow-x-auto md:flex-wrap">
+                  {CATEGORIES.map(c => (
                   <button key={c} onClick={() => setCategoryFilter(categoryFilter === c ? 'All' : c)}
-                    className={`px-1.5 py-0.5 rounded transition-colors ${
+                    className={`shrink-0 px-1.5 py-0.5 rounded transition-colors ${
                       categoryFilter === c
                         ? 'dark:bg-[#00FF88] dark:text-[#0A0A0F] text-white bg-blue-500'
                         : 'dark:bg-[#1A1A24] dark:text-[#7A7A85] hover:dark:bg-[#2A2A3A]'
@@ -531,7 +550,7 @@ export default function Emails() {
       </div>
 
       {/* Right: Email Preview + Reply */}
-      <div className="col-span-2 flex flex-col">
+      <div className="md:col-span-2 flex flex-col">
         {selectedEmail ? (
           <>
             {/* Reply Success Banner */}

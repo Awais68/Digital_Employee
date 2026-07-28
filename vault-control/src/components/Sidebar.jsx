@@ -77,9 +77,10 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
 
       {/* Sidebar */}
       <div className={`
-        fixed md:relative h-screen dark:bg-[#1B2A48] bg-white
+        fixed md:relative inset-y-0 left-0 md:inset-y-auto md:left-auto
+        h-screen dark:bg-[#1B2A48] bg-white
         dark:border-r dark:border-[#2A3E5F] border-r border-gray-200
-        transition-all duration-300 z-40 flex flex-col overflow-hidden
+        transition-all duration-300 z-50 flex flex-col overflow-hidden
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         ${isCollapsed ? 'w-20' : 'w-64'}
       `}>

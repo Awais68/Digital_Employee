@@ -85,7 +85,7 @@ export default function TopBar({ isDark, setIsDark, currentPage, setCurrentPage 
       h-16 border-b transition-all duration-200
       dark:bg-[#12121A] dark:border-[#1A1A24]
       bg-white border-gray-200
-      flex items-center justify-between px-6 gap-4
+      flex items-center justify-between pl-14 md:pl-6 pr-4 md:pr-6 gap-2 md:gap-4
     `}>
       {/* Left: Page Title */}
       <div className="flex-1 min-w-0">
