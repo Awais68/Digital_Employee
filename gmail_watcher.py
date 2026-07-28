@@ -44,6 +44,8 @@ from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
 import requests
 
+_http_session = requests.Session()
+
 # DRY_RUN mode — set via env, defaults to true for safety
 DRY_RUN = os.getenv('DRY_RUN', 'true').lower() == 'true'
 
@@ -1059,7 +1061,7 @@ thread_id: {email.thread_id}
         """Send email to backend server for atomic processing (dedup + AI + file creation).
         Returns True only if server accepted and processed the email."""
         try:
-            resp = requests.post(
+            resp = _http_session.post(
                 f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/process-email",
                 json={
                     'subject': email.subject,
@@ -1069,7 +1071,7 @@ thread_id: {email.thread_id}
                     'email_id': email.id,
                     'thread_id': email.thread_id
                 },
-                timeout=60
+                timeout=(5, 60)
             )
             if resp.ok:
                 logger.info(f"🤖 Server accepted email {email.id}: {email.subject[:50]}")
@@ -1086,8 +1088,17 @@ thread_id: {email.thread_id}
             else:
                 logger.warning(f"[AI Process] Server returned {resp.status_code}: {resp.text[:200]}")
                 return False
+        except requests.exceptions.ConnectTimeout as e:
+            logger.warning(f"[AI Process] CONNECT-TIMEOUT: {e}")
+            return False
+        except requests.exceptions.ReadTimeout as e:
+            logger.warning(f"[AI Process] READ-TIMEOUT: {e}")
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"[AI Process] CONNECTION-ERROR: {e}")
+            return False
         except Exception as e:
-            logger.warning(f"[AI Process] Failed: {e}")
+            logger.warning(f"[AI Process] UNEXPECTED-ERROR: {type(e).__name__}: {e}")
             return False
 
     def _acquire_run_lock(self) -> bool:
