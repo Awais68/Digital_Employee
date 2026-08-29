@@ -40,9 +40,32 @@ export function AuthProvider({ children }) {
     }
   }, [token, fetchUser]);
 
+  // The global axios timeout is 30s, but the server alone allows up to 30s just
+  // to open a Neon connection on a cold start — bcrypt and the query sit on top
+  // of that. At the default the browser always gave up first, so a cold-start
+  // login could never succeed and surfaced as a raw "timeout of 30000ms
+  // exceeded". Auth calls get their own, longer budget.
+  const AUTH_TIMEOUT_MS = 60000;
+
+  // Turn transport-level axios failures into something a user can act on.
+  // `err.message` for these is the raw axios string, which tells the user
+  // nothing about what to do next.
+  function authError(err, fallback) {
+    if (err.response?.data?.error) return new Error(err.response.data.error);
+    if (err.response?.data?.message) return new Error(err.response.data.message);
+    if (err.code === 'ECONNABORTED' || /timeout/i.test(err.message || '')) {
+      return new Error('Server did not respond in time. It may be starting up — try again in a moment.');
+    }
+    if (err.code === 'ERR_NETWORK' || !err.response) {
+      return new Error('Cannot reach the server. Check your connection or try again shortly.');
+    }
+    if (err.message) return err;
+    return new Error(fallback);
+  }
+
   const login = useCallback(async (username, password) => {
     try {
-      const res = await axios.post('/api/auth/login', { username, password });
+      const res = await axios.post('/api/auth/login', { username, password }, { timeout: AUTH_TIMEOUT_MS });
       if (res.data.success) {
         setToken(res.data.token);
         setUser(res.data.user);
@@ -52,22 +75,13 @@ export function AuthProvider({ children }) {
       }
       throw new Error(res.data.message || 'Login failed');
     } catch (err) {
-      if (err.response?.data?.error) {
-        throw new Error(err.response.data.error);
-      }
-      if (err.response?.data?.message) {
-        throw new Error(err.response.data.message);
-      }
-      if (err.message) {
-        throw err;
-      }
-      throw new Error('Authentication failed');
+      throw authError(err, 'Authentication failed');
     }
   }, []);
 
   const register = useCallback(async (username, email, password) => {
     try {
-      const res = await axios.post('/api/auth/register', { username, email, password });
+      const res = await axios.post('/api/auth/register', { username, email, password }, { timeout: AUTH_TIMEOUT_MS });
       if (res.data.success) {
         setToken(res.data.token);
         setUser(res.data.user);
@@ -77,16 +91,7 @@ export function AuthProvider({ children }) {
       }
       throw new Error(res.data.message || 'Registration failed');
     } catch (err) {
-      if (err.response?.data?.error) {
-        throw new Error(err.response.data.error);
-      }
-      if (err.response?.data?.message) {
-        throw new Error(err.response.data.message);
-      }
-      if (err.message) {
-        throw err;
-      }
-      throw new Error('Registration failed');
+      throw authError(err, 'Registration failed');
     }
   }, []);
 

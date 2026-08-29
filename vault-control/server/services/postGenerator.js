@@ -26,6 +26,59 @@ function containsBannedPatterns(text) {
   return BANNED_PATTERNS.some(re => re.test(text));
 }
 
+// ─── INSTRUCTION-ECHO DETECTION ────────────────────────────────
+// A post reached the approval queue whose entire body was the prompt restated:
+// "We need to craft an Instagram post per strict rules. Constraints: - Word
+// count 30-150 words. - Hashtags 10-15 at end..." — i.e. the model answered with
+// the brief instead of the post. The existing reasoning-stripper only trims
+// LEADING preamble lines, so it cannot catch an output that is instructions all
+// the way down. Nothing else stood between that and the queue.
+const INSTRUCTION_ECHO_PATTERNS = [
+  /\bword count\s*:?\s*\d+\s*[-–]\s*\d+/i,
+  /\bhashtags\s*:?\s*\d+\s*[-–]\s*\d+/i,
+  /\bconstraints\s*:/i,
+  /\bper strict rules\b/i,
+  /\bstrict platform rules\b/i,
+  /\bmust follow all\b/i,
+  /\breturn only\b/i,
+  /\bdo not include (any )?(markdown|code fences|explanations)/i,
+  /\bline breaks between\b.*\b(hook|paragraph|bullet)/i,
+  /\bweb research data\s*:/i,
+  /\bhook ideas\s*:/i,
+  /\btrending angle\s*:/i,
+  /\bkey facts\s*:/i,
+  /\bpain points\s*:/i,
+  /\bwe need to (craft|write|produce)\b/i,
+  /\b(craft|write) (a|an|one) \w+ (social )?(media )?post\b/i,
+  /\$\{/,            // an unrendered template literal made it into the copy
+  /\bexact structure\b/i,
+  /\bcontent (rules|requirements)\s*:/i,
+];
+
+// Two independent signals are required so a normal post that happens to say
+// something like "key facts:" is not thrown away. A stray colon heading is not
+// evidence; a colon heading PLUS a word-count constraint is.
+function looksLikeInstructions(text) {
+  if (!text) return true;
+  const hits = INSTRUCTION_ECHO_PATTERNS.filter(re => re.test(text));
+  return hits.length >= 2;
+}
+
+// The last gate before copy is stored or published. Throws rather than returns a
+// flag: a caller that forgets to check a boolean publishes the prompt, and the
+// scheduler already treats a generation throw as "skip today".
+function assertPublishableCopy(text, label) {
+  const clean = (text || '').trim();
+  if (clean.length < 40) {
+    throw new Error(`${label}: generated copy is too short to publish (${clean.length} chars)`);
+  }
+  if (looksLikeInstructions(clean)) {
+    const hits = INSTRUCTION_ECHO_PATTERNS.filter(re => re.test(clean)).map(String).slice(0, 3);
+    throw new Error(`${label}: model echoed the brief instead of writing the post (matched ${hits.join(', ')})`);
+  }
+  return clean;
+}
+
 // STRICT PLATFORM RULES
 const STRICT_PLATFORM_RULES = {
   linkedin: {
@@ -82,6 +135,45 @@ ${toneSection}`;
 function getPlatformHashtagCount(platform) {
   const rules = STRICT_PLATFORM_RULES[platform] || STRICT_PLATFORM_RULES.linkedin;
   return `${rules.minHashtags}-${rules.maxHashtags}`;
+}
+
+// ─── Hashtag budget ───────────────────────────────────────────────────────
+// One caption is published VERBATIM to every selected platform, so it has to
+// satisfy the STRICTEST platform in the set — not each platform's own window.
+// The core prompt asked for 5-7 tags while LinkedIn and Facebook both cap at 5,
+// so a 6-tag caption sailed through generation and then failed publish
+// validation with "Too many hashtags (6/5 maximum)".
+function effectiveHashtagWindow(platforms) {
+  const list = Array.isArray(platforms) && platforms.length ? platforms : ['linkedin'];
+  let min = 0;
+  let max = Infinity;
+  for (const p of list) {
+    const rules = STRICT_PLATFORM_RULES[p] || STRICT_PLATFORM_RULES.linkedin;
+    min = Math.max(min, rules.minHashtags);
+    max = Math.min(max, rules.maxHashtags);
+  }
+  if (!Number.isFinite(max)) max = STRICT_PLATFORM_RULES.linkedin.maxHashtags;
+  // An impossible window (Instagram's floor of 10 against LinkedIn's ceiling of
+  // 5) collapses onto the ceiling: exceeding the cap is a hard block, falling
+  // short of a floor is not.
+  if (min > max) min = max;
+  return { min, max };
+}
+
+// Drop hashtags past `max`, keeping the leading ones — the model puts the most
+// relevant tags first. Deterministic, so an over-eager model can never block a
+// publish; the prompt asks for the right count, this guarantees it.
+function clampHashtags(content, max) {
+  if (typeof content !== 'string') return content;
+  const tags = content.match(/#[\p{L}\p{N}_]+/gu) || [];
+  if (tags.length <= max) return content;
+  let seen = 0;
+  return content
+    .replace(/#[\p{L}\p{N}_]+/gu, (m) => (++seen <= max ? m : ''))
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export const DEFAULT_TOPICS = [
@@ -213,7 +305,11 @@ async function condensedWebSearch(topic) {
   return { text, sources: usable };
 }
 
-export async function researchAndGeneratePost(topic, platform, postNumber = 1) {
+export async function researchAndGeneratePost(topic, platform, postNumber = 1, opts = {}) {
+  // soloDaily: this is the ONE post going out today (see the 1/day rule in
+  // scheduler.js). It gets a stricter hook bar because there is no second post
+  // to make up for a flat one.
+  const soloDaily = opts.soloDaily === true;
   // ── STEP 1: REAL WEB RESEARCH (with verified sources) ───────────────────
   console.log(`[PostGen] Web researching: "${topic}"`);
   const webResearch = await condensedWebSearch(topic);
@@ -318,6 +414,15 @@ Use line breaks between sections.`,
 - Sound like an industry expert sharing analysis
 - Use data points where available`;
 
+  const soloDailyBlock = soloDaily ? `THIS IS THE ONLY POST GOING OUT TODAY — it has to stop the scroll on its own:
+- The first line must be the single most surprising or counter-intuitive thing in the
+  research. If a reader saw only that line, they should want the next one.
+- Lead with the specific — a name, a number, a version, a date — never with a category.
+- Pick ONE idea and go deep. A single sharp claim beats three shallow ones.
+- Cut every sentence that could appear under any other topic. If it is reusable, it is filler.
+- Earn the last line: end on a concrete implication or a real question, not a sign-off.
+` : '';
+
   const postPrompt = `Write a ${platform} social post #${postNumber} about ${topic}.
 
 TOPIC: ${topic}
@@ -330,6 +435,7 @@ HASHTAGS: ${research.best_hashtags?.join(' ')}
 WEB RESEARCH DATA:
 ${webData.substring(0, 1000)}
 
+${soloDailyBlock}
 STRICT PLATFORM RULES (MUST FOLLOW ALL):
 ${getStrictPlatformRules(platform)}
 
@@ -378,6 +484,18 @@ Return ONLY the post text. No explanations, no intro, no markdown formatting.`;
     postContent = await callAI(systemMsg, retryPrompt, 1400);
     retried = true;
   }
+
+  // Same gate as the unified path — see assertPublishableCopy.
+  if (looksLikeInstructions(postContent)) {
+    console.warn(`[PostGen] ${platform} draft reads as the brief, not a post — regenerating once.`);
+    postContent = await callAI(
+      systemMsg,
+      postPrompt + '\n\nCRITICAL: your previous answer restated these instructions instead of writing the post. Do NOT describe the requirements, do NOT list constraints. Output ONLY the finished post text, starting with the hook line.',
+      1400
+    );
+    retried = true;
+  }
+  postContent = assertPublishableCopy(postContent, `${platform} post`);
 
   // ── IMAGE PROMPT ─────────────────────────────────────────────────────────
   const visualHook = research.hook_ideas?.[0] || research.trending_angle || topic;
@@ -606,7 +724,9 @@ sentence — never a trailing list. If none fit naturally, mention no one.
 Candidates: ${mentionPool.join(', ')}.`
     : `Do not @-mention or tag anyone; no handles are provided.`;
 
-  const hashtagPool = (research.best_hashtags || []).slice(0, 7).join(' ') || `#${topic.replace(/\s+/g, '')}`;
+  const { min: minTags, max: maxTags } = effectiveHashtagWindow(platforms);
+  const tagCountText = minTags === maxTags ? `exactly ${maxTags}` : `${minTags}-${maxTags}`;
+  const hashtagPool = (research.best_hashtags || []).slice(0, maxTags).join(' ') || `#${topic.replace(/\s+/g, '')}`;
   const corePrompt = `Write ONE final, ready-to-publish social media caption about "${topic}".
 This SINGLE caption will be posted VERBATIM to LinkedIn, Facebook, and Instagram — the
 exact same text on all three platforms. Do NOT write platform variations. Write one caption
@@ -629,9 +749,17 @@ EXACT STRUCTURE (follow precisely):
 4. Blank line.
 5. CLOSING QUESTION / CTA — one line ending in a question.
 6. Blank line.
-7. HASHTAGS — 5-7 hashtags on the final line, tied to "${topic}".
+7. HASHTAGS — ${tagCountText} hashtags on the final line, tied to "${topic}". Never more than ${maxTags}.
 
 Emojis are optional. If used, keep professional and engaging — never spammy.
+
+SCROLL-STOP BAR (this is the ONLY post published today — it has to earn attention alone):
+- The hook must be the single most surprising or counter-intuitive thing in the research.
+  If a reader saw only that line, they should want the next one.
+- Lead with the specific — a name, a number, a version, a date — never with a category.
+- Commit to ONE idea and go deep. One sharp claim beats three shallow ones.
+- Cut any sentence that could sit under a different topic unchanged. Reusable = filler.
+- The closing question must be one a real practitioner would actually ask, not engagement bait.
 
 CONTENT RULES:
 - Sound like a real practitioner, first person, no corporate-guru fluff.
@@ -664,6 +792,26 @@ Return ONLY the final caption text, formatted exactly as structured above.`;
     if (_lastCallUsedMock) console.error('[Unified] ⚠ CORE retry also fell back to mock.');
   }
   core = core.trim();
+
+  // Instruction-echo gate. One retry with a blunt reminder, then give up — a
+  // skipped post is recoverable, a published prompt is not.
+  if (looksLikeInstructions(core)) {
+    console.warn('[Unified] Core reads as the brief, not a post — regenerating once.');
+    _resetMockFlag();
+    core = (await callAI(
+      coreSystem,
+      corePrompt + '\n\nCRITICAL: your previous answer restated these instructions instead of writing the post. Do NOT describe the requirements, do NOT list constraints. Output ONLY the finished caption a reader would see, starting with the hook sentence.',
+      1400
+    )).trim();
+  }
+  core = assertPublishableCopy(core, 'Unified core caption');
+
+  // Hard cap, applied after every regeneration path above.
+  const preClampTags = (core.match(/#[\p{L}\p{N}_]+/gu) || []).length;
+  core = clampHashtags(core, maxTags);
+  if (preClampTags > maxTags) {
+    console.warn(`[Unified] Trimmed hashtags ${preClampTags} → ${maxTags} for [${platforms.join(', ')}]`);
+  }
 
   // Detect which mentions actually ended up woven into the core text.
   const usedMentions = mentionPool.filter(m => core.toLowerCase().includes(m.toLowerCase()));
