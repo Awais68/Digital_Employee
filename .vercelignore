@@ -1,0 +1,17 @@
+# Vercel's Root Directory for this project is "vault-control", so the CLI has to
+# be run from the repo root — which otherwise makes it walk the entire monorepo,
+# including live WhatsApp session files that change mid-scan (ENOENT) and dozens
+# of .env backups that must never leave this machine.
+# Whitelist: ignore everything, then re-add exactly what `vite build` needs.
+/*
+!/vault-control
+/vault-control/*
+!/vault-control/index.html
+!/vault-control/package.json
+!/vault-control/package-lock.json
+!/vault-control/vite.config.js
+!/vault-control/postcss.config.js
+!/vault-control/tailwind.config.js
+!/vault-control/vercel.json
+!/vault-control/src
+!/vault-control/public
