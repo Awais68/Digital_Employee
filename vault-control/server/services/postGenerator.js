@@ -542,7 +542,7 @@ Style keywords: modern, premium, editorial, tech, data visualization, dark mode,
 
 // NOTE: Twitter intentionally excluded from the active default set (kept in code/config
 // as `disabled` so it can be re-enabled later). See routes/posts.js STRICT_RULES + UI toggle.
-export async function generateDailyPosts(topicInput, platforms = ['linkedin', 'facebook']) {
+export async function generateDailyPosts(topicInput, platforms = ['linkedin', 'facebook'], opts = {}) {
   const topic = topicInput || DEFAULT_TOPICS[Math.floor(Math.random() * DEFAULT_TOPICS.length)];
   const posts = [];
 
@@ -563,8 +563,13 @@ export async function generateDailyPosts(topicInput, platforms = ['linkedin', 'f
     // Which of these slots carry an image is decided by the rotation policy
     // (2 with, 1 without, 1 with, 2 without) rather than by "always". A feed
     // where every single post has an image is a pattern in itself.
+    // `forceImages` is for an explicitly requested with-image batch (a manual
+    // test, or a launch post). It bypasses the rotation without advancing it,
+    // so the alternating pattern the feed sees is not knocked out of step.
     const { nextImageDecisions } = await import('./postPolicy.js');
-    const imageSlots = await nextImageDecisions(platforms.length);
+    const imageSlots = opts.forceImages
+      ? platforms.map(() => true)
+      : await nextImageDecisions(platforms.length);
     const platformsNeedingImages = platforms.filter((_, i) => imageSlots[i]);
 
     let imageResults = {};

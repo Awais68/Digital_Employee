@@ -109,23 +109,32 @@ export async function createHitlRequest({ kind = 'email', sourceId, title, summa
     [ref, kind, sourceId || null, title || '', summary || '', draft || '', JSON.stringify(payload), ownerPhone()]
   )
 
-  const lines = [
-    `🔔 *APPROVAL NEEDED*  [#${ref}]`,
-    '',
-    `*From:* ${payload.from || 'unknown'}`,
-    `*Subject:* ${title || '(none)'}`,
-    '',
-    `*They want:* ${summary || 'see draft below'}`,
-  ]
-  if (draft) {
-    lines.push('', '*Our draft reply:*', '```', String(draft).slice(0, 700), '```')
-  }
+  const isPost = kind === 'post'
+  const lines = isPost
+    ? [
+        `🔔 *POST APPROVAL*  [#${ref}]`,
+        '',
+        `*Topic:* ${title || '(none)'}`,
+        `*Going to:* ${(payload.platforms || []).join(', ') || 'unknown'}`,
+        `*Image:* ${payload.imageUrl ? 'attached to the post' : 'text only'}`,
+        '',
+        String(draft || summary || '').slice(0, 900),
+      ]
+    : [
+        `🔔 *APPROVAL NEEDED*  [#${ref}]`,
+        '',
+        `*From:* ${payload.from || 'unknown'}`,
+        `*Subject:* ${title || '(none)'}`,
+        '',
+        `*They want:* ${summary || 'see draft below'}`,
+        ...(draft ? ['', '*Our draft reply:*', '```', String(draft).slice(0, 700), '```'] : []),
+      ]
   lines.push(
     '',
     'Reply with:',
-    `*${ref} APPROVE* — send it`,
+    `*${ref} APPROVE* — ${isPost ? 'publish it' : 'send it'}`,
     `*${ref} REJECT* — drop it`,
-    `*${ref} EDIT <your text>* — send your version instead`,
+    `*${ref} EDIT <your text>* — ${isPost ? 'publish your version' : 'send your version instead'}`,
   )
   await sendToOwner(lines.join('\n'))
   console.log(`[HITL] Request #${ref} raised (${kind}): ${title}`)
@@ -155,6 +164,50 @@ function moveVaultFile(fileName, toFolder) {
   return { moved: true, to: toFolder }
 }
 
+// A post approval is not a file move. The drafted rows already live in
+// scheduled_posts, so approving means publishing them and recording where they
+// landed; rejecting means marking them so no later sweep picks them back up.
+async function decidePostRequest(payload, decision, opts) {
+  const ids = (Array.isArray(payload.postIds) ? payload.postIds : []).map(Number).filter(Boolean)
+  if (!ids.length) return { moved: false, reason: 'no draft posts attached' }
+
+  if (decision === 'reject') {
+    await query(`UPDATE scheduled_posts SET status='rejected' WHERE id = ANY($1)`, [ids])
+    return { moved: true, to: 'rejected', detail: `${ids.length} draft(s) dropped — nothing was published.` }
+  }
+
+  if (decision === 'edit' && opts.editedDraft) {
+    // Clamp here too: the owner's text goes out verbatim otherwise, and a
+    // hashtag overflow would fail the publish at the platform instead.
+    const { clampForPlatforms } = await import('./postPolicy.js')
+    for (const id of ids) {
+      const row = (await query(`SELECT platform FROM scheduled_posts WHERE id=$1`, [id])).rows[0]
+      if (!row) continue
+      await query(`UPDATE scheduled_posts SET content=$2 WHERE id=$1`,
+        [id, clampForPlatforms(opts.editedDraft, [row.platform])])
+    }
+  }
+
+  const { publishPost } = await import('./socialMediaService.js')
+  const lines = []
+  for (const id of ids) {
+    const row = (await query(`SELECT * FROM scheduled_posts WHERE id=$1`, [id])).rows[0]
+    if (!row) continue
+    try {
+      const r = await publishPost(row)
+      const url = r?.url || r?.postUrl || r?.permalink || r?.id || null
+      await query(`UPDATE scheduled_posts SET status='published', published_at=NOW(), post_url=$2 WHERE id=$1`,
+        [id, url ? String(url) : null])
+      lines.push(`✅ ${row.platform}${url ? ` — ${url}` : ''}`)
+    } catch (e) {
+      await query(`UPDATE scheduled_posts SET status='failed' WHERE id=$1`, [id])
+      lines.push(`❌ ${row.platform} — ${e.message}`)
+      console.warn(`[HITL] Publish failed for post ${id} (${row.platform}):`, e.message)
+    }
+  }
+  return { moved: true, to: 'published', detail: lines.join('\n') }
+}
+
 /**
  * Apply a decision to a request. Safe to call from WhatsApp or from the UI.
  * @param {string} ref
@@ -173,7 +226,9 @@ export async function decide(ref, decision, opts = {}) {
   const vaultFile = payload.vaultFile
   let result
 
-  if (decision === 'reject') {
+  if (reqRow.kind === 'post') {
+    result = await decidePostRequest(payload, decision, opts)
+  } else if (decision === 'reject') {
     result = moveVaultFile(vaultFile, 'Rejected')
   } else {
     if (decision === 'edit' && opts.editedDraft && vaultFile) {
@@ -206,8 +261,10 @@ export async function decide(ref, decision, opts = {}) {
     ok: true,
     status: finalStatus,
     message: result.moved
-      ? `✅ #${ref} ${finalStatus}. ${decision === 'reject' ? 'Nothing will be sent.' : 'It will go out on the next cycle.'}`
-      : `⚠️ #${ref} marked ${finalStatus}, but the draft file was not found (${result.reason}).`,
+      ? (result.detail
+          ? `#${ref} ${finalStatus}.\n${result.detail}`
+          : `✅ #${ref} ${finalStatus}. ${decision === 'reject' ? 'Nothing will be sent.' : 'It will go out on the next cycle.'}`)
+      : `⚠️ #${ref} marked ${finalStatus}, but the draft was not found (${result.reason}).`,
   }
 }
 

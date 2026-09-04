@@ -404,6 +404,51 @@ router.get('/queue', async (req, res) => {
   }
 })
 
+// POST /generate-for-approval — the system writes the post, the owner approves
+// it from WhatsApp. Scheduled posts publish unattended; this path exists for
+// the ones a human wants to see first, so the drafts are parked in
+// pending_approval and nothing is published until a decision comes back.
+router.post('/generate-for-approval', requireAdmin, async (req, res) => {
+  try {
+    const { topic, platforms = ['linkedin', 'facebook'], forceImages = false } = req.body || {}
+    const result = await generateDailyPosts(topic, platforms, { forceImages })
+
+    const { clampForPlatforms } = await import('../services/postPolicy.js')
+    const ids = []
+    let imageUrl = null
+    for (const post of result.posts) {
+      const content = clampForPlatforms(post.content, [post.platform])
+      const row = await query(`
+        INSERT INTO scheduled_posts
+          (topic, platform, content, image_url, scheduled_for, status, hashtags, mentions)
+        VALUES ($1,$2,$3,$4,$5,'pending_approval',$6,$7)
+        RETURNING id
+      `, [
+        result.topic, post.platform, content, post.imageUrl, post.scheduledFor,
+        JSON.stringify(post.hashtags || []), JSON.stringify(post.mentions || []),
+      ])
+      ids.push(row.rows[0].id)
+      if (!imageUrl && post.imageUrl) imageUrl = post.imageUrl
+    }
+
+    const first = result.posts[0]
+    const { createHitlRequest } = await import('../services/hitl.js')
+    const ref = await createHitlRequest({
+      kind: 'post',
+      sourceId: `post-batch-${ids.join('-')}`,
+      title: result.topic,
+      summary: `${ids.length} draft(s) for ${platforms.join(', ')}`,
+      draft: first ? clampForPlatforms(first.content, [first.platform]) : '',
+      payload: { postIds: ids, platforms, imageUrl },
+    })
+
+    res.json({ success: true, ref, topic: result.topic, postIds: ids, imageUrl: toClientImageUrl(imageUrl) })
+  } catch (e) {
+    console.error('[PostGen] generate-for-approval failed:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // POST /compose — create a manual post directly in the DB
 router.post('/compose', requireAdmin, async (req, res) => {
   try {
