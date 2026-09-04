@@ -7,14 +7,32 @@ import { callAI } from "./aiProvider.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GENERATED_DIR = path.resolve(__dirname, "../../public/generated");
 
+// Generated files are written to THIS process's disk. SERVER_PUBLIC_URL can
+// point at a different deployment (e.g. the Oracle box), and handing back a
+// URL on that host 404s for both the browser preview and the server-side
+// downloadImage() step. Always address our own files through our own origin;
+// publishing re-hosts them on a public CDN via imageHosting.getPublicImageUrl().
+function selfBaseUrl() {
+  return process.env.SELF_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+}
+
+
 // ─── Brand logo — embedded once as base64 for the header lockup ───────────
 // The ASNEXA brand mark sits on the right of the header. A generic file
 // loader is used so any image (png/jpeg) can be embedded as a data URI.
-const LOGO_PATH = path.resolve(__dirname, "../../public/uploads/logoBig.png");
-const BRAND_LOGO_PATH = path.resolve(
-  __dirname,
-  "../../public/uploads/logoAsNexa.png",
-);
+// The logo files are stored with whatever extension they were uploaded with,
+// so resolve by basename across the formats we accept rather than hardcoding
+// ".png" — a mismatch silently drops the brand mark from every image.
+const UPLOADS_DIR = path.resolve(__dirname, "../../public/uploads");
+function resolveLogoPath(basename) {
+  for (const ext of [".png", ".jpeg", ".jpg", ".webp"]) {
+    const candidate = path.join(UPLOADS_DIR, basename + ext);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return path.join(UPLOADS_DIR, basename + ".png"); // keep the old error path
+}
+const LOGO_PATH = resolveLogoPath("logoBig");
+const BRAND_LOGO_PATH = resolveLogoPath("logoAsNexa");
 
 const _logoCache = {}; // path -> dataUri | '' (attempted & failed)
 function loadImageDataUri(filePath) {
@@ -265,6 +283,34 @@ function extractContentFromPost(postContent, topic) {
 }
 
 // ─── AI-based content extraction with JSON schema + retry ─────────────
+// Models routinely wrap the JSON in code fences, a <think> preamble, or a
+// sentence of commentary. Pull out the first balanced {...} instead of trusting
+// the whole response to be parseable.
+function parseJsonLoose(raw) {
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    const start = cleaned.indexOf("{");
+    if (start === -1) throw e;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = start; i < cleaned.length; i++) {
+      const ch = cleaned[i];
+      if (esc) { esc = false; continue; }
+      if (ch === "\\") { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}" && --depth === 0) {
+        return JSON.parse(cleaned.slice(start, i + 1));
+      }
+    }
+    throw e;
+  }
+}
+
 async function extractContentViaAI(postContent, topic) {
   const systemPrompt =
     "You extract structured image-overlay content from marketing posts. Return ONLY valid JSON — no markdown, no code fences.";
@@ -297,8 +343,7 @@ ${postContent.substring(0, 1500)}`;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const raw = await callAI(systemPrompt, prompt, 800);
-      const cleaned = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleaned);
+      const parsed = parseJsonLoose(raw);
 
       const validation = validateStructuredContent(parsed);
       if (validation.valid) {
@@ -421,8 +466,7 @@ async function generateViaWikipedia(topic, width = 1080, height = 1350) {
   fs.writeFileSync(destPath, imgBuf);
 
   const base =
-    process.env.SERVER_PUBLIC_URL ||
-    `http://localhost:${process.env.PORT || 3000}`;
+    selfBaseUrl();
   const url = `${base}/generated/${filename}`;
   console.log(
     `[ImageGen] Wikipedia image saved: ${filename} (from "${firstTitle}")`,
@@ -855,14 +899,12 @@ async function generateCanvaStyleImage(
     const svgPath = path.join(GENERATED_DIR, `branded_${Date.now()}.svg`);
     fs.writeFileSync(svgPath, svg, "utf-8");
     const base =
-      process.env.SERVER_PUBLIC_URL ||
-      `http://localhost:${process.env.PORT || 3000}`;
+      selfBaseUrl();
     return `${base}/generated/${path.basename(svgPath)}`;
   }
 
   const base =
-    process.env.SERVER_PUBLIC_URL ||
-    `http://localhost:${process.env.PORT || 3000}`;
+    selfBaseUrl();
   return `${base}/generated/${filename}`;
 }
 
@@ -1024,14 +1066,12 @@ async function generatePremiumDesignImage(topic, width = 1080, height = 1350) {
     fs.writeFileSync(svgPath, svg, "utf-8");
     console.log(`[ImageGen] Premium design SVG: ${path.basename(svgPath)}`);
     const base =
-      process.env.SERVER_PUBLIC_URL ||
-      `http://localhost:${process.env.PORT || 3000}`;
+      selfBaseUrl();
     return `${base}/generated/${path.basename(svgPath)}`;
   }
 
   const base =
-    process.env.SERVER_PUBLIC_URL ||
-    `http://localhost:${process.env.PORT || 3000}`;
+    selfBaseUrl();
   return `${base}/generated/${filename}`;
 }
 
@@ -1090,8 +1130,7 @@ async function generateViaPollinations(topic, width = 1080, height = 1350) {
   }
 
   const base =
-    process.env.SERVER_PUBLIC_URL ||
-    `http://localhost:${process.env.PORT || 3000}`;
+    selfBaseUrl();
   console.log(
     `[ImageGen] AI image saved: ${filename} (${(fs.statSync(destPath).size / 1024).toFixed(0)}KB)`,
   );
@@ -1127,9 +1166,107 @@ async function generateSVGImage(topic, width = 1080, height = 1350) {
   const { default: sharp } = await import("sharp");
   await sharp(Buffer.from(svg)).png().toFile(destPath);
 
-  const base = process.env.SERVER_PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const base = selfBaseUrl();
   console.log("[ImageGen] SVG fallback image:", filename);
   return `${base}/generated/${filename}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GEMINI IMAGE GENERATION — the primary source for post images.
+//
+// GEMINI_API_KEY has been sitting unused in .env: the only Gemini path was an
+// indirect one through OpenRouter, five fallbacks deep, so in practice it never
+// ran. This calls Google directly and sits at the front of the chain.
+//
+// The prompt is built per CATEGORY, because a research post and a hiring
+// announcement should not look the same. Each category fixes the composition,
+// palette and mood so a feed of these still reads as one brand.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const IMAGE_CATEGORY_STYLES = {
+  research: {
+    scene: "abstract data visualisation, neural network topology, depth of field",
+    mood: "deep navy and electric blue, cool light, analytical",
+  },
+  engineering: {
+    scene: "clean isometric system architecture, connected nodes and pipelines",
+    mood: "slate grey with cyan accents, technical blueprint feel",
+  },
+  announcement: {
+    scene: "bold minimal composition with a single strong focal object",
+    mood: "high contrast, warm accent light, confident",
+  },
+  hiring: {
+    scene: "modern workspace, human silhouettes, open and welcoming",
+    mood: "soft daylight, teal and amber, optimistic",
+  },
+  tip: {
+    scene: "simple flat-lay of tools or icons on a clean surface",
+    mood: "bright, uncluttered, friendly",
+  },
+  general: {
+    scene: "professional abstract tech composition",
+    mood: "premium editorial lighting, restrained palette",
+  },
+};
+
+export function categoriseTopic(topic = "", content = "") {
+  const t = `${topic} ${content}`.toLowerCase();
+  if (/(research|paper|study|benchmark|findings|arxiv)/.test(t)) return "research";
+  if (/(hiring|job|role|vacancy|join us|we are looking)/.test(t)) return "hiring";
+  if (/(launch|announc|release|introducing|now live)/.test(t)) return "announcement";
+  if (/(tip|how to|guide|lesson|mistake|checklist)/.test(t)) return "tip";
+  if (/(engineering|architecture|pipeline|system|infra|loop|harness|graph)/.test(t)) return "engineering";
+  return "general";
+}
+
+async function generateViaGemini(topic, style = "professional", aspectRatio = "4:5", postContent = "") {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("GEMINI_API_KEY not set");
+
+  const category = categoriseTopic(topic, postContent);
+  const preset = IMAGE_CATEGORY_STYLES[category] || IMAGE_CATEGORY_STYLES.general;
+  const model = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
+
+  // No text in the image: Gemini renders words unreliably, and the caption
+  // already carries them. Asking for none is what keeps these usable.
+  const prompt = [
+    `A ${style} social media image about: ${topic}.`,
+    `Composition: ${preset.scene}.`,
+    `Palette and mood: ${preset.mood}.`,
+    `Aspect ratio ${aspectRatio}. Photorealistic or high-end 3D render, magazine quality.`,
+    `Absolutely no text, no words, no letters, no logos, no watermarks, no UI mockups.`,
+  ].join(" ");
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseModalities: ["IMAGE"] },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Gemini HTTP ${res.status}: ${detail.substring(0, 200)}`);
+  }
+  const data = await res.json();
+  if (data.error) throw new Error(`Gemini: ${data.error.message}`);
+
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const inline = parts.find((p) => p.inlineData?.data || p.inline_data?.data);
+  const b64 = inline?.inlineData?.data || inline?.inline_data?.data;
+  if (!b64) throw new Error("Gemini returned no image data");
+
+  fs.mkdirSync(GENERATED_DIR, { recursive: true });
+  const filename = `gemini_${category}_${Date.now()}.png`;
+  fs.writeFileSync(path.join(GENERATED_DIR, filename), Buffer.from(b64, "base64"));
+  console.log(`[ImageGen] Gemini image saved: ${filename} (category: ${category})`);
+  return `${selfBaseUrl()}/generated/${filename}`;
 }
 
 export async function generatePostImage(
@@ -1138,6 +1275,17 @@ export async function generatePostImage(
   aspectRatio = "4:5",
   postContent = "",
 ) {
+  // 0. Gemini — the configured primary generator. Explicitly first because the
+  //    owner asked for images to come from Gemini; everything below it is a
+  //    fallback for when the key is missing, out of quota, or refuses a prompt.
+  if (process.env.GEMINI_API_KEY && process.env.IMAGE_PRIMARY !== "template") {
+    try {
+      return await generateViaGemini(topic, style, aspectRatio, postContent);
+    } catch (e) {
+      console.warn("[ImageGen] Gemini failed:", e.message);
+    }
+  }
+
   // 1. Branded template with structured content from post body
   if (postContent) {
     try {
@@ -1236,8 +1384,7 @@ export async function generatePostImage(
           fs.writeFileSync(destPath, Buffer.from(await img.arrayBuffer()));
         }
         const base =
-          process.env.SERVER_PUBLIC_URL ||
-          `http://localhost:${process.env.PORT || 3000}`;
+          selfBaseUrl();
         console.log("[ImageGen] OpenRouter image saved:", filename);
         return `${base}/generated/${filename}`;
       }

@@ -2,20 +2,32 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Send, Save, Upload, Calendar, Sparkles, Copy, Check, Loader2,
   AlertCircle, Trash2, Edit2, Clock, CheckCircle2, Eye,
-  Linkedin, Facebook, Instagram, Twitter, Hash, Image,
+  Linkedin, Facebook, Instagram, Twitter, Hash, Image, Plus,
 } from 'lucide-react'
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
 
 const platforms = [
-  { id: 'linkedin', name: 'LinkedIn', limit: 3000, color: '#0A66C2', icon: Linkedin, hashtagMax: 5, minWords: 50, maxWords: 500, requireImage: true },
-  { id: 'facebook', name: 'Facebook', limit: 63206, color: '#1877F2', icon: Facebook, hashtagMax: 10, minWords: 50, maxWords: 500, requireImage: true },
-  { id: 'instagram', name: 'Instagram', limit: 2200, color: '#E4405F', icon: Instagram, hashtagMax: 30, minWords: 50, maxWords: 500, requireImage: true },
-  { id: 'twitter', name: 'Twitter', limit: 280, color: '#1DA1F2', icon: Twitter, hashtagMax: 3, minWords: 5, maxWords: 50, requireImage: false, disabled: true },
+  { id: 'linkedin',  name: 'LinkedIn',  limit: 3000,  color: '#0A66C2', icon: Linkedin,  hashtagMax: 5,  hashtagMin: 3, minWords: 40, maxWords: 500,  requireImage: true },
+  { id: 'facebook',  name: 'Facebook',  limit: 63206, color: '#1877F2', icon: Facebook,  hashtagMax: 5,  hashtagMin: 2, minWords: 20, maxWords: 500,  requireImage: true },
+  { id: 'instagram', name: 'Instagram', limit: 2200,  color: '#E4405F', icon: Instagram, hashtagMax: 15, hashtagMin: 5, minWords: 15, maxWords: 2200, requireImage: true },
+  { id: 'twitter',   name: 'Twitter',   limit: 280,   color: '#1DA1F2', icon: Twitter,   hashtagMax: 3,  hashtagMin: 1, minWords: 5,  maxWords: 50,   requireImage: false, disabled: true },
 ]
 
-// MANDATORY MENTIONS - Maximum audience reach
-const MANDATORY_MENTIONS = ['Ameen Alam', 'Zia Khan', 'Asharib Ali']
+// Opt-in via VITE_MANDATORY_MENTIONS (comma separated). Empty by default:
+// forcing the same three @mentions onto every post reads as engagement bait
+// and was the main reason posts looked machine-generated.
+const MANDATORY_MENTIONS = (import.meta.env.VITE_MANDATORY_MENTIONS || '')
+  .split(',').map(m => m.trim()).filter(Boolean)
+
+// Phrases that make copy read as AI-written. Surfaced as warnings, not blocks.
+const AI_TELLS = [
+  "in today's fast-paced world", 'in the ever-evolving', 'game-changer', 'game changer',
+  'unlock the power', 'harness the power', 'delve into', 'dive deep into',
+  'revolutionize the way', 'take it to the next level', 'the future is here',
+  'thrilled to share that', 'stay tuned for more', 'the possibilities are endless',
+  'for their incredible work in this space',
+]
 
 // STRICT RULES - Every post MUST follow these
 const STRICT_RULES = {
@@ -27,7 +39,7 @@ const STRICT_RULES = {
   maxHashtags: 5,
   blockWithoutImage: true,
   spamKeywords: ['buy now', 'click here', 'limited time', 'act fast', '100% free', 'act now', 'free money'],
-  minWords: 50,
+  // No global minWords: word floors are per-platform (see `platforms` above).
 }
 
 export default function SocialMedia() {
@@ -61,7 +73,42 @@ export default function SocialMedia() {
   const { success, error: toastError, warning } = useToast()
 
   // STRICT VALIDATION FUNCTION
-  const validatePost = (text, platforms, hasImage) => {
+  // Non-blocking reach/quality signals. These never stop a publish — they tell
+  // the author what is likely to suppress impressions before they ship it.
+  const reviewQuality = (text, selectedIds) => {
+    const warnings = []
+    if (!text?.trim()) return warnings
+    const lower = text.toLowerCase()
+
+    AI_TELLS.forEach(tell => {
+      if (lower.includes(tell)) warnings.push(`Reads as AI-written: "${tell}"`)
+    })
+
+    const emojis = (text.match(/\p{Extended_Pictographic}/gu) || []).length
+    if (emojis > 8) warnings.push(`${emojis} emojis — heavy emoji use suppresses reach`)
+
+    const tags = text.match(/#\w+/g) || []
+    ;(selectedIds || []).forEach(id => {
+      const p = platforms.find(x => x.id === id)
+      if (p && tags.length < p.hashtagMin) {
+        warnings.push(`${p.name}: ${tags.length} hashtags — ${p.hashtagMin}+ reaches further`)
+      }
+    })
+
+    const firstLine = text.split('\n')[0].trim()
+    if (firstLine.length > 140) {
+      warnings.push('First line is long — platforms truncate it, so lead with the hook')
+    }
+    if (!/[?!]/.test(text)) {
+      warnings.push('No question or call to action — replies are what drive distribution')
+    }
+    return warnings
+  }
+
+  // `selectedIds` (not `platforms`): the parameter used to shadow the
+  // module-level `platforms` array, which is why the per-platform checks below
+  // were dead code.
+  const validatePost = (text, selectedIds, hasImage) => {
     const errors = []
     
     // Image validation (MANDATORY)
@@ -77,21 +124,22 @@ export default function SocialMedia() {
     
     const words = text.split(/\s+/).filter(w => w.length > 0)
     
-    // Global minimum word count
-    if (words.length < STRICT_RULES.minWords) {
-      errors.push(`Minimum ${STRICT_RULES.minWords} words required (current: ${words.length})`)
-    }
-    
-    // Word count per platform
-    platforms.forEach(platformId => {
+    // Word count per selected platform.
+    // The old loop iterated `platforms` (the module-level array) instead of the
+    // `selectedPlatforms` argument, so `p.id === platformId` never matched and
+    // per-platform validation silently did nothing.
+    selectedIds.forEach(platformId => {
       const platform = platforms.find(p => p.id === platformId)
-      if (platform) {
-        if (words.length < platform.minWords) {
-          errors.push(`${platform.name}: Too few words (${words.length}/${platform.minWords} minimum)`)
-        }
-        if (words.length > platform.maxWords) {
-          errors.push(`${platform.name}: Too many words (${words.length}/${platform.maxWords} maximum)`)
-        }
+      if (!platform) return
+      if (words.length < platform.minWords) {
+        errors.push(`${platform.name}: Too few words (${words.length}/${platform.minWords} minimum)`)
+      }
+      if (words.length > platform.maxWords) {
+        errors.push(`${platform.name}: Too many words (${words.length}/${platform.maxWords} maximum)`)
+      }
+      const tags = text.match(/#\w+/g) || []
+      if (tags.length > platform.hashtagMax) {
+        errors.push(`${platform.name}: Too many hashtags (${tags.length}/${platform.hashtagMax} maximum)`)
       }
     })
     
@@ -103,14 +151,8 @@ export default function SocialMedia() {
       }
     }
     
-    // Mandatory mentions validation
-    if (STRICT_RULES.requireMentions) {
-      const textLower = text.toLowerCase()
-      const missingMentions = MANDATORY_MENTIONS.filter(mention => !textLower.includes(mention.toLowerCase()))
-      if (missingMentions.length > 0) {
-        errors.push(`Missing mandatory mentions: ${missingMentions.join(', ')} - Required for maximum reach`)
-      }
-    }
+    // Mentions are opt-in and auto-inserted before posting, so a missing
+    // mention is never a reason to block a publish.
     
     
     // Spam detection
@@ -161,7 +203,9 @@ export default function SocialMedia() {
 
   const charCount = (platform) => {
     const p = platforms.find(x => x.id === platform)
-    return { current: content.length, max: p.limit }
+    // p can be undefined for a stale/unknown id; reading p.limit threw and took
+    // the whole page down.
+    return { current: content.length, max: p?.limit ?? Infinity }
   }
 
   const isOverLimit = (platform) => {
@@ -223,22 +267,35 @@ export default function SocialMedia() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  // Rotating phrasing: a fixed sentence repeated on every post becomes a
+  // recognisable signature and is exactly what made the copy look automated.
+  const MENTION_TEMPLATES = [
+    (n) => `Credit where it's due — ${n}.`,
+    (n) => `${n}, this one's in your lane.`,
+    (n) => `Curious what ${n} make of this.`,
+    (n) => `Been learning a lot from ${n} on this.`,
+    (n) => `${n} — would value your take.`,
+  ]
+
   const insertMentionsInline = (text, mentions) => {
-    const missingMentions = mentions.filter(m => !text.toLowerCase().includes(m.toLowerCase()))
-    if (!missingMentions.length) return text
+    if (!mentions?.length) return text
+    const missing = mentions.filter(m => !text.toLowerCase().includes(m.toLowerCase()))
+    if (!missing.length) return text
     const hashtagIndex = text.search(/#\w/)
     const insertionPoint = hashtagIndex > 50 ? hashtagIndex : text.length
-    const mentionText = missingMentions.map(m => `@${m}`).join(', ')
-    const sentence = `\n\nShoutout to ${mentionText} for their incredible work in this space!`
+    const tagged = missing.map(m => `@${m}`)
+    const names = tagged.length === 1
+      ? tagged[0]
+      : tagged.slice(0, -1).join(', ') + ' and ' + tagged[tagged.length - 1]
+    const template = MENTION_TEMPLATES[Math.floor(Math.random() * MENTION_TEMPLATES.length)]
+    const sentence = `\n\n${template(names)}`
     return text.slice(0, insertionPoint).trimEnd() + sentence + '\n\n' + text.slice(insertionPoint).trimStart()
   }
 
   const handlePost = async () => {
     // Add mandatory mentions inline if not present
     let finalContent = content
-    const contentLower = finalContent.toLowerCase()
-    const hasMentions = MANDATORY_MENTIONS.some(m => contentLower.includes(m.toLowerCase()))
-    if (!hasMentions) {
+    if (MANDATORY_MENTIONS.length) {
       finalContent = insertMentionsInline(finalContent, MANDATORY_MENTIONS)
     }
     
@@ -410,14 +467,45 @@ export default function SocialMedia() {
   }
 
   const [topicSuggestions, setTopicSuggestions] = useState([])
+  const [customTopics, setCustomTopics] = useState([])
+  const [newTopic, setNewTopic] = useState('')
+  const [addingTopic, setAddingTopic] = useState(false)
   const [generatedImages, setGeneratedImages] = useState({})
   const [generateError, setGenerateError] = useState(null)
   const [workflowSteps, setWorkflowSteps] = useState({})
   const [resizedVariants, setResizedVariants] = useState({})
 
   useEffect(() => {
-    axios.get('/api/posts/topics').then(r => setTopicSuggestions(r.data.topics || [])).catch(() => {})
+    axios.get('/api/posts/topics').then(r => {
+      setTopicSuggestions(r.data.topics || [])
+      setCustomTopics(r.data.custom || [])
+    }).catch(() => {})
   }, [])
+
+  const addTopic = async () => {
+    const value = newTopic.trim()
+    if (!value) return
+    setAddingTopic(true)
+    try {
+      const r = await axios.post('/api/posts/topics', { topic: value })
+      setTopicSuggestions(r.data.topics || [])
+      setCustomTopics(r.data.custom || [])
+      setNewTopic('')
+      setTopic(value)
+    } catch (e) {
+      setGenerateError(e.response?.data?.error || e.message)
+    } finally {
+      setAddingTopic(false)
+    }
+  }
+
+  const removeTopic = async (t) => {
+    try {
+      const r = await axios.delete(`/api/posts/topics/${encodeURIComponent(t)}`)
+      setTopicSuggestions(r.data.topics || [])
+      setCustomTopics(r.data.custom || [])
+    } catch { /* leave the chip in place if the delete fails */ }
+  }
 
   const generateAIPosts = async () => {
     if (!topic.trim()) return
@@ -722,6 +810,24 @@ export default function SocialMedia() {
                 </div>
               )}
 
+              {/* Reach / quality warnings — advisory, never blocking */}
+              {(() => {
+                const warnings = reviewQuality(content, selectedPlatforms)
+                if (!warnings.length) return null
+                return (
+                  <div className="mb-4 p-4 rounded-lg dark:bg-yellow-500/10 bg-yellow-50 border dark:border-yellow-500/40 border-yellow-200">
+                    <p className="text-sm font-bold dark:text-yellow-300 text-yellow-700 mb-2 font-mono flex items-center gap-2">
+                      <AlertCircle size={16} /> REACH WARNINGS ({warnings.length})
+                    </p>
+                    <ul className="text-xs dark:text-yellow-200 text-yellow-700 space-y-1">
+                      {warnings.map((w, i) => (
+                        <li key={i}>• {w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })()}
+
               {/* Content Validation Status */}
               {content && (
                 <div className="mb-4 p-3 rounded-lg dark:bg-[#1A1A24] bg-gray-50 border dark:border-[#2A3E5F] border-gray-200">
@@ -789,12 +895,28 @@ export default function SocialMedia() {
                 {isGenerating ? 'Generating...' : 'Generate'}
               </button>
             </div>
+            <div className="flex gap-2 mb-3">
+              <input type="text" value={newTopic} onChange={(e) => setNewTopic(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addTopic()}
+                placeholder="Add your own topic to the list..."
+                className="flex-1 px-3 py-2 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-xs" />
+              <button onClick={addTopic} disabled={addingTopic || !newTopic.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium dark:bg-[#2A3E5F] dark:text-[#B0C4FF] bg-gray-200 text-gray-700 disabled:opacity-50">
+                <Plus size={14} /> Add Topic
+              </button>
+            </div>
             {topicSuggestions.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 <span className="text-[10px] dark:text-[#7A7A85] uppercase tracking-wider mr-1 self-center">Suggestions:</span>
                 {topicSuggestions.map(s => (
-                  <button key={s} onClick={() => setTopic(s)}
-                    className="text-[10px] px-2 py-1 rounded dark:bg-[#1A1A24] dark:text-[#B0C4FF] bg-gray-100 hover:dark:bg-[#2A3E5F] transition-colors">{s}</button>
+                  <span key={s} className="group inline-flex items-center rounded dark:bg-[#1A1A24] bg-gray-100 hover:dark:bg-[#2A3E5F] transition-colors">
+                    <button onClick={() => setTopic(s)}
+                      className="text-[10px] px-2 py-1 dark:text-[#B0C4FF] text-gray-700">{s}</button>
+                    {customTopics.includes(s) && (
+                      <button onClick={() => removeTopic(s)} title="Remove topic"
+                        className="px-1.5 py-1 text-[10px] opacity-0 group-hover:opacity-100 text-red-400">×</button>
+                    )}
+                  </span>
                 ))}
               </div>
             )}

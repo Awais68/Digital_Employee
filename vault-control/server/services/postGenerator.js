@@ -177,6 +177,9 @@ function clampHashtags(content, max) {
 }
 
 export const DEFAULT_TOPICS = [
+  'Loop Engineering',
+  'Harness Engineering',
+  'Graph Engineering',
   'Software Engineering best practices',
   'Web Development trends',
   'Agentic AI and Automation',
@@ -557,8 +560,20 @@ export async function generateDailyPosts(topicInput, platforms = ['linkedin', 'f
     console.log(`[PostGen] Unified: ${unified.verifiedSourceCount} verified sources, ` +
       `core narrative + ${Object.keys(unified.posts).length} platform adaptations`);
 
-    console.log(`[PostGen] Generating & validating images for all platforms...`);
-    const imageResults = await generateAllPlatformImages(topic, research, platforms, tempDir, (research.hook_ideas || [])[0] || topic, unified.core);
+    // Which of these slots carry an image is decided by the rotation policy
+    // (2 with, 1 without, 1 with, 2 without) rather than by "always". A feed
+    // where every single post has an image is a pattern in itself.
+    const { nextImageDecisions } = await import('./postPolicy.js');
+    const imageSlots = await nextImageDecisions(platforms.length);
+    const platformsNeedingImages = platforms.filter((_, i) => imageSlots[i]);
+
+    let imageResults = {};
+    if (platformsNeedingImages.length) {
+      console.log(`[PostGen] Generating & validating images for: ${platformsNeedingImages.join(', ')}`);
+      imageResults = await generateAllPlatformImages(topic, research, platformsNeedingImages, tempDir, (research.hook_ideas || [])[0] || topic, unified.core);
+    } else {
+      console.log('[PostGen] Rotation says text-only for this batch — no images generated');
+    }
 
     console.log(`[PostGen] Assembling final scheduled posts...`);
 
@@ -568,11 +583,14 @@ export async function generateDailyPosts(topicInput, platforms = ['linkedin', 'f
       if (!platformPost) continue;
 
       const time = POST_TIMES[i % POST_TIMES.length];
-      const imageResult = imageResults[platform];
+      const wantsImage = imageSlots[i];
+      const imageResult = wantsImage ? imageResults[platform] : null;
       let imageUrl = null;
       let resizedImages = {};
 
-      if (imageResult && !imageResult.error) {
+      if (!wantsImage) {
+        console.log(`[PostGen] ${platform}: text-only slot (rotation)`);
+      } else if (imageResult && !imageResult.error) {
         imageUrl = imageResult.originalUrl;
         resizedImages = imageResult.resizedImages || {};
         console.log(`[PostGen] ${platform}: Model=${imageResult.modelUsed}, Validation=${imageResult.validation?.success ? 'PASS' : 'FAIL'}, Variants=${Object.keys(resizedImages).length}`);
@@ -583,6 +601,13 @@ export async function generateDailyPosts(topicInput, platforms = ['linkedin', 'f
         } catch (e) {
           imageUrl = null;
         }
+      }
+      // Instagram is image-only: a text-only slot there would be an empty post,
+      // so it always gets one regardless of where the rotation stands.
+      if (!imageUrl && platform === 'instagram') {
+        try {
+          imageUrl = await generatePostImage(topic, 'professional', '4:5', platformPost.content || '');
+        } catch { imageUrl = null; }
       }
 
       const scheduledTime = new Date();

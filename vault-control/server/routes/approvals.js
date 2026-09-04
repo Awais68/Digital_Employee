@@ -97,6 +97,23 @@ function findFileInPendingApproval(id) {
 }
 
 // APPROVE an item
+
+// A decision made in the dashboard must close the matching WhatsApp request,
+// otherwise the owner is asked to approve on their phone something they already
+// approved on screen. Matched on the vault filename carried in the payload.
+async function closeHitlFor(fileId, status) {
+  try {
+    const { query } = await import('../database/connection.js')
+    await query(
+      `UPDATE hitl_requests SET status=$1, decided_at=NOW(), decided_by='dashboard'
+       WHERE status='pending' AND payload->>'vaultFile' IN ($2, $3)`,
+      [status, `${fileId}.md`, fileId]
+    )
+  } catch (e) {
+    console.warn('[Approvals] Could not sync HITL request:', e.message)
+  }
+}
+
 router.post('/:id/approve', requireAdmin, (req, res) => {
   try {
     const { id } = req.params
@@ -121,6 +138,7 @@ router.post('/:id/approve', requireAdmin, (req, res) => {
     // Move the file
     fs.renameSync(sourcePath, destPath)
     
+    closeHitlFor(id, 'approved')
     createNotification('success', 'Approved', `Item ${id} was approved`, { source: 'approval', id })
     if (global.broadcast) {
       global.broadcast({ type: 'approval_changed', action: 'approved', id })
@@ -158,6 +176,7 @@ router.post('/:id/reject', requireAdmin, (req, res) => {
     // Move the file
     fs.renameSync(sourcePath, destPath)
     
+    closeHitlFor(id, 'rejected')
     createNotification('warning', 'Rejected', `Item ${id} was rejected`, { source: 'approval', id })
     if (global.broadcast) {
       global.broadcast({ type: 'approval_changed', action: 'rejected', id })

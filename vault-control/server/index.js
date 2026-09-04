@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import './loadEnv.js'   // must stay first — populates process.env before any other module evaluates
 import express from 'express'
 import { WebSocketServer } from 'ws'
 import { createServer } from 'http'
@@ -9,7 +9,7 @@ import net from 'net'
 import chokidar from 'chokidar'
 import compression from 'compression'
 import { refreshAndBroadcast, getVaultCounts, getRecentActivity, getPendingApprovals, getServiceStatus } from './system-status.js'
-import { testConnection, initializeSchema, closePool, query } from './database/connection.js'
+import { testConnection, initializeSchema, closePool, query, getDbHealth } from './database/connection.js'
 import { generateCSRFToken, verifyCSRF } from './database/csrf.js'
 import { authenticateToken, authenticateApiKey, optionalAuth } from './database/auth.js'
 import { rateLimiter, authRateLimiter } from './database/rateLimiter.js'
@@ -73,7 +73,7 @@ global.wsBroadcast = (data) => {
       sent++
     }
   })
-  if (sent > 0) console.log(`[WS] Broadcast to ${sent} clients:`, data.type)
+  if (sent > 0 && process.env.DEBUG_WS === 'true') console.log(`[WS] Broadcast to ${sent} clients:`, data.type)
 }
 global.broadcast = global.wsBroadcast
 
@@ -122,11 +122,30 @@ app.use('/api', (req, res, next) => {
   res.status(503).json({ error: 'Server starting up', retryAfter: 2 })
 })
 
+// DB status is derived from the last REAL query, not a heartbeat — pinging Neon
+// on a timer is what kept its compute from ever suspending. Before any query has
+// run we fall back to the one-shot boot check.
+function dbStatus() {
+  const h = getDbHealth()
+  const known = h.lastQueryAt ? h.healthy : dbConnected
+  return known ? 'connected' : 'disconnected'
+}
+
 // Health check (no auth required)
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    database: dbConnected ? 'connected' : 'disconnected',
+  const health = getDbHealth()
+  const database = dbStatus()
+  // status used to be a hardcoded 'ok' with a 200 even while database read
+  // 'disconnected' — a monitor watching this endpoint saw green through a total
+  // DB outage. Let the DB decide both the body and the status code.
+  const degraded = database !== 'connected'
+  res.status(degraded ? 503 : 200).json({
+    status: degraded ? 'degraded' : 'ok',
+    // Derived from the last REAL query, not a heartbeat — pinging Neon on a
+    // timer is what kept the compute from ever suspending.
+    database,
+    databaseLastQueryAt: health.lastQueryAt,
+    databaseLastError: health.lastError || undefined,
     auth: ENABLE_AUTH ? 'enabled' : 'disabled',
     timestamp: new Date().toISOString(),
   })
@@ -138,7 +157,8 @@ if (ENABLE_AUTH) {
     // Skip auth for routes registered above
     if (req.path.startsWith('/chat/') || req.path.startsWith('/notifications/') || req.path.startsWith('/whatsapp/') ||
         req.path.startsWith('/internal/') || req.path.startsWith('/csrf-token') ||
-        req.path.startsWith('/health') || req.path.startsWith('/auth/')) {
+        req.path.startsWith('/health') || req.path.startsWith('/auth/') ||
+        req.path === '/admin/login') {   // admin panel has its own password gate
       return next()
     }
     authenticateToken(req, res, next)
@@ -158,13 +178,17 @@ app.use('/api/export', exportRouter)
 app.use('/api/todos', todosRouter)
 app.use('/api/email-templates', templatesRouter)
 app.use('/api/posts', postsRouter)
+app.use('/api/admin/login', authRateLimiter())
 app.use('/api/admin', adminRouter)
 app.use('/api/oracle', oracleCloudRouter)
 app.use('/api/analytics', analyticsRouter)
 
 // Chatbot SSE — eventBus injected after import (already initialized above)
+// optionalAuth (not authenticateToken) so chat stays usable without login, but
+// req.user is populated — the router uses it to gate outward-facing actions
+// (send email / publish post / WhatsApp) to admins when ENABLE_AUTH is on.
 setChatbotEventBus(chatbotEventBus)
-app.use('/api', chatbotRouter)
+app.use('/api', optionalAuth, chatbotRouter)
 
 // Internal notification endpoint (localhost only, no auth)
 app.post('/api/internal/notify', express.json(), async (req, res) => {
@@ -193,83 +217,68 @@ app.post('/api/internal/email-event', express.json(), async (req, res) => {
 const _recentlyProcessedEmailIds = new Set()
 setInterval(() => _recentlyProcessedEmailIds.clear(), 5 * 60 * 1000)
 
+// Every branch of this handler MUST answer the request. gmail_watcher.py only
+// marks a mail read (and applies AI/Processed) after a 2xx or a 409; anything
+// else means "not processed, try again". The two filter branches that used to
+// `return` without touching `res` therefore made the watcher sit out its 60s
+// read timeout and re-submit the very same junk mail on every cycle, forever.
 app.post('/api/internal/process-email', express.json(), async (req, res) => {
-  const { subject, sender, body, priority, email_id, thread_id } = req.body
+  // The Gmail watcher posts `sender`; the webhook path and manual replays use
+  // `from`. Accept either so a key mismatch can never blank the sender and
+  // silently disable every domain-based triage rule.
+  const { subject, body, priority, email_id, thread_id } = req.body
+  const sender = req.body.sender || req.body.from || ''
   console.log(`[AI Email] Processing: "${subject?.substring(0, 60)}" from ${sender} [${priority}]${email_id ? ` id=${email_id}` : ''}`)
 
-  // ── STRICT FILTER LAYER 1: No-reply — absolutely ZERO processing ──
-  // Must run before DB insert AND before task file creation.
-  const senderLower = (sender || '').toLowerCase()
-  const subjectLower = (subject || '').toLowerCase()
-  const bodyLower = (body || '').toLowerCase()
-
-  const noReplyPatterns = [
-    'noreply', 'no-reply', 'no_reply', 'donotreply', 'do-not-reply',
-    'do_not_reply', 'noreply@', 'no-reply@', 'donotreply@',
-    'notification@', 'notifications@', 'alert@', 'alerts@',
-    'mailer-daemon', 'mailer-daemon@', 'postmaster@',
-  ]
-  if (noReplyPatterns.some(p => senderLower.includes(p))) {
-    console.log(`[AI Email] STRICT REJECT (no-reply): ${subject?.substring(0, 60)} from ${sender} — zero processing`)
-    return
-  }
-
-  const promoPatterns = [
-    'newsletter', 'unsubscribe', 'marketing', 'promotion', 'promo',
-    'weekly digest', 'monthly digest', 'you received', 'you have a new',
-    'special offer', 'limited time', 'coupon', 'discount',
-    'recommended for you', 'trending', 'popular',
-  ]
-  const isPromotional = promoPatterns.some(p => subjectLower.includes(p) || bodyLower.includes(p))
-
-  const infoPatterns = [
-    'your login', 'password changed', 'account update', 'verification code',
-    'otp:', 'one-time pin', '2fa', 'two-factor', 'email changed',
-    'welcome to', 'get started', 'onboarding', 'thanks for signing',
-    'receipt', 'order confirmation', 'subscription confirmed',
-    'weekly report', 'monthly statement', 'your statement',
-  ]
-  const isInformational = infoPatterns.some(p => subjectLower.includes(p) || bodyLower.includes(p))
-
-  // ── STRICT FILTER LAYER 2: Promotional / Informational — DB dedup only, no task file, no AI ──
-  if (isPromotional || isInformational) {
-    const tag = isPromotional ? 'promotional' : 'informational'
-    console.log(`[AI Email] STRICT REJECT (${tag}): ${subject?.substring(0, 60)} from ${sender} — DB entry only`)
-    // DB insert for dedup tracking (so we never fetch it again)
-    if (email_id) _recentlyProcessedEmailIds.add(email_id)
-    try {
-      const { query } = await import('./database/connection.js')
-      await query(
-        `INSERT INTO emails(msg_id, from_address, subject, body, status, received_at, thread_id)
-         VALUES($1, $2, $3, $4, 'skipped', NOW(), $5)
-         ON CONFLICT(msg_id) DO NOTHING`,
-        [email_id || `skipped-${Date.now()}`, sender || 'unknown', subject || '', body || '', thread_id || '']
-      )
-    } catch (dbErr) {
-      console.warn(`[AI Email] DB skip for ${tag} email failed:`, dbErr.message)
-    }
-    return
-  }
+  const answer = (payload, code = 200) => { if (!res.headersSent) res.status(code).json(payload) }
 
   // ── LAYER 1: In-memory dedup (fast path) ──
   if (email_id && _recentlyProcessedEmailIds.has(email_id)) {
     console.log(`[AI Email] Dedup (memory): Already processed email ${email_id} — skipping`)
-    return res.status(409).json({ error: 'duplicate', layer: 'memory' })
+    return answer({ error: 'duplicate', layer: 'memory' }, 409)
+  }
+
+  const { query } = await import('./database/connection.js')
+
+  // ── TRIAGE: one verdict decides everything downstream ──
+  // junk       → DB row only. No task file, no draft, no ping. This is what
+  //              stops the system from writing job applications to Instagram.
+  // info       → task file for the record; nothing is sent to anyone.
+  // actionable → task file + draft + WhatsApp approval to the owner.
+  const { triageEmail } = await import('./services/emailTriage.js')
+  const triage = await triageEmail({ from: sender, subject, body, priority })
+  console.log(`[AI Email] Triage: ${triage.verdict} (${triage.decidedBy}) — ${triage.reason}`)
+
+  if (triage.verdict === 'junk') {
+    if (email_id) _recentlyProcessedEmailIds.add(email_id)
+    try {
+      await query(
+        `INSERT INTO emails(msg_id, from_address, subject, body, status, received_at, thread_id, category, category_reason)
+         VALUES($1,$2,$3,$4,'skipped',NOW(),$5,$6,$7)
+         ON CONFLICT(msg_id) DO NOTHING`,
+        [email_id || `skipped-${Date.now()}`, sender || 'unknown', subject || '', body || '',
+         thread_id || '', triage.category, triage.reason]
+      )
+    } catch (dbErr) {
+      console.warn('[AI Email] DB skip insert failed:', dbErr.message)
+    }
+    console.log(`[AI Email] SKIPPED (${triage.category}): "${subject?.substring(0, 60)}" — no reply, no task file, no alert`)
+    return answer({ received: true, skipped: true, verdict: 'junk', reason: triage.reason })
   }
 
   // ── LAYER 2: PostgreSQL atomic dedup (ultimate guarantee) ──
   try {
-    const { query } = await import('./database/connection.js')
     const result = await query(
-      `INSERT INTO emails(msg_id, from_address, subject, body, status, received_at, thread_id)
-       VALUES($1, $2, $3, $4, 'pending', NOW(), $5)
+      `INSERT INTO emails(msg_id, from_address, subject, body, status, received_at, thread_id, category, category_reason)
+       VALUES($1,$2,$3,$4,'pending',NOW(),$5,$6,$7)
        ON CONFLICT(msg_id) DO NOTHING
        RETURNING id`,
-      [email_id || `no-id-${Date.now()}`, sender || 'unknown', subject || '', body || '', thread_id || '']
+      [email_id || `no-id-${Date.now()}`, sender || 'unknown', subject || '', body || '',
+       thread_id || '', triage.category, triage.reason]
     )
     if (result.rows.length === 0 && email_id) {
       console.log(`[AI Email] Dedup (DB): Email ${email_id} already exists in DB — skipping`)
-      return res.status(409).json({ error: 'duplicate', layer: 'database' })
+      return answer({ error: 'duplicate', layer: 'database' }, 409)
     }
   } catch (dbErr) {
     // If DB is down, fall back to memory-only dedup
@@ -278,7 +287,7 @@ app.post('/api/internal/process-email', express.json(), async (req, res) => {
 
   if (email_id) _recentlyProcessedEmailIds.add(email_id)
 
-  // ── Create Needs_Action/ task file (only for actionable work emails) ──
+  // ── Create Needs_Action/ task file (actionable + info only) ──
   try {
     const fs = await import('fs')
     const path = await import('path')
@@ -297,8 +306,10 @@ type: email
 from: ${sender || 'unknown'}
 subject: ${subject || ''}
 received: ${new Date().toISOString()}
-priority: ${priority || 'medium'}
+priority: ${triage.priority}
 status: pending
+verdict: ${triage.verdict}
+category: ${triage.category}
 email_id: ${email_id || ''}
 thread_id: ${thread_id || ''}
 ---
@@ -311,7 +322,8 @@ thread_id: ${thread_id || ''}
 |-------|-------|
 | **From** | ${sender || 'unknown'} |
 | **Received** | ${new Date().toISOString()} |
-| **Priority** | ${(priority || 'medium').toUpperCase()} |
+| **Priority** | ${triage.priority.toUpperCase()} |
+| **Triage** | ${triage.verdict} — ${triage.reason} |
 | **Status** | Pending |
 
 ---
@@ -343,102 +355,89 @@ ${body || ''}
     console.error('[AI Email] Error creating task file:', fsErr.message)
   }
 
-  // ── AI ANALYSIS ──
-  res.json({ received: true })
+  // The watcher is released here; everything below is slow work (LLM calls,
+  // WhatsApp) that must not hold its socket open.
+  answer({ received: true, verdict: triage.verdict })
 
   setImmediate(async () => {
     try {
       const { callAI } = await import('./services/aiProvider.js')
       const { notify } = await import('./services/notificationService.js')
 
+      // An `info` email is real mail that asks nothing of us: file it, tell the
+      // dashboard, and stop. No draft, no WhatsApp.
+      if (triage.verdict === 'info') {
+        notify('info', `Email: ${(subject || '').substring(0, 40)}`,
+          `Filed for the record — ${triage.reason}`, { verdict: 'info' })
+        return
+      }
+
+      // ── ACTIONABLE ────────────────────────────────────────────────────────
       const systemPrompt = `You are an autonomous AI employee. Analyze this email and decide what action to take. Respond ONLY in valid JSON with no markdown formatting.`
       const userPrompt = `Email from: ${sender}
 Subject: ${subject}
-Priority: ${priority}
+Priority: ${triage.priority}
 Body: ${body?.substring(0, 1500) || ''}
+
+This email has already been confirmed as a genuine request that needs a human
+reply. Write the reply — do not decide whether one is needed.
 
 Respond with this exact JSON structure:
 {
-  "requires_response": true/false,
-  "urgency": "immediate/today/this_week/no_action",
-  "action_type": "reply/forward/create_task/archive/escalate",
-  "draft_reply": "if reply needed, the full reply text here, else null",
-  "task_title": "if task needed, short task title here, else null",
+  "asked": "in one plain sentence, what the sender is asking for",
+  "draft_reply": "the full reply text, professional, no placeholders",
+  "task_title": "short task title if we must do something, else null",
   "task_description": "task details if needed",
   "summary": "one line summary of what needs to happen"
 }`
 
       let plan
       try {
-        const raw = await callAI(systemPrompt, userPrompt, 800)
-        const cleaned = raw.replace(/```json|```/g, '').trim()
-        plan = JSON.parse(cleaned)
-      } catch {
-        plan = { requires_response: false, urgency: 'today', action_type: 'archive', summary: 'Email logged for review' }
+        const raw = await callAI(systemPrompt, userPrompt, 900)
+        plan = JSON.parse(raw.replace(/```json|```/g, '').trim())
+      } catch (e) {
+        // The draft is optional; the escalation is not. A model failure must
+        // still put this email in front of the owner.
+        console.warn('[AI Email] Plan generation failed:', e.message)
+        plan = { asked: triage.reason, draft_reply: null, summary: 'Needs your reply — AI draft unavailable' }
       }
+      console.log('[AI Email] Plan:', JSON.stringify(plan).substring(0, 300))
 
-      console.log('[AI Email] Plan:', JSON.stringify(plan))
-
-      // 1. Create todo if action needed (with dedup check)
+      // 1. Todos — from the plan and from the email body itself
+      const { extractTasksFromEmail, createTodoFromText } = await import('./services/taskCapture.js')
       if (plan.task_title) {
-        try {
-          const { query } = await import('./database/connection.js')
-          const existing = await query(
-            `SELECT id FROM todos WHERE title = $1 AND source = 'email' AND created_at > NOW() - INTERVAL '24 hours' LIMIT 1`,
-            [plan.task_title]
-          )
-          if (existing.rows.length === 0) {
-            await query(
-              `INSERT INTO todos(title, description, source, priority) VALUES($1,$2,'email',$3)`,
-              [plan.task_title, plan.task_description || body?.substring(0, 200) || '',
-               priority === 'high' ? 'high' : 'medium']
-            )
-            notify('info', 'Task Created', plan.task_title)
-          } else {
-            console.log(`[AI Email] Dedup: Todo already exists for "${plan.task_title}" — skipping`)
-          }
-        } catch (dbErr) {
-          console.error('[AI Email] DB error creating todo:', dbErr.message)
-        }
+        await createTodoFromText(plan.task_title, {
+          source: 'email',
+          sourceId: email_id || '',
+          description: plan.task_description || `From ${sender} — "${subject}"`,
+        }).catch(e => console.warn('[AI Email] Todo create failed:', e.message))
       }
+      extractTasksFromEmail({ msgId: email_id || '', from: sender, subject, body })
+        .catch(e => console.warn('[AI Email] Task extraction failed:', e.message))
 
-      // 2. Create draft reply in Pending_Approval if response needed (with dedup check)
-      if (plan.requires_response && plan.draft_reply) {
-        try {
-          const fs = await import('fs')
-          const path = await import('path')
-          const vaultPath = process.env.VAULT_PATH || '.'
-          const approvalDir = path.join(vaultPath, 'Pending_Approval')
-          fs.mkdirSync(approvalDir, { recursive: true })
+      // 2. Draft reply in Pending_Approval (dedup on email_id)
+      const fs = await import('fs')
+      const path = await import('path')
+      const vaultPath = process.env.VAULT_PATH || '.'
+      const approvalDir = path.join(vaultPath, 'Pending_Approval')
+      fs.mkdirSync(approvalDir, { recursive: true })
 
-          const emailIdCheck = email_id || ''
-          let alreadyExists = false
-          if (emailIdCheck && fs.existsSync(approvalDir)) {
-            const existingFiles = fs.readdirSync(approvalDir)
-            for (const f of existingFiles) {
-              const fPath = path.join(approvalDir, f)
-              try {
-                const content = fs.readFileSync(fPath, 'utf-8')
-                if (content.includes(`email_id: ${emailIdCheck}`)) {
-                  console.log(`[AI Email] Dedup: Approval file already exists for email ${emailIdCheck} — skipping`)
-                  alreadyExists = true
-                  break
-                }
-              } catch {}
-            }
-          }
-
-          if (alreadyExists) {
-            notify('info', 'Reply Already Exists',
-              `Draft reply already exists for "${subject?.substring(0, 50)}"`,
-              { action: 'approve_reply' })
-          } else {
-            const approvalFile = path.join(approvalDir, `EMAIL_REPLY_${Date.now()}.md`)
-            const replyContent = `---
+      let approvalFileName = null
+      if (plan.draft_reply) {
+        const already = fs.readdirSync(approvalDir).find(f => {
+          try { return email_id && fs.readFileSync(path.join(approvalDir, f), 'utf-8').includes(`email_id: ${email_id}`) }
+          catch { return false }
+        })
+        if (already) {
+          console.log(`[AI Email] Dedup: Approval file already exists for email ${email_id}`)
+          approvalFileName = already
+        } else {
+          approvalFileName = `EMAIL_REPLY_${Date.now()}.md`
+          const replyContent = `---
 type: email_reply
 to: ${sender || 'unknown'}
 subject: Re: ${subject || ''}
-priority: ${priority || 'medium'}
+priority: ${triage.priority}
 status: pending_approval
 created: ${new Date().toISOString()}
 action: send_email
@@ -446,7 +445,11 @@ email_id: ${email_id || ''}
 thread_id: ${thread_id || ''}
 ---
 
-## Proposed Reply
+## What they asked
+
+${plan.asked || triage.reason}
+
+## Reply
 
 ${plan.draft_reply}
 
@@ -457,42 +460,30 @@ Subject: ${subject || ''}
 ---
 Move to /Approved/ to send this reply.
 `
-            fs.writeFileSync(approvalFile, replyContent, 'utf-8')
-            console.log(`[AI Email] Approval file created: ${approvalFile}`)
-
-            notify('warning', 'Reply Draft Ready',
-              `Draft reply to "${subject?.substring(0, 50)}" needs your approval`,
-              { file: approvalFile, action: 'approve_reply' })
-          }
-        } catch (fsErr) {
-          console.error('[AI Email] Error creating approval file:', fsErr.message)
+          fs.writeFileSync(path.join(approvalDir, approvalFileName), replyContent, 'utf-8')
+          console.log(`[AI Email] Approval file created: ${approvalFileName}`)
         }
       }
 
-      // 3. WhatsApp notification for urgent emails
-      if (priority === 'high') {
-        try {
-          const whatsapp = await import('./services/whatsappService.js')
-          if (whatsapp.getStatus() === 'connected') {
-            const ownerPhone = process.env.OWNER_PHONE
-            if (ownerPhone) {
-              await whatsapp.sendMessage(ownerPhone,
-                `🔴 *URGENT EMAIL*\n\nFrom: ${sender}\nSubject: ${subject}\n\nAI Action: ${plan.summary || 'Review required'}${plan.requires_response ? '\n📝 Draft reply created — check dashboard' : ''}`
-              ).catch(() => {})
-            }
-          }
-        } catch (waErr) {
-          console.error('[AI Email] WhatsApp notify error:', waErr.message)
-        }
-      }
+      // 3. HITL — the owner's standing rule: every genuine email goes to
+      //    WhatsApp for a decision, whatever its priority. The old code only
+      //    pinged on priority === 'high', which is exactly how a real inbound
+      //    lead ("We ARe looking for FDE engineer", priority NORMAL) was filed
+      //    and then silently forgotten.
+      const { createHitlRequest } = await import('./services/hitl.js')
+      await createHitlRequest({
+        kind: 'email',
+        sourceId: email_id || '',
+        title: subject || '(no subject)',
+        summary: plan.asked || plan.summary || triage.reason,
+        draft: plan.draft_reply || '',
+        payload: { from: sender, threadId: thread_id || '', vaultFile: approvalFileName, priority: triage.priority },
+      }).catch(e => console.error('[AI Email] HITL request failed:', e.message))
 
-      // 4. Final confirmation notification
-      notify(
-        priority === 'high' ? 'urgent' : 'info',
-        `Email Processed: ${(subject || '').substring(0, 40)}`,
-        plan.summary || 'Email processed by AI',
-        { action: plan.action_type, hasReply: !!plan.requires_response }
-      )
+      notify(triage.priority === 'high' ? 'urgent' : 'warning',
+        `Approval needed: ${(subject || '').substring(0, 40)}`,
+        plan.summary || 'Sent to WhatsApp for your decision',
+        { action: 'approve_reply', file: approvalFileName })
 
     } catch (e) {
       console.error('[AI Email] Processing error:', e.message)
@@ -621,7 +612,10 @@ if (vaultPath) {
       /\.obsidian/,
       /\.claude/,
       /\.qwen/,
+      /(^|[\/\\])vault-control([\/\\]|$)/,
+      /(^|[\/\\])AI_Employee_Vault([\/\\]|$)/,
     ],
+    followSymlinks: false,
     persistent: true,
     ignoreInitial: true,
     awaitWriteFinish: {
@@ -634,7 +628,6 @@ if (vaultPath) {
   const debouncedRefresh = async () => {
     clearTimeout(debounceTimer)
     debounceTimer = setTimeout(async () => {
-      console.log('[Vault Change] Refreshing dashboard data...')
       try {
         const { cacheDel } = await import('./services/cache.js')
         cacheDel('system_stats')
@@ -647,20 +640,9 @@ if (vaultPath) {
     console.log(`[Vault Watcher] Watching: ${vaultPath}`)
   })
 
-  watcher.on('add', (path) => {
-    console.log(`[Vault Change] File added: ${path}`)
-    debouncedRefresh()
-  })
-
-  watcher.on('change', (path) => {
-    console.log(`[Vault Change] File changed: ${path}`)
-    debouncedRefresh()
-  })
-
-  watcher.on('unlink', (path) => {
-    console.log(`[Vault Change] File deleted: ${path}`)
-    debouncedRefresh()
-  })
+  watcher.on('add', () => debouncedRefresh())
+  watcher.on('change', () => debouncedRefresh())
+  watcher.on('unlink', () => debouncedRefresh())
 
   watcher.on('error', (error) => {
     console.error('[Vault Watcher] Error:', error)
@@ -769,35 +751,18 @@ async function boot() {
     console.log(`[Auth] ${ENABLE_AUTH ? 'Enabled' : 'Disabled (dev mode)'}`)
     console.log(`[Database] ${dbConnected ? 'Connected' : 'Not connected (file-based mode)'}`)
 
-    // Neon keep-alive + live health probe — always runs so dbConnected reflects
-    // reality (not a one-shot boot latch). Recovers if the boot check missed a
-    // Neon cold-start (10-25s), and flips to false if the DB later drops.
-    setInterval(async () => {
-      try { await query('SELECT 1'); dbConnected = true }
-      catch { dbConnected = false }
-    }, 30000)
-
-    // Scheduled post checker — runs every 30 seconds
-    setInterval(async () => {
-      try {
-        const due = await query(
-          `SELECT * FROM scheduled_posts WHERE status='scheduled' AND scheduled_for <= NOW() LIMIT 5`
-        )
-        for (const post of due.rows) {
-          try {
-            await query(`UPDATE scheduled_posts SET status='publishing' WHERE id=$1`, [post.id])
-            console.log(`[Scheduler] Publishing scheduled post ${post.id}...`)
-            const { default: axios } = await import('axios')
-            await axios.post(`http://localhost:${freePort}/api/social/draft/${post.id}/publish`)
-            await query(`UPDATE scheduled_posts SET status='published', published_at=NOW() WHERE id=$1`, [post.id])
-            console.log(`[Scheduler] Published ${post.id}`)
-          } catch (err) {
-            console.error(`[Scheduler] Failed post ${post.id}:`, err.message)
-            await query(`UPDATE scheduled_posts SET status='failed' WHERE id=$1`, [post.id]).catch(() => {})
-          }
-        }
-      } catch {}
-    }, 30000)
+    // NOTE: the old 30s `SELECT 1` keep-alive and the 30s scheduled-post scan
+    // used to live here. Both kept the Neon compute awake 24/7 (it only
+    // suspends after ~5 min with zero queries), which blew through the compute
+    // quota every ~8 days. Health is now derived from real query traffic
+    // (database/connection.js) and due work runs on exact-time timers
+    // (services/dueScheduler.js). Do not reintroduce a periodic ping here.
+    try {
+      const { startDueScheduler } = await import('./services/dueScheduler.js')
+      startDueScheduler(freePort)
+    } catch (e) {
+      console.warn('[Startup] Due scheduler error:', e.message)
+    }
 
   } catch (err) {
     console.error('[Startup] Critical error:', err.message)

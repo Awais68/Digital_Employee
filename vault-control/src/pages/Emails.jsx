@@ -48,6 +48,163 @@ const replyTemplates = [
   },
 ]
 
+// ───────────────────────────────────────────────────────────────────────────
+// A processed email is stored as a markdown file whose body nests the original
+// mail, our draft, the frontmatter and an instructions table. Rendering that
+// file verbatim is what made a delivered reply unreadable — the two things the
+// reader actually wants (what they asked, what we said) were buried in the
+// middle of it.
+//
+// This pulls those two out and shows them as separate blocks, with the raw file
+// still one click away.
+// ───────────────────────────────────────────────────────────────────────────
+
+function parseFrontmatter(raw) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(raw || '')
+  if (!m) return {}
+  const out = {}
+  for (const line of m[1].split(/\r?\n/)) {
+    const i = line.indexOf(':')
+    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim()
+  }
+  return out
+}
+
+// Grab a "## Heading" section's body, stopping at the next heading of any level.
+function section(raw, headings) {
+  for (const h of headings) {
+    const re = new RegExp(`^#{1,3}\\s*(?:[^\\n]*\\b)?${h}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n#{1,3}\\s|\\n---\\s*\\n|$)`, 'im')
+    const m = re.exec(raw || '')
+    if (m && m[1].trim()) return m[1].trim()
+  }
+  return null
+}
+
+// Instruction tables ("| ✅ Approve | ... |") and the vault's move-to-folder
+// footers are workflow chrome, not content.
+function stripChrome(text) {
+  if (!text) return text
+  return text
+    .split(/\r?\n/)
+    .filter(l => !/^\s*\|/.test(l))
+    .filter(l => !/^\s*\*(Processed|Generated) by/i.test(l))
+    .filter(l => !/^\s*(Move to|Only send|Approve:|Reject:)/i.test(l))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function parseEmailRecord(email) {
+  const raw = email?.body || email?.content || email?.preview || ''
+  const fm = parseFrontmatter(raw)
+
+  const asked = stripChrome(
+    section(raw, ['What they asked', 'Original Email', 'Email Content', 'Message', 'Original Message', 'Query'])
+  )
+  const replied = stripChrome(
+    section(raw, ['Proposed Reply', 'Reply', 'Draft Reply', 'Response', 'Our Reply'])
+  )
+
+  // No recognisable structure (a plain inbox mail): the whole body IS the query.
+  const bodyOnly = !asked && !replied ? stripChrome(raw.replace(/^---[\s\S]*?---\s*/, '')) : null
+
+  return {
+    raw,
+    fm,
+    asked: asked || bodyOnly,
+    replied,
+    from: email?.from || fm.from || fm.to || 'Unknown',
+    subject: email?.subject || fm.subject || 'No subject',
+    status: fm.status || null,
+  }
+}
+
+// Sent / rejected / pending, derived from the folder the file lives in — that
+// folder IS the workflow state in this vault.
+function statusOf(email, fm) {
+  const folder = (email?.folder || '').toLowerCase()
+  const name = (email?.id || email?.name || '').toLowerCase()
+  if (name.startsWith('rejected_') || folder === 'rejected') {
+    return { label: 'Rejected — nothing was sent', tone: 'text-red-400', dot: 'bg-red-500' }
+  }
+  if (folder === 'done' || fm?.status === 'sent' || fm?.status === 'completed') {
+    return { label: 'Reply sent', tone: 'text-green-400', dot: 'bg-green-500' }
+  }
+  if (folder === 'approved') {
+    return { label: 'Approved — sending on the next cycle', tone: 'text-green-400', dot: 'bg-green-500' }
+  }
+  if (folder === 'pending_approval' || fm?.status === 'pending_approval') {
+    return { label: 'Waiting for your approval', tone: 'text-yellow-400', dot: 'bg-yellow-500' }
+  }
+  if (folder === 'needs_action') {
+    return { label: 'Needs action', tone: 'text-blue-400', dot: 'bg-blue-500' }
+  }
+  return { label: fm?.status ? fm.status.replace(/_/g, ' ') : 'In inbox', tone: 'dark:text-[#7A7A85] text-gray-500', dot: 'bg-gray-400' }
+}
+
+function EmailRecordView({ email }) {
+  const [showRaw, setShowRaw] = useState(false)
+  const rec = parseEmailRecord(email)
+  const status = statusOf(email, rec.fm)
+
+  return (
+    <div className="space-y-4">
+      {/* One-glance status */}
+      <div className="flex items-center gap-2 text-sm">
+        <span className={`w-2 h-2 rounded-full ${status.dot}`} />
+        <span className={`font-medium ${status.tone}`}>{status.label}</span>
+        {rec.fm.created && (
+          <span className="dark:text-[#7A7A85] text-gray-500 text-xs">
+            · {new Date(rec.fm.created).toLocaleString()}
+          </span>
+        )}
+      </div>
+
+      {/* What they asked */}
+      <div className="rounded-lg border dark:border-[#1A1A24] border-gray-200 overflow-hidden">
+        <div className="px-4 py-2 dark:bg-[#12121A] bg-gray-50 border-b dark:border-[#1A1A24] border-gray-200 flex items-center gap-2">
+          <Mail size={14} className="dark:text-[#B0C4FF] text-blue-500" />
+          <span className="text-xs font-bold uppercase tracking-wider dark:text-[#B0C4FF] text-blue-600">
+            They asked
+          </span>
+          <span className="text-xs dark:text-[#7A7A85] text-gray-500 truncate">— {rec.from}</span>
+        </div>
+        <p className="p-4 text-sm dark:text-[#E0E0E6] text-gray-800 whitespace-pre-wrap leading-relaxed">
+          {rec.asked || 'No message content.'}
+        </p>
+      </div>
+
+      {/* What we replied */}
+      {rec.replied && (
+        <div className="rounded-lg border dark:border-[#1A3A2A] border-green-200 overflow-hidden">
+          <div className="px-4 py-2 dark:bg-[#0F1A14] bg-green-50 border-b dark:border-[#1A3A2A] border-green-200 flex items-center gap-2">
+            <Reply size={14} className="dark:text-[#00FF88] text-green-600" />
+            <span className="text-xs font-bold uppercase tracking-wider dark:text-[#00FF88] text-green-700">
+              {status.label === 'Reply sent' ? 'We replied' : 'Draft reply'}
+            </span>
+          </div>
+          <p className="p-4 text-sm dark:text-[#E0E0E6] text-gray-800 whitespace-pre-wrap leading-relaxed">
+            {rec.replied}
+          </p>
+        </div>
+      )}
+
+      <button
+        onClick={() => setShowRaw(!showRaw)}
+        className="flex items-center gap-1.5 text-xs dark:text-[#7A7A85] text-gray-500 hover:dark:text-[#E0E0E6] hover:text-gray-900 transition-colors"
+      >
+        {showRaw ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        {showRaw ? 'Hide raw file' : 'Show raw file'}
+      </button>
+      {showRaw && (
+        <pre className="p-4 rounded-lg dark:bg-[#0D0D14] bg-gray-50 text-[11px] dark:text-[#7A7A85] text-gray-600 whitespace-pre-wrap font-mono overflow-x-auto">
+          {rec.raw || 'No content available.'}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 export default function Emails() {
   const [selectedFolder, setSelectedFolder] = useState('Inbox')
   const [emails, setEmails] = useState([])
@@ -688,13 +845,9 @@ export default function Emails() {
               </div>
             )}
 
-            {/* Email Body */}
+            {/* Email Body — structured: what they asked, what we replied, status */}
             <div className="p-6 flex-1 overflow-y-auto">
-              <div className="prose dark:prose-invert max-w-none">
-                <p className="text-sm dark:text-[#E0E0E6] whitespace-pre-wrap leading-relaxed font-mono">
-                  {selectedEmail.body || selectedEmail.content || selectedEmail.preview || 'No content available.'}
-                </p>
-              </div>
+              <EmailRecordView email={{ ...selectedEmail, folder: selectedEmail.folder || selectedFolder }} />
             </div>
 
             {/* Action Bar */}

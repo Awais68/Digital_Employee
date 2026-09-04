@@ -19,8 +19,7 @@ function getAuthToken() {
 
 const INITIAL_MESSAGE = {
   role: "assistant",
-  content:
-    "Hey! I'm your FTE assistant. Batao kya karna hai — posts, emails, todos, WhatsApp — main sab kar sakta hoon.",
+  content: "What do you need?",
 };
 
 // Markdown-style bold + clickable [label](url) links — NO truncation, always full text
@@ -52,6 +51,14 @@ function renderContent(text) {
   return <span>{parts}</span>;
 }
 
+// Strip the control blocks the model emits so they never reach the bubble.
+function stripTags(text) {
+  return text
+    .replace(/<ACTION>[\s\S]*?<\/ACTION>/g, "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim();
+}
+
 function MessageBubble({ msg, isStreaming }) {
   const isUser = msg.role === "user";
   return (
@@ -77,7 +84,7 @@ function MessageBubble({ msg, isStreaming }) {
   );
 }
 
-function ActionBadge({ action }) {
+function ActionBadge({ action, result }) {
   if (!action) return null;
   const labels = {
     ADD_TODO: "✅ Todo added",
@@ -85,10 +92,18 @@ function ActionBadge({ action }) {
     SEND_WHATSAPP: "💬 WhatsApp sent",
     APPROVE_DRAFT: "🚀 Draft approved",
     CHECK_EMAILS: "📧 Emails checked",
+    SEND_EMAIL: "✉️ Email sent",
+    PUBLISH_POST: "📣 Post published",
+    GET_LAST_POST: "🔎 Last post",
+    CREATE_INVOICE: "🧾 Invoice pending approval",
   };
+  const ok = result?.success !== false;
+  const tone = ok
+    ? "bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
+    : "bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300";
   return (
-    <div className="mx-3 mb-1.5 px-2.5 py-1 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg text-xs text-green-700 dark:text-green-300">
-      {labels[action.type] || `⚡ ${action.type}`}
+    <div className={`mx-3 mb-1.5 px-2.5 py-1 border rounded-lg text-xs ${tone}`}>
+      {ok ? labels[action.type] || `⚡ ${action.type}` : `⚠️ ${result?.error || "Action failed"}`}
     </div>
   );
 }
@@ -115,6 +130,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [lastAction, setLastAction] = useState(null);
+  const [lastResult, setLastResult] = useState(null);
   const [streamingText, setStreamingText] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const bottomRef = useRef(null);
@@ -143,6 +159,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
     setIsThinking(true);
     setStreamingText("");
     setLastAction(null);
+    setLastResult(null);
     let accumulated = "";
     try {
       const controller = new AbortController();
@@ -182,33 +199,60 @@ export default function ChatbotPanel({ isOpen, onClose }) {
             } else if (parsed.type === "chunk") {
               setIsThinking(false);
               accumulated += parsed.text;
-              const clean = accumulated
-                .replace(/<ACTION>[\s\S]*?<\/ACTION>/g, "")
-                .replace(/<think>[\s\S]*?<\/think>/gi, "")
-                .trim();
-              setStreamingText(clean);
+              setStreamingText(stripTags(accumulated));
             } else if (parsed.type === "action") {
               setLastAction(parsed.action);
+              setLastResult(parsed.result);
             } else if (parsed.type === "email_status") {
               if (parsed.data?.emails?.length > 0) {
                 const lines = parsed.data.emails
                   .map((e) => `📧 [${e.subject}](inbox/${e.id}) — ${e.from}`)
                   .join("\n");
                 accumulated += "\n\n" + lines;
-                setStreamingText(
-                  accumulated.replace(/<ACTION>[\s\S]*?<\/ACTION>/g, "").trim(),
-                );
+                setStreamingText(stripTags(accumulated));
               } else if (parsed.data?.summary) {
                 accumulated += "\n\n" + parsed.data.summary;
-                setStreamingText(
-                  accumulated.replace(/<ACTION>[\s\S]*?<\/ACTION>/g, "").trim(),
-                );
+                setStreamingText(stripTags(accumulated));
               }
+            } else if (parsed.type === "email_sent") {
+              const d = parsed.data || {};
+              accumulated +=
+                "\n\n" +
+                (d.success
+                  ? `✉️ **${d.to}** ko bhej diya — ${d.subject}` +
+                    (d.dryRun ? " _(dry run — actually deliver nahi hui)_" : "")
+                  : `⚠️ Email nahi gayi: ${d.error || "unknown error"}`);
+              setStreamingText(stripTags(accumulated));
+            } else if (parsed.type === "post_published") {
+              const d = parsed.data || {};
+              const lines = (d.results || [])
+                .map((r) =>
+                  r.success
+                    ? `✅ **${r.platform}** — ${r.url ? `[post dekhein](${r.url})` : "posted"}`
+                    : `❌ **${r.platform}** — ${r.error}`,
+                )
+                .join("\n");
+              accumulated += "\n\n" + (lines || d.summary || "");
+              setStreamingText(stripTags(accumulated));
+            } else if (parsed.type === "post_status") {
+              const posts = parsed.data?.posts || [];
+              if (posts.length) {
+                accumulated +=
+                  "\n\n" +
+                  posts
+                    .map(
+                      (p) =>
+                        `📣 **${p.platform}** — ${p.url ? `[${p.topic || "post"}](${p.url})` : p.topic || "post"} — ${
+                          p.publishedAt ? new Date(p.publishedAt).toLocaleDateString() : ""
+                        }\n"${p.preview}..."`,
+                    )
+                    .join("\n\n");
+              } else {
+                accumulated += "\n\nAbhi tak koi post publish nahi hui.";
+              }
+              setStreamingText(stripTags(accumulated));
             } else if (parsed.type === "done") {
-              const final = accumulated
-                .replace(/<ACTION>[\s\S]*?<\/ACTION>/g, "")
-                .replace(/<think>[\s\S]*?<\/think>/gi, "")
-                .trim();
+              const final = stripTags(accumulated);
               setMessages((prev) => [
                 ...prev,
                 { role: "assistant", content: final },
@@ -227,10 +271,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
       // Stream ended without a `done` event (network drop, proxy cut-off, etc.)
       // but we did receive text — commit it so the bubble is never left blank.
       if (!committed) {
-        const final = accumulated
-          .replace(/<ACTION>[\s\S]*?<\/ACTION>/g, "")
-          .replace(/<think>[\s\S]*?<\/think>/gi, "")
-          .trim();
+        const final = stripTags(accumulated);
         if (final) {
           setMessages((prev) => [
             ...prev,
@@ -272,6 +313,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
   const clearChat = () => {
     setMessages([INITIAL_MESSAGE]);
     setLastAction(null);
+    setLastResult(null);
     setStreamingText("");
     setIsThinking(false);
   };
@@ -325,7 +367,7 @@ export default function ChatbotPanel({ isOpen, onClose }) {
         <div ref={bottomRef} />
       </div>
       {/* Action badge */}
-      <ActionBadge action={lastAction} />
+      <ActionBadge action={lastAction} result={lastResult} />
       {/* Input */}
       <div className="px-3 pb-3 shrink-0">
         <div className="flex items-end gap-2 bg-gray-100 dark:bg-gray-800 rounded-xl px-3 py-2">
