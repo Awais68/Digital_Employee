@@ -23,20 +23,46 @@ import { query } from '../database/connection.js'
 // "urgent email" alert and todo reminder ever sent went to a number that does
 // not exist. WHATSAPP_PHONE in the root .env is the real, logged-in number, so
 // it is the fallback and the two are always compared digits-only.
+const PLACEHOLDER = '923001234567'
+const DEFAULT_COUNTRY_CODE = process.env.WHATSAPP_COUNTRY_CODE || '92'
+
+// A number may be written 03352204606, 3352204606, +92 335 2204606 or
+// 923352204606 — they are all the same person. WhatsApp ids only ever carry the
+// full international form, so normalise to that before comparing anything.
+function normalisePhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '')
+  if (!d) return ''
+  if (d.startsWith('00')) d = d.slice(2)
+  if (d.startsWith('0')) d = DEFAULT_COUNTRY_CODE + d.slice(1)
+  else if (d.length <= 10) d = DEFAULT_COUNTRY_CODE + d
+  return d
+}
+
+/**
+ * Every number allowed to approve, in send order. OWNER_PHONE may hold several,
+ * comma-separated, so a second person can approve without a code change.
+ */
+export function ownerPhones() {
+  const listed = String(process.env.OWNER_PHONE || '').split(/[,;\s]+/)
+  const nums = listed.map(normalisePhone).filter(n => n && n !== PLACEHOLDER)
+  const linked = normalisePhone(process.env.WHATSAPP_PHONE)
+  // The linked account always counts: it is the chat the bot can definitely
+  // reach, and a bad OWNER_PHONE must never mute the system entirely.
+  if (linked && !nums.includes(linked)) nums.push(linked)
+  return nums
+}
+
+// Kept for callers that only need somewhere to address a single message.
 export function ownerPhone() {
-  const raw = process.env.OWNER_PHONE || process.env.WHATSAPP_PHONE || ''
-  const digits = String(raw).replace(/\D/g, '')
-  // A placeholder is worse than nothing: it silently swallows every alert.
-  if (!digits || digits === '923001234567') {
-    return String(process.env.WHATSAPP_PHONE || '').replace(/\D/g, '')
-  }
-  return digits
+  return ownerPhones()[0] || ''
 }
 
 export function isOwner(waFrom = '') {
-  const owner = ownerPhone()
-  if (!owner) return false
-  return String(waFrom).replace(/\D/g, '').endsWith(owner)
+  // Normalise the incoming side too: a WhatsApp id is always international, but
+  // a number typed into a config or a test is often the local 03xx form.
+  const from = normalisePhone(String(waFrom).split('@')[0])
+  if (!from) return false
+  return ownerPhones().some(o => from.endsWith(o) || o.endsWith(from))
 }
 
 // ─── Outbound pacing ───────────────────────────────────────────────────────
@@ -50,8 +76,8 @@ let lastSentAt = 0
 
 export function sendToOwner(text) {
   sendChain = sendChain.then(async () => {
-    const owner = ownerPhone()
-    if (!owner) {
+    const owners = ownerPhones()
+    if (!owners.length) {
       console.warn('[HITL] No owner phone configured — set WHATSAPP_PHONE or OWNER_PHONE')
       return { skipped: 'no-owner-phone' }
     }
@@ -60,11 +86,20 @@ export function sendToOwner(text) {
       console.warn(`[HITL] WhatsApp ${wa.getStatus()} — message queued in DB only`)
       return { skipped: 'not-connected' }
     }
-    const wait = MIN_SEND_GAP_MS - (Date.now() - lastSentAt)
-    if (wait > 0) await new Promise(r => setTimeout(r, wait))
-    lastSentAt = Date.now()
-    await wa.sendMessage(owner, text)
-    return { sent: true }
+    const sent = []
+    for (const owner of owners) {
+      const wait = MIN_SEND_GAP_MS - (Date.now() - lastSentAt)
+      if (wait > 0) await new Promise(r => setTimeout(r, wait))
+      lastSentAt = Date.now()
+      try {
+        await wa.sendMessage(owner, text)
+        sent.push(owner)
+      } catch (e) {
+        // One unreachable approver must not stop the others being told.
+        console.warn(`[HITL] Send to ${owner} failed:`, e.message)
+      }
+    }
+    return { sent: sent.length, to: sent }
   }).catch(e => {
     console.error('[HITL] Send to owner failed:', e.message)
     return { error: e.message }
@@ -97,8 +132,10 @@ async function nextRef() {
  * @param {string} [req.draft]    the reply we propose to send, if any
  * @param {object} [req.payload]  { vaultFile, from, ... } — used to execute
  */
-export async function createHitlRequest({ kind = 'email', sourceId, title, summary, draft = '', payload = {} }) {
-  const ref = await nextRef()
+export async function createHitlRequest({ kind = 'email', sourceId, title, summary, draft = '', payload = {}, ref: existingRef = null }) {
+  // A caller passing `ref` is re-raising a request that already exists (an
+  // approver was added, say) — it must not open a second one for the same item.
+  const ref = existingRef || await nextRef()
   await query(
     `INSERT INTO hitl_requests (ref, kind, source_id, title, summary, draft, payload, status, sent_to)
      VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',$8)
@@ -106,7 +143,7 @@ export async function createHitlRequest({ kind = 'email', sourceId, title, summa
        kind=EXCLUDED.kind, source_id=EXCLUDED.source_id, title=EXCLUDED.title,
        summary=EXCLUDED.summary, draft=EXCLUDED.draft, payload=EXCLUDED.payload,
        status='pending', created_at=NOW(), decided_at=NULL, decided_by=NULL`,
-    [ref, kind, sourceId || null, title || '', summary || '', draft || '', JSON.stringify(payload), ownerPhone()]
+    [ref, kind, sourceId || null, title || '', summary || '', draft || '', JSON.stringify(payload), ownerPhones().join(',')]
   )
 
   const isPost = kind === 'post'
@@ -345,4 +382,4 @@ export async function handleOwnerCommand(from, body) {
   return (await decide(ref, decision, { note: rest?.trim() || null, by: from })).message
 }
 
-export default { createHitlRequest, decide, listPending, handleOwnerCommand, sendToOwner, ownerPhone, isOwner }
+export default { createHitlRequest, decide, listPending, handleOwnerCommand, sendToOwner, ownerPhone, ownerPhones, isOwner }

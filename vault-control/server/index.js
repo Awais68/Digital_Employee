@@ -222,6 +222,32 @@ setInterval(() => _recentlyProcessedEmailIds.clear(), 5 * 60 * 1000)
 // else means "not processed, try again". The two filter branches that used to
 // `return` without touching `res` therefore made the watcher sit out its 60s
 // read timeout and re-submit the very same junk mail on every cycle, forever.
+// Re-send a still-pending approval to every owner number. Needed whenever the
+// approver list changes: the original message only ever reached whoever was
+// configured at the time, and the request itself is still valid.
+app.post('/api/internal/hitl/notify', express.json(), async (req, res) => {
+  try {
+    const ref = String(req.body?.ref || '').trim()
+    if (!ref) return res.status(400).json({ error: 'ref required' })
+    const { query } = await import('./database/connection.js')
+    const r = await query(`SELECT * FROM hitl_requests WHERE ref=$1 AND status='pending'`, [ref])
+    const row = r.rows[0]
+    if (!row) return res.status(404).json({ error: `No pending request #${ref}` })
+
+    const { createHitlRequest } = await import('./services/hitl.js')
+    const payload = typeof row.payload === 'string' ? JSON.parse(row.payload || '{}') : (row.payload || {})
+    // Re-raising the same ref rewrites the row in place rather than opening a
+    // second request for the same thing.
+    await createHitlRequest({
+      ref, kind: row.kind, sourceId: row.source_id, title: row.title,
+      summary: row.summary, draft: row.draft, payload,
+    })
+    res.json({ resent: true, ref })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 app.post('/api/internal/process-email', express.json(), async (req, res) => {
   // The Gmail watcher posts `sender`; the webhook path and manual replays use
   // `from`. Accept either so a key mismatch can never blank the sender and

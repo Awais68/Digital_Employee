@@ -265,6 +265,9 @@ export async function initWhatsApp() {
       try {
         const { handleOwnerCommand, isOwner } = await import('./hitl.js')
         const chat = msg.to || msg.from
+        // Chat id and verdict only — the message body is the owner's own text
+        // and there is no reason to write it into a log file.
+        console.log(`[WhatsApp] own message in ${chat} — owner=${isOwner(chat)}`)
         if (!isOwner(chat)) return               // only the owner's own chat
         const reply = await handleOwnerCommand(chat, msg.body)
         if (reply) {
