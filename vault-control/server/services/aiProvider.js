@@ -6,6 +6,14 @@ export function _resetMockFlag() {
   _lastCallUsedMock = false;
 }
 
+// Groq fallback chain. Reasoning models that emit a <think> preamble (qwen3.6)
+// are deliberately excluded — the JSON consumers cannot use them.
+const GROQ_MODELS = [
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'groq/compound-mini',
+]
+
 async function tryProvider(name, fn) {
   try {
     const result = await fn()
@@ -19,6 +27,52 @@ async function tryProvider(name, fn) {
 export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
   let result
   _resetMockFlag()
+
+  // Groq first — fastest and cheapest of the configured providers, and the only
+  // one that keeps working when the OpenRouter balance runs dry.
+  result = await tryProvider('Groq', async () => {
+    if (!process.env.GROQ_API_KEY?.startsWith('gsk_')) return null
+
+    const configured = process.env.GROQ_MODEL
+    // gpt-oss models pretty-print JSON, so give them headroom — an 800-token
+    // budget truncates mid-object and every JSON.parse downstream fails.
+    const tokenBudget = Math.min(Math.max(maxTokens, 1500), 8192)
+    const modelsToTry = configured
+      ? [configured, ...GROQ_MODELS.filter(m => m !== configured)]
+      : GROQ_MODELS
+
+    for (const model of modelsToTry) {
+      try {
+        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            max_tokens: tokenBudget,
+          }),
+        })
+        const data = await resp.json()
+        const text = data.choices?.[0]?.message?.content
+        if (text) {
+          console.log(`[aiProvider] Groq OK with model: ${model}`)
+          return text
+        }
+        const errMsg = data.error?.message || JSON.stringify(data).slice(0, 100)
+        console.warn(`[aiProvider] Groq model ${model} failed: ${errMsg}`)
+      } catch (e) {
+        console.warn(`[aiProvider] Groq model ${model} threw: ${e.message.slice(0, 80)}`)
+      }
+    }
+    throw new Error('All Groq models exhausted')
+  })
+  if (result) return result
 
   result = await tryProvider('Anthropic', async () => {
     if (!process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-')) return null
@@ -69,10 +123,19 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
       'google/gemma-4-26b-a4b-it:free',
       'nvidia/nemotron-3-ultra-550b-a55b:free',
       'nvidia/nemotron-3-super-120b-a12b:free',
-      'openai/gpt-oss-20b:free',
+      // `openai/gpt-oss-20b:free` used to be here — OpenRouter no longer publishes a
+      // :free variant of it, so every call burned a round-trip on "No endpoints
+      // found". Replaced with two ids that do exist rather than the paid
+      // `openai/gpt-oss-20b`: this list is the free tier, and a paid model hidden in
+      // it would quietly spend credit. Verified against /api/v1/models on 2026-08-29.
+      'z-ai/glm-5.2:free',
+      'google/gemma-4-31b-it:free',
     ];
 
-    const paidModels = ['openai/gpt-4o-mini', 'openai/gpt-4o', 'anthropic/claude-3-5-haiku'];
+    // `anthropic/claude-3-5-haiku` was in this list and is not a model id OpenRouter
+    // serves — it returned "No endpoints found" on every fallback attempt, i.e. the
+    // last paid rung was dead. The current Haiku slug is claude-haiku-4.5.
+    const paidModels = ['openai/gpt-4o-mini', 'openai/gpt-4o', 'anthropic/claude-haiku-4.5'];
 
     const modelsToTry = configuredModel && !configuredModel.includes(':free')
       ? [configuredModel, ...paidModels.filter(m => m !== configuredModel), ...freeModels]

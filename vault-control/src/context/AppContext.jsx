@@ -19,17 +19,38 @@ export function AppProvider({ children }) {
   const wsRef = useRef(null);
   const reconnectRef = useRef(null);
 
-  const addNotification = useCallback((notif) => {
+  const addNotification = useCallback((raw) => {
+    // Defensive: a malformed WS frame must never throw inside a state updater.
+    // An uncaught throw here unmounts the whole React root (blank screen), because
+    // AppProvider sits above every ErrorBoundary.
+    if (!raw || typeof raw !== "object") return;
+    const notif = {
+      id: raw.id ?? `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      title: raw.title ?? "Notification",
+      message: raw.message ?? "",
+      category: raw.category ?? "info",
+      read: raw.read ?? false,
+      timestamp: raw.timestamp ?? new Date().toISOString(),
+      ...raw,
+    };
     setNotifications((prev) => {
-      if (prev.find((n) => n.id === notif.id)) return prev;
+      if (prev.some((n) => n.id === notif.id)) return prev;
       const updated = [notif, ...prev].slice(0, 100);
       setUnreadCount(updated.filter((n) => !n.read).length);
-      if (Notification.permission === "granted" && !document.hasFocus()) {
-        new Notification(notif.title, {
-          body: notif.message,
-          icon: "/favicon.ico",
-          tag: notif.id,
-        });
+      try {
+        if (
+          typeof Notification !== "undefined" &&
+          Notification.permission === "granted" &&
+          !document.hasFocus()
+        ) {
+          new Notification(notif.title, {
+            body: notif.message,
+            icon: "/favicon.ico",
+            tag: notif.id,
+          });
+        }
+      } catch {
+        /* browser notification is best-effort */
       }
       return updated;
     });
@@ -66,7 +87,8 @@ export function AppProvider({ children }) {
             setWaStatus("qr_pending");
             break;
           case "notification":
-            addNotification(data.notification);
+            // Accept both shapes: { notification: {...} } and a flat payload.
+            addNotification(data.notification ?? data);
             break;
           case "todo:new":
             window.dispatchEvent(new CustomEvent("todo:refresh"));

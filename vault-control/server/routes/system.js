@@ -2,6 +2,7 @@ import express from 'express'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import {
   getServiceStatus,
   getSystemHealth,
@@ -11,10 +12,17 @@ import {
   getPendingApprovals,
   refreshAndBroadcast,
   getVmInfo,
+  getWorkerStatus,
 } from '../system-status.js'
 import { readVaultFiles, searchVaultFiles } from '../vault-reader.js'
 import fs from 'fs'
 import { requireAdmin } from '../database/auth.js'
+
+// Repo root anchored to this file. The old `path.resolve(process.cwd(), '..')`
+// pointed one level ABOVE the repo whenever the server ran from the repo root
+// (which is what PM2 does), so the dashboard's Start/Stop Workers buttons ran
+// in a directory that has no workers.py and always failed.
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 
 const execAsync = promisify(exec)
 
@@ -82,18 +90,13 @@ router.get('/stats', async (req, res) => {
     const cached = mod.cacheGet('system_stats')
     if (cached) return res.json(cached)
 
-    const workerList = ['orchestrator', 'whatsapp_watcher', 'gmail_watcher']
-    const workerStatus = {}
-    for (const name of workerList) {
-      let running = false
-      let pid = null
-      try {
-        const { stdout } = await execAsync(`pgrep -f "${name}\\.py"`).catch(() => ({ stdout: '' }))
-        const pids = stdout.trim().split('\n').filter(Boolean).map(Number)
-        if (pids.length > 0) { running = true; pid = pids[0] }
-      } catch {}
-      workerStatus[name] = { name, running, pid }
-    }
+    // Single source of truth. This route used to pgrep for `<name>.py` itself,
+    // which disagreed with the WebSocket dashboard_update (built from
+    // getWorkerStatus) on every field: the orchestrator has no long-lived process
+    // and whatsapp_watcher.py does not exist at all — WhatsApp is embedded in this
+    // server. Two implementations meant the panel flipped state depending on which
+    // update arrived last.
+    const workerStatus = await getWorkerStatus()
 
     const stats = {
       vaultCounts: getVaultCounts(true),
@@ -139,25 +142,7 @@ router.get('/search', (req, res) => {
 // GET worker status
 router.get('/workers', async (req, res) => {
   try {
-    const workerList = ['orchestrator', 'whatsapp_watcher', 'gmail_watcher']
-    const workers = {}
-
-    for (const name of workerList) {
-      let running = false
-      let pid = null
-      
-      try {
-        const { stdout } = await execAsync(`pgrep -f "${name}\\.py"`).catch(() => ({ stdout: '' }))
-        const pids = stdout.trim().split('\n').filter(Boolean).map(Number)
-        if (pids.length > 0) {
-          running = true
-          pid = pids[0]
-        }
-      } catch {}
-
-      workers[name] = { name, running, pid }
-    }
-    
+    const workers = await getWorkerStatus()
     res.json({ workers })
   } catch (err) {
     res.status(500).json({ error: 'Failed to get worker status', message: err.message })
@@ -167,9 +152,8 @@ router.get('/workers', async (req, res) => {
 // POST start workers
 router.post('/workers/start', requireAdmin, async (req, res) => {
   try {
-    const VAULT_PARENT = path.resolve(process.cwd(), '..')
-    const cmd = `cd "${VAULT_PARENT}" && python3 workers.py start`
-    const { stdout } = await execAsync(cmd, { timeout: 10000 })
+    const cmd = `cd "${REPO_ROOT}" && python3 workers.py start`
+    const { stdout } = await execAsync(cmd, { timeout: 120000 })
     
     refreshAndBroadcast()
     res.json({ success: true, message: 'Workers started', output: stdout })
@@ -181,9 +165,8 @@ router.post('/workers/start', requireAdmin, async (req, res) => {
 // POST stop workers
 router.post('/workers/stop', requireAdmin, async (req, res) => {
   try {
-    const VAULT_PARENT = path.resolve(process.cwd(), '..')
-    const cmd = `cd "${VAULT_PARENT}" && python3 workers.py stop`
-    const { stdout } = await execAsync(cmd, { timeout: 10000 })
+    const cmd = `cd "${REPO_ROOT}" && python3 workers.py stop`
+    const { stdout } = await execAsync(cmd, { timeout: 120000 })
     
     refreshAndBroadcast()
     res.json({ success: true, message: 'Workers stopped', output: stdout })

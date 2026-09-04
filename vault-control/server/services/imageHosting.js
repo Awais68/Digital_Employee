@@ -12,6 +12,37 @@ const __dirname = path.dirname(__filename)
 const PUBLIC_DIR = path.resolve(__dirname, '../../public/uploads')
 fs.mkdirSync(PUBLIC_DIR, { recursive: true })
 
+// Our own /uploads and /generated paths are served straight off this process's
+// disk, but a stored URL can name a DIFFERENT host: drafts written before
+// imageGenerator switched to SELF_BASE_URL carry
+// https://api.digitalfte.online/generated/<file>, and that box has never had
+// those files — so publishing an older draft died on
+// "Download failed: 404 https://api.digitalfte.online/generated/...".
+// Map any such URL back to the local file. Same bytes, no round-trip, and no
+// dependency on which host happened to write the draft.
+const LOCAL_SERVE_DIRS = {
+  '/uploads/':   path.resolve(__dirname, '../../public/uploads'),
+  '/generated/': path.resolve(__dirname, '../../public/generated'),
+}
+
+function resolveLocalFile(source) {
+  if (typeof source !== 'string' || !/^https?:\/\//.test(source)) return null
+  let pathname
+  try {
+    pathname = new URL(source).pathname
+  } catch {
+    return null
+  }
+  for (const [prefix, dir] of Object.entries(LOCAL_SERVE_DIRS)) {
+    if (!pathname.startsWith(prefix)) continue
+    // basename only: a stored URL is untrusted input and must not be able to
+    // walk out of the directory it claims to be in.
+    const file = path.join(dir, path.basename(decodeURIComponent(pathname)))
+    if (fs.existsSync(file)) return file
+  }
+  return null
+}
+
 function getServerBaseUrl() {
   return (
     process.env.SERVER_PUBLIC_URL ||
@@ -31,8 +62,13 @@ export async function hostImageLocally(source) {
       const base64Data = source.replace(/^data:image\/\w+;base64,/, '')
       fs.writeFileSync(destPath, Buffer.from(base64Data, 'base64'))
     } else if (typeof source === 'string' && (source.startsWith('http://') || source.startsWith('https://'))) {
-      const buffer = await downloadImageBuffer(source)
-      fs.writeFileSync(destPath, buffer)
+      const local = resolveLocalFile(source)
+      if (local) {
+        fs.copyFileSync(local, destPath)
+      } else {
+        const buffer = await downloadImageBuffer(source)
+        fs.writeFileSync(destPath, buffer)
+      }
     } else if (typeof source === 'string' && fs.existsSync(source)) {
       fs.copyFileSync(source, destPath)
     } else {
@@ -82,9 +118,11 @@ export async function uploadToCloudinary(imageBuffer) {
 }
 
 /**
- * getPublicImageUrl — 2-level fallback chain
- * 1. Ngrok/Server URL (fastest, local)
- * 2. Cloudinary (best quality, production)
+ * getPublicImageUrl — 3-level fallback chain, every result verified reachable.
+ * 1. Cloudinary   (durable CDN, no tunnel required — the default)
+ * 2. SERVER_PUBLIC_URL / ngrok, only if the resulting URL actually resolves
+ * 3. The original source URL, only if it actually resolves
+ * Returns null when nothing works, so the caller can post text-only.
  */
 export async function getPublicImageUrl(source, needsPublicUrl = false) {
 
@@ -127,9 +165,13 @@ export async function getPublicImageUrl(source, needsPublicUrl = false) {
           source.replace(/^data:image\/\w+;base64,/, ''), 'base64'
         )
       } else if (typeof source === 'string') {
-        const fs = await import('fs')
-        if (fs.default.existsSync(source)) {
-          imageBuffer = fs.default.readFileSync(source)
+        // `fs` is imported at the top of this module; the dynamic import that
+        // used to be here shadowed it for no reason.
+        const local = resolveLocalFile(source)
+        if (local) {
+          imageBuffer = fs.readFileSync(local)
+        } else if (fs.existsSync(source)) {
+          imageBuffer = fs.readFileSync(source)
         } else if (source.startsWith('http')) {
           imageBuffer = await downloadImageBuffer(source, 3)
         }
@@ -142,53 +184,35 @@ export async function getPublicImageUrl(source, needsPublicUrl = false) {
 
   const errors = []
 
-  // ══════════════════════════════════════════════════
-  // FALLBACK 1 — Ngrok / SERVER_PUBLIC_URL
-  // ══════════════════════════════════════════════════
-  const serverUrl = process.env.SERVER_PUBLIC_URL || ''
-  const isLocalUrl = serverUrl.includes('localhost') || serverUrl.includes('127.0.0.1')
-
-  if (serverUrl && !isLocalUrl) {
-    try {
-      console.log('[ImageHost] Trying #1 Ngrok/Server...')
-      const buf = await getBuffer()
-      if (!buf) throw new Error('Could not get image buffer')
-
-      const crypto   = await import('crypto')
-      const fs       = await import('fs')
-      const path     = await import('path')
-
-      const PUBLIC_DIR = path.default.resolve('vault-control/public/uploads')
-      fs.default.mkdirSync(PUBLIC_DIR, { recursive: true })
-
-      const filename = `img_${Date.now()}_${crypto.default.randomBytes(4).toString('hex')}.jpg`
-      const destPath = path.default.join(PUBLIC_DIR, filename)
-      fs.default.writeFileSync(destPath, buf)
-
-      const url = `${serverUrl.replace(/\/$/, '')}/uploads/${filename}`
-      console.log('[ImageHost] #1 Ngrok SUCCESS:', url.substring(0, 80))
-      return url
-
-    } catch (e) {
-      const msg = `#1 Ngrok failed: ${e.message}`
-      errors.push(msg)
-      console.warn('[ImageHost]', msg)
+  // Verify a URL is actually fetchable from the public internet before we hand
+  // it to Meta/LinkedIn. Returning an unreachable URL is what made posting
+  // "work sometimes": the dead ngrok tunnel never threw, so Cloudinary was
+  // never reached and the platform silently failed to fetch the image.
+  const isReachable = async (url) => {
+    for (const method of ['HEAD', 'GET']) {
+      try {
+        const resp = await fetch(url, {
+          method,
+          redirect: 'follow',
+          signal: AbortSignal.timeout(8000)
+        })
+        if (resp.ok && (resp.headers.get('content-type') || '').startsWith('image/')) {
+          return true
+        }
+      } catch { /* try next method */ }
     }
-  } else {
-    console.log('[ImageHost] #1 Ngrok skipped —', serverUrl ? 'URL is localhost' : 'SERVER_PUBLIC_URL not set')
+    return false
   }
 
   // ══════════════════════════════════════════════════
-  // FALLBACK 2 — Cloudinary
+  // FALLBACK 1 — Cloudinary (durable, no tunnel required)
   // ══════════════════════════════════════════════════
   if (process.env.CLOUDINARY_URL || process.env.CLOUDINARY_CLOUD_NAME) {
     try {
-      console.log('[ImageHost] Trying #2 Cloudinary...')
+      console.log('[ImageHost] Trying #1 Cloudinary...')
       const buf = await getBuffer()
       if (!buf) throw new Error('Could not get image buffer')
 
-      const { createRequire } = await import('module')
-      const require = createRequire(import.meta.url)
       const cloudinary = require('cloudinary').v2
 
       const url = await new Promise((resolve, reject) => {
@@ -208,23 +232,68 @@ export async function getPublicImageUrl(source, needsPublicUrl = false) {
         stream.end(buf)
       })
 
-      console.log('[ImageHost] #2 Cloudinary SUCCESS:', url.substring(0, 80))
+      console.log('[ImageHost] #1 Cloudinary SUCCESS:', url.substring(0, 80))
       return url
 
     } catch (e) {
-      const msg = `#2 Cloudinary failed: ${e.message}`
+      const msg = `#1 Cloudinary failed: ${e.message}`
       errors.push(msg)
       console.warn('[ImageHost]', msg)
     }
   } else {
-    console.log('[ImageHost] #2 Cloudinary skipped — CLOUDINARY_URL not set')
+    console.log('[ImageHost] #1 Cloudinary skipped — CLOUDINARY_URL not set')
+  }
+
+  // ══════════════════════════════════════════════════
+  // FALLBACK 2 — SERVER_PUBLIC_URL / ngrok tunnel (verified)
+  // ══════════════════════════════════════════════════
+  const serverUrl  = (process.env.SERVER_PUBLIC_URL || '').replace(/\/$/, '')
+  const isLocalUrl = serverUrl.includes('localhost') || serverUrl.includes('127.0.0.1')
+
+  if (serverUrl && !isLocalUrl) {
+    try {
+      console.log('[ImageHost] Trying #2 SERVER_PUBLIC_URL...')
+      const buf = await getBuffer()
+      if (!buf) throw new Error('Could not get image buffer')
+
+      // PUBLIC_DIR is module-anchored; the old cwd-relative resolve wrote files
+      // outside the directory Express actually serves whenever cwd != repo root.
+      const filename = `img_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.jpg`
+      fs.writeFileSync(path.join(PUBLIC_DIR, filename), buf)
+
+      const url = `${serverUrl}/uploads/${filename}`
+      if (!(await isReachable(url))) {
+        throw new Error(`URL not publicly reachable: ${url}`)
+      }
+
+      console.log('[ImageHost] #2 SERVER_PUBLIC_URL SUCCESS:', url.substring(0, 80))
+      return url
+
+    } catch (e) {
+      const msg = `#2 SERVER_PUBLIC_URL failed: ${e.message}`
+      errors.push(msg)
+      console.warn('[ImageHost]', msg)
+    }
+  } else {
+    console.log('[ImageHost] #2 SERVER_PUBLIC_URL skipped —', serverUrl ? 'URL is local' : 'not set')
+  }
+
+  // ══════════════════════════════════════════════════
+  // FALLBACK 3 — the original source, if it is already reachable
+  // ══════════════════════════════════════════════════
+  if (typeof source === 'string' && source.startsWith('http') && !source.includes('localhost')) {
+    if (await isReachable(source)) {
+      console.log('[ImageHost] #3 Using original source URL (verified reachable)')
+      return source
+    }
+    errors.push('#3 original source URL not reachable')
   }
 
   // ══════════════════════════════════════════════════
   // ALL FAILED — Return null (caller posts text-only)
   // ══════════════════════════════════════════════════
   console.error('[ImageHost] ALL methods failed:')
-  errors.forEach((e, i) => console.error(`  ${i+1}. ${e}`))
+  errors.forEach((e, i) => console.error(`  ${i + 1}. ${e}`))
   console.warn('[ImageHost] Returning null — post will be text-only')
   return null
 }

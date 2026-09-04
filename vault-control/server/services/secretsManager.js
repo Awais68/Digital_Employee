@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import { fileURLToPath } from 'url'
+import { PREFIXED_ENV_MAP as KEY_MAP } from './apiKeyMap.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SECRETS_FILE = path.join(__dirname, '..', '.secrets.enc')
@@ -37,20 +38,7 @@ function decrypt(text) {
   }
 }
 
-// ENV key mapping (same as connection.js)
-const KEY_MAP = {
-  api_gemini: 'GEMINI_API_KEY',
-  api_openai: 'OPENAI_API_KEY',
-  api_openrouter: 'OPENROUTER_API_KEY',
-  api_claude: 'ANTHROPIC_API_KEY',
-  api_facebook: 'META_SYSTEM_USER_TOKEN',
-  api_instagram: 'INSTAGRAM_ACCESS_TOKEN',
-  api_linkedin: 'LINKEDIN_ACCESS_TOKEN',
-  api_twitter_key: 'TWITTER_API_KEY',
-  api_twitter_secret: 'TWITTER_API_SECRET',
-  api_whatsapp: 'WHATSAPP_API_KEY',
-  api_discord: 'DISCORD_BOT_TOKEN',
-}
+// ENV key mapping — shared with routes/admin.js and database/connection.js
 
 export function loadSecrets() {
   try {
@@ -61,9 +49,8 @@ export function loadSecrets() {
     const data = JSON.parse(decrypted)
     for (const [key, value] of Object.entries(data)) {
       const envKey = KEY_MAP[key] || key
-      if (value && !process.env[envKey]) {
-        process.env[envKey] = value
-      }
+      // Admin-supplied keys take precedence over the backend .env values
+      if (value) process.env[envKey] = value
     }
     return data
   } catch {

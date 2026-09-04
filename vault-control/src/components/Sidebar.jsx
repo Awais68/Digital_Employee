@@ -5,17 +5,14 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import usePolling from '../hooks/usePolling'
 
 function WorkerStatus() {
   const [workers, setWorkers] = useState({})
   const [expanded, setExpanded] = useState(true)
-  useEffect(() => {
+  usePolling(() => {
     axios.get('/api/system/workers').then(r => setWorkers(r.data.workers || {})).catch(() => {})
-    const iv = setInterval(() => {
-      axios.get('/api/system/workers').then(r => setWorkers(r.data.workers || {})).catch(() => {})
-    }, 30000)
-    return () => clearInterval(iv)
-  }, [])
+  }, 60000)
   const workerList = Object.values(workers)
   const anyRunning = workerList.some(w => w.running)
   return (

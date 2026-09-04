@@ -15,6 +15,21 @@ const __dirname = dirname(__filename)
 
 const router = express.Router()
 
+// --- Publish dedup guard (60s window, in-memory) ---
+const recentPublishes = new Map()
+const DEDUP_WINDOW_MS = 60000
+
+function checkDuplicatePublish(key) {
+  const now = Date.now()
+  const last = recentPublishes.get(key)
+  if (last && (now - last) < DEDUP_WINDOW_MS) {
+    return true
+  }
+  recentPublishes.set(key, now)
+  return false
+}
+// --- end dedup guard ---
+
 // GET all social data (drafts + history)
 router.get('/', (req, res) => {
   try {
@@ -311,6 +326,14 @@ router.post('/draft/:id/publish', requireAdmin, async (req, res) => {
   
     console.log('[Publish] Found file at:', sourcePath)
 
+    if (checkDuplicatePublish(sourcePath)) {
+      console.warn('[Publish] Duplicate publish blocked for:', sourcePath)
+      return res.status(429).json({
+        success: false,
+        message: 'Duplicate publish request blocked - this post was already published/attempted in the last 60 seconds.'
+      })
+    }
+
     const donePath = getVaultPath('Done')
     
     // Read file content and frontmatter
@@ -453,6 +476,17 @@ router.post('/auto-publish', requireAdmin, async (req, res) => {
     for (const post of socialPosts) {
       try {
         const postPath = getVaultPath('Pending_Approval', post.filename)
+
+        if (checkDuplicatePublish(postPath)) {
+          console.warn('[Auto-Publish] Duplicate publish blocked for:', postPath)
+          publishResults.push({
+            filename: post.filename,
+            success: false,
+            message: 'Duplicate publish blocked (already attempted within 60s)'
+          })
+          continue
+        }
+
         const fileContent = fs.readFileSync(postPath, 'utf-8')
         
         let platforms = []

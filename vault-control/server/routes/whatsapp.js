@@ -470,4 +470,36 @@ router.delete('/messages/:msg_id', requireAdmin, async (req, res) => {
   }
 })
 
+// DELETE /chat/:chatId — clear one conversation from the local history (admin only).
+// Scope is deliberately the DB only: this wipes what the dashboard shows, it does
+// NOT delete anything inside WhatsApp itself. Deleting on WhatsApp is irreversible
+// and reaches a third party, so it is not something a dashboard button should do
+// silently — the UI says so too.
+router.delete('/chat/:chatId', requireAdmin, async (req, res) => {
+  const chatId = decodeURIComponent(req.params.chatId)
+  // Chat ids arrive as either a bare number or `<number>@c.us` / `@g.us` / `@lid`.
+  // Rows are stored under a mix of both, so match on the bare number.
+  const phone = chatId.replace(/@c\.us|@g\.us|@lid/g, '').trim()
+  if (!phone) {
+    return res.status(400).json({ success: false, error: 'Empty chat id' })
+  }
+  try {
+    const result = await query(
+      `DELETE FROM whatsapp_messages
+       WHERE from_number = $1 OR to_number = $1
+          OR from_number LIKE $2 OR to_number LIKE $2`,
+      [phone, `%${phone}%`]
+    )
+    // The chat list is cached for 30s; without this the deleted chat reappears
+    // on the next poll and looks like the delete silently failed.
+    const { cacheDel } = await import('../services/cache.js')
+    cacheDel('wa_live_chats')
+    console.log(`[WA] Cleared ${result.rowCount} message row(s) for chat ${phone}`)
+    res.json({ success: true, chatId, deleted: result.rowCount })
+  } catch (e) {
+    console.error('[WA] delete chat error:', e.message)
+    res.status(500).json({ success: false, error: e.message })
+  }
+})
+
 export default router

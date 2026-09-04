@@ -399,17 +399,77 @@ export function getPendingApprovals() {
 
 // ─── Refresh & Broadcast ──────────────────────────────────────────────────────
 
-async function getWorkerStatus() {
-  const workerList = ['orchestrator', 'whatsapp_watcher', 'gmail_watcher']
-  const workers = {}
-  for (const name of workerList) {
-    let running = false, pid = null
+// Orchestrator runs via cron (run_orchestrator_once.py → orchestrator.py), so it is
+// never a long-lived process. Report it as running when the cron job is registered AND
+// produced activity recently (cron fires every 3 min → use a 15 min freshness window).
+// The orchestrator is a periodic job, not a daemon: PM2 runs it with
+// `cron_restart: */3`, so it is alive for about a second and "waiting restart" for
+// the other 179. Liveness is therefore the wrong question — a pgrep or a PID check
+// reports Stopped ~99% of the time and makes the dashboard flap.
+//
+// This used to grep `crontab -l` for /orchestrator\.py/ (which only matched a
+// leftover *comment* — the job moved to PM2) and then require one of two log files
+// that no longer exist, so it answered "stopped" unconditionally. Ask PM2 first,
+// and fall back to the freshness of the log the orchestrator actually writes.
+async function getOrchestratorStatus() {
+  try {
+    const { stdout } = await execAsync('pm2 jlist').catch(() => ({ stdout: '' }))
+    const procs = JSON.parse(stdout || '[]')
+    const p = procs.find(x => x.name === 'orchestrator')
+    if (p) {
+      const status = p.pm2_env?.status
+      const scheduled = Boolean(p.pm2_env?.cron_restart)
+      return {
+        // "waiting restart" on a cron-scheduled process means healthy and due to
+        // run again, so it counts as running; "errored"/"stopped" do not.
+        running: status === 'online' || (scheduled && status === 'waiting restart'),
+        pid: p.pid || null,
+        detail: scheduled ? `scheduled ${p.pm2_env.cron_restart}` : status,
+      }
+    }
+  } catch { /* PM2 not installed or not managing this stack — use the log below */ }
+
+  let recent = false
+  for (const f of [
+    path.join(VAULT_PATH, 'Logs', 'orchestrator.log'),
+    path.join(VAULT_PATH, 'Logs', 'orchestrator-out.log'),
+  ]) {
     try {
-      const { stdout } = await execAsync(`pgrep -f "${name}\\.py"`).catch(() => ({ stdout: '' }))
-      const pids = stdout.trim().split('\n').filter(Boolean).map(Number)
-      if (pids.length > 0) { running = true; pid = pids[0] }
+      if (fs.existsSync(f)) recent = recent || (Date.now() - fs.statSync(f).mtimeMs) < 15 * 60 * 1000
     } catch {}
-    workers[name] = { name, running, pid }
+  }
+  return { running: recent, pid: null, detail: recent ? 'ran recently' : 'no recent run' }
+}
+
+export async function getWorkerStatus() {
+  const workerList = [
+    { name: 'orchestrator', check: getOrchestratorStatus },
+    { name: 'whatsapp_watcher', check: async () => {
+        // WhatsApp is an embedded whatsapp-web.js client inside this server, not a
+        // standalone whatsapp_watcher.py process. Report the live client state.
+        try {
+          const ws = await import('./services/whatsappService.js')
+          const status = ws.getStatus()
+          return { running: status === 'connected', pid: null, detail: status }
+        } catch { return { running: false, pid: null, detail: 'unavailable' } }
+      } },
+    { name: 'gmail_watcher', check: async () => {
+        let running = false, pid = null
+        try {
+          const { stdout } = await execAsync('pgrep -f "gmail_watcher\\.py"').catch(() => ({ stdout: '' }))
+          const pids = stdout.trim().split('\n').filter(Boolean).map(Number)
+          if (pids.length > 0) { running = true; pid = pids[0] }
+        } catch {}
+        return { running, pid, detail: running ? null : 'not running' }
+      } },
+  ]
+  const workers = {}
+  for (const w of workerList) {
+    // `detail` carries what a PID cannot: these workers are periodic or embedded,
+    // so the dashboard needs a state word ("scheduled */3", "connected") instead of
+    // printing a null PID.
+    const { running, pid, detail } = await w.check()
+    workers[w.name] = { name: w.name, running, pid: pid ?? null, detail: detail ?? null }
   }
   return workers
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import {
   TrendingUp, TrendingDown, MessageSquare, Mail,
@@ -11,6 +11,7 @@ import {
   PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import axios from 'axios'
+import usePolling from '../hooks/usePolling'
 
 const KPI_CARDS = [
   { label: 'Total Activity', key: 'total', icon: Zap, color: '#00FF88', bg: 'dark:bg-[#00FF88]/10 bg-green-50', border: 'dark:border-[#00FF88]/30 border-green-200' },
@@ -106,19 +107,15 @@ export default function Dashboard({ setCurrentPage }) {
     }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    let tick = 0
-    if (!cancelled) fetchDashboardData()
-    if (!cancelled) fetchAnalytics()
-    const interval = setInterval(() => {
-      if (cancelled) return
-      fetchDashboardData()
-      tick++
-      if (tick % 4 === 0) fetchAnalytics()
-    }, 10000)
-    return () => { cancelled = true; clearInterval(interval) }
+  // 60s (was 10s) and paused while the tab is hidden — these endpoints hit Neon,
+  // whose compute only suspends after ~5 min of silence.
+  const tickRef = useRef(0)
+  const poll = useCallback(() => {
+    fetchDashboardData()
+    tickRef.current++
+    if (tickRef.current % 5 === 0) fetchAnalytics()
   }, [fetchDashboardData, fetchAnalytics])
+  usePolling(poll, 60000)
 
   const kpiValues = useMemo(() => ({
     total: recentActivity.length,
@@ -214,7 +211,15 @@ export default function Dashboard({ setCurrentPage }) {
                   <div className={`w-2.5 h-2.5 rounded-full ${worker.running ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
                   <p className="text-sm font-semibold dark:text-[#E0E0E6] text-gray-900 capitalize">{name.replace('_', ' ')}</p>
                 </div>
-                <span className="text-xs dark:text-[#7A7A85]">{worker.running ? `Running (PID ${worker.pid})` : 'Stopped'}</span>
+                {/* Only the gmail watcher is a long-lived process with a PID. The
+                    orchestrator is a PM2 cron job and WhatsApp is embedded in the
+                    server, so both report pid:null — printing "Running (PID null)"
+                    read like a bug. Show the backend's `detail` word instead. */}
+                <span className="text-xs dark:text-[#7A7A85]">
+                  {worker.running
+                    ? (worker.pid ? `Running (PID ${worker.pid})` : `Running${worker.detail ? ` (${worker.detail})` : ''}`)
+                    : `Stopped${worker.detail ? ` (${worker.detail})` : ''}`}
+                </span>
               </div>
             )) : <p className="text-sm dark:text-[#7A7A85] text-center py-4">No worker data</p>}
           </div>

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Server, Cpu, HardDrive, Wifi, WifiOff, Activity, ArrowDown, ArrowUp, AlertTriangle, GitBranch } from 'lucide-react'
+import { RefreshCw, Server, Cpu, HardDrive, Wifi, WifiOff, Activity, ArrowDown, ArrowUp, AlertTriangle, GitBranch, Trash2, Loader2, CheckCircle2 } from 'lucide-react'
 import axios from 'axios'
+import usePolling from '../hooks/usePolling'
 
-const REFRESH_INTERVAL = 10000
+const REFRESH_INTERVAL = 30000 // 30s, and only while the tab is visible
 
 function formatUptime(seconds) {
   if (!seconds && seconds !== 0) return '—'
@@ -13,6 +14,26 @@ function formatUptime(seconds) {
   if (d > 0) return `${d}d ${h}h`
   if (h > 0) return `${h}h ${m}m`
   return `${m}m`
+}
+
+// Utilisation colour is driven by the number, not by which metric it is. The
+// disk row used to be hardcoded orange, so a healthy 24% read as a warning and
+// looked like "storage is full" — see the false-disk-full report.
+const OK = 70   // below this: healthy
+const WARN = 90 // at/above this: critical
+
+function usageBarColor(percent) {
+  if (percent === null) return 'bg-gray-400'
+  if (percent >= WARN) return 'bg-red-500'
+  if (percent >= OK) return 'bg-orange-500'
+  return 'bg-green-500'
+}
+
+function usageCardColor(percent) {
+  if (percent === null) return 'dark:bg-gray-500/20 dark:text-gray-400 bg-gray-100 text-gray-500'
+  if (percent >= WARN) return 'dark:bg-red-500/20 dark:text-red-400 bg-red-50 text-red-600'
+  if (percent >= OK) return 'dark:bg-orange-500/20 dark:text-orange-400 bg-orange-50 text-orange-600'
+  return 'dark:bg-green-500/20 dark:text-green-400 bg-green-50 text-green-600'
 }
 
 function ProgressBar({ percent, color, label, value }) {
@@ -80,14 +101,19 @@ export default function OracleCloud() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
+  const [cleaning, setCleaning] = useState(false)
+  const [cleanResult, setCleanResult] = useState(null)
+  const [cleanStatus, setCleanStatus] = useState(null)
 
   const fetchAll = useCallback(async () => {
     try {
-      const [oracleRes, vmRes, statsRes] = await Promise.all([
+      const [oracleRes, vmRes, statsRes, cleanRes] = await Promise.all([
         axios.get('/api/oracle/stats', { timeout: 15000 }).catch(() => null),
         axios.get('/api/system/vm-info').catch(() => null),
         axios.get('/api/system/stats').catch(() => null),
+        axios.get('/api/oracle/clean/status').catch(() => null),
       ])
+      if (cleanRes?.data) setCleanStatus(cleanRes.data)
       if (oracleRes?.data) setStats(oracleRes.data)
       if (vmRes?.data && typeof vmRes.data === 'object') setVmInfo(vmRes.data)
       if (statsRes?.data?.services) setServices(statsRes.data.services)
@@ -101,11 +127,25 @@ export default function OracleCloud() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchAll()
-    const iv = setInterval(fetchAll, REFRESH_INTERVAL)
-    return () => clearInterval(iv)
-  }, [fetchAll])
+  usePolling(fetchAll, REFRESH_INTERVAL)
+
+  const handleClean = async () => {
+    setCleaning(true)
+    setCleanResult(null)
+    try {
+      // Clearing caches over SSH runs a series of remote commands; give it room.
+      const { data } = await axios.post('/api/oracle/clean', {}, { timeout: 180000 })
+      setCleanResult(data)
+      fetchAll()
+    } catch (err) {
+      setCleanResult({
+        success: false,
+        error: err.response?.data?.error || err.response?.data?.message || err.message,
+      })
+    } finally {
+      setCleaning(false)
+    }
+  }
 
   const online = stats?.online ?? vmInfo?.online
   const cpu = stats?.cpu || {}
@@ -113,7 +153,16 @@ export default function OracleCloud() {
   const disk = stats?.disk || {}
   const net = stats?.network || {}
   const procs = stats?.processes || []
-  const metrics = vmInfo?.metrics || {}
+  // NOTE: vmInfo.metrics is NOT the VM's. getVmInfo() returns the Oracle host's
+  // ip/region/provider but fills `metrics` from getSystemMetrics(), which reads
+  // *this* machine's os/df. This page used to fall back to it whenever the SSH
+  // stats call was slow or failed, so the laptop's 99%-full root disk rendered
+  // under the "Oracle Cloud VM" heading and read as "OCI storage is full".
+  // Only /api/oracle/stats describes the VM — when it is missing, show "—".
+  const diskPercent = disk.percent ?? null
+  const cpuPercent = cpu.percent ?? null
+  const memPercent = mem.percent ?? null
+  const pct = (v) => (v === null ? '—' : `${v}%`)
 
   const cloudServices = services.filter(s =>
     ['Email MCP', 'Gmail Watcher', 'LinkedIn MCP'].includes(s.name)
@@ -158,14 +207,62 @@ export default function OracleCloud() {
               )}
             </div>
           </div>
-          <button
-            onClick={fetchAll}
-            className="flex items-center gap-2 px-4 py-2 rounded font-medium text-sm transition-all dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-900 hover:opacity-80"
-          >
-            <RefreshCw size={16} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleClean}
+              disabled={cleaning || !online}
+              title={online ? 'Clear package caches, old logs and temp files on the VM' : 'VM offline'}
+              className="flex items-center gap-2 px-4 py-2 rounded font-medium text-sm transition-all bg-amber-500/15 text-amber-500 border border-amber-500/40 hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {cleaning ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+              {cleaning ? 'Cleaning…' : 'Clear Cache & Space'}
+            </button>
+            <button
+              onClick={fetchAll}
+              className="flex items-center gap-2 px-4 py-2 rounded font-medium text-sm transition-all dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-100 text-gray-900 hover:opacity-80"
+            >
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+          </div>
         </div>
+
+        {/* Cleanup result + auto-clean schedule */}
+        {(cleanResult || cleanStatus?.lastClean) && (() => {
+          const r = cleanResult || cleanStatus.lastClean
+          return (
+            <div className={`mb-4 p-3 rounded-lg border text-sm ${
+              r.success
+                ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-400'
+            }`}>
+              <div className="flex items-center gap-2 font-semibold">
+                {r.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                {r.success
+                  ? `Freed ${r.freedFormatted} — ${r.freeAfter} free now`
+                  : `Cleanup failed: ${r.error}`}
+                {r.trigger && (
+                  <span className="text-xs opacity-60 font-normal">({r.trigger})</span>
+                )}
+              </div>
+              {r.df && <div className="mt-1 text-xs font-mono opacity-70">{r.df}</div>}
+              {r.steps?.some(st => !st.ok) && (
+                <div className="mt-1 text-xs opacity-70">
+                  Skipped: {r.steps.filter(st => !st.ok).map(st => st.step).join(', ')}
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {cleanStatus?.autoCleanEnabled && (
+          <p className="mb-4 text-xs dark:text-[#7A7A85] text-gray-400">
+            Auto-clean runs every {cleanStatus.intervalHours}h
+            {cleanStatus.lastClean?.timestamp
+              ? ` — last run ${new Date(cleanStatus.lastClean.timestamp).toLocaleString()}`
+              : ' — no run yet this session'}
+          </p>
+        )}
 
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
@@ -178,7 +275,8 @@ export default function OracleCloud() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="dark:text-[#7A7A85] text-gray-500">Host</p>
-            <p className="font-mono dark:text-[#E0E0E6] text-gray-900">{stats?.host || vmInfo?.hostname || '—'}</p>
+            {/* vmInfo.ip is the VM; vmInfo.hostname is this machine — never fall back to it here */}
+            <p className="font-mono dark:text-[#E0E0E6] text-gray-900">{stats?.host || vmInfo?.ip || '—'}</p>
           </div>
           <div>
             <p className="dark:text-[#7A7A85] text-gray-500">Region</p>
@@ -190,7 +288,7 @@ export default function OracleCloud() {
           </div>
           <div>
             <p className="dark:text-[#7A7A85] text-gray-500">Uptime</p>
-            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">{formatUptime(stats?.uptime || metrics?.uptime)}</p>
+            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">{formatUptime(stats?.uptime)}</p>
           </div>
         </div>
       </div>
@@ -200,23 +298,23 @@ export default function OracleCloud() {
         <StatCard
           icon={Cpu}
           label="CPU"
-          value={`${cpu.percent || metrics?.cpu?.percent || 0}%`}
-          sub={`${cpu.cores || metrics?.cpu?.cores || 0} cores`}
-          color="dark:bg-blue-500/20 dark:text-blue-400 bg-blue-50 text-blue-600"
+          value={pct(cpuPercent)}
+          sub={cpu.cores ? `${cpu.cores} cores` : '—'}
+          color={usageCardColor(cpuPercent)}
         />
         <StatCard
           icon={Activity}
           label="MEMORY"
-          value={`${mem.percent || metrics?.memory?.percent || 0}%`}
-          sub={mem.used ? `${mem.used} / ${mem.total} MB` : `${metrics?.memory?.used || 0} / ${metrics?.memory?.total || 0} MB`}
-          color="dark:bg-purple-500/20 dark:text-purple-400 bg-purple-50 text-purple-600"
+          value={pct(memPercent)}
+          sub={mem.used ? `${mem.used} / ${mem.total} MB` : '—'}
+          color={usageCardColor(memPercent)}
         />
         <StatCard
           icon={HardDrive}
           label="DISK"
-          value={`${disk.percent || metrics?.disk?.percent || 0}%`}
-          sub={disk.used ? `${disk.used} / ${disk.total} GB` : `${metrics?.disk?.used || 0} / ${metrics?.disk?.total || 0} GB`}
-          color="dark:bg-orange-500/20 dark:text-orange-400 bg-orange-50 text-orange-600"
+          value={pct(diskPercent)}
+          sub={disk.used ? `${disk.used} / ${disk.total} GB` : '—'}
+          color={usageCardColor(diskPercent)}
         />
         <StatCard
           icon={Wifi}
@@ -232,27 +330,27 @@ export default function OracleCloud() {
         <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 mb-4">Resource Usage</h3>
         <div className="space-y-4">
           <ProgressBar
-            percent={cpu.percent || metrics?.cpu?.percent || 0}
-            color="bg-blue-500"
+            percent={cpuPercent ?? 0}
+            color={usageBarColor(cpuPercent)}
             label="CPU"
-            value={`${cpu.percent || metrics?.cpu?.percent || 0}%`}
+            value={pct(cpuPercent)}
           />
-          {(cpu.loadAvg || metrics?.cpu?.loadavg) && (
+          {cpu.loadAvg && (
             <p className="text-[10px] dark:text-[#7A7A85] text-gray-400 -mt-2">
-              Load: {cpu.loadAvg?.['1m'] || metrics?.cpu?.loadavg?.[0] || 0} / {cpu.loadAvg?.['5m'] || metrics?.cpu?.loadavg?.[1] || 0} / {cpu.loadAvg?.['15m'] || metrics?.cpu?.loadavg?.[2] || 0}
+              Load: {cpu.loadAvg['1m'] ?? 0} / {cpu.loadAvg['5m'] ?? 0} / {cpu.loadAvg['15m'] ?? 0}
             </p>
           )}
           <ProgressBar
-            percent={mem.percent || metrics?.memory?.percent || 0}
-            color="bg-purple-500"
+            percent={memPercent ?? 0}
+            color={usageBarColor(memPercent)}
             label="Memory"
-            value={mem.used ? `${mem.used} MB / ${mem.total} MB` : `${metrics?.memory?.used || 0} MB / ${metrics?.memory?.total || 0} MB`}
+            value={mem.used ? `${mem.used} MB / ${mem.total} MB` : '—'}
           />
           <ProgressBar
-            percent={disk.percent || metrics?.disk?.percent || 0}
-            color="bg-orange-500"
+            percent={diskPercent ?? 0}
+            color={usageBarColor(diskPercent)}
             label="Disk"
-            value={disk.used ? `${disk.used} GB / ${disk.total} GB` : `${metrics?.disk?.used || 0} GB / ${metrics?.disk?.total || 0} GB`}
+            value={disk.used ? `${disk.used} GB / ${disk.total} GB` : '—'}
           />
           {(net.inFormatted || net.outFormatted) && (
             <>

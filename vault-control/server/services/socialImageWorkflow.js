@@ -8,7 +8,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
-const SOCIAL_SIZES_DIR = path.join(PROJECT_ROOT, '.agents/skills/social-media-image-sizes');
+// The skill lives in .claude/skills (reachable as skills/ via a symlink); the
+// `.agents/skills/...` path this used to point at holds only a node_modules tree —
+// no scripts/ — so every check/resize spawn died on ENOENT. The sharp dependency
+// still comes from that .agents tree, symlinked in as the skill's node_modules.
+// First existing path wins so a differently-laid-out checkout still resolves.
+const SOCIAL_SIZES_DIR = [
+  path.join(PROJECT_ROOT, '.claude/skills/social-media-image-sizes'),
+  path.join(PROJECT_ROOT, 'skills/social-media-image-sizes'),
+].find(p => fs.existsSync(path.join(p, 'scripts'))) ||
+  path.join(PROJECT_ROOT, '.claude/skills/social-media-image-sizes');
 
 const PLATFORM_SPECS = {
   linkedin: {

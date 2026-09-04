@@ -8,6 +8,7 @@ import TopBar from "./components/TopBar";
 import ChatbotPanel from "./components/Chatbot/ChatbotPanel";
 import ChatbotButton from "./components/Chatbot/ChatbotButton";
 import { Loader2, Lock, AlertCircle } from "lucide-react";
+import { usePageRoute } from "./hooks/usePageRoute";
 
 // Lazy load page components to reduce initial bundle size (bundle-dynamic-imports)
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -177,7 +178,9 @@ function LoginPage() {
 }
 
 function AppContent() {
-  const [currentPage, setCurrentPage] = useState("dashboard");
+  // URL-backed, so the page survives a refresh, the Back button works, and a
+  // link to a specific page can be shared. See hooks/usePageRoute.js.
+  const [currentPage, setCurrentPage] = usePageRoute();
   const [chatOpen, setChatOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem("theme");
@@ -246,7 +249,7 @@ function AppContent() {
       case "admin":
         return <ErrorBoundary fallbackTitle="Admin Panel Error"><AdminPanel /></ErrorBoundary>;
       default:
-        return <ErrorBoundary fallbackTitle="Dashboard Error"><Dashboard /></ErrorBoundary>;
+        return <ErrorBoundary fallbackTitle="Dashboard Error"><Dashboard setCurrentPage={setCurrentPage} /></ErrorBoundary>;
     }
   };
 
@@ -283,12 +286,16 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppProvider>
-          <AppContent />
-        </AppProvider>
-      </ToastProvider>
-    </AuthProvider>
+    // Root-level boundary: without it, a throw inside any provider unmounts the
+    // entire React tree and the user sees a blank screen with no way to recover.
+    <ErrorBoundary fallbackTitle="Application Error">
+      <AuthProvider>
+        <ToastProvider>
+          <AppProvider>
+            <AppContent />
+          </AppProvider>
+        </ToastProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

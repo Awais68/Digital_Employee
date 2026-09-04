@@ -33,7 +33,18 @@ class NotificationSystem {
     await this.saveToDatabase(event, data, priority)
 
     if (global.broadcast) {
-      global.broadcast({ type: 'notification', event, data, priority })
+      global.broadcast({
+        type: 'notification',
+        notification: {
+          id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          category: priority === 'IMMEDIATE' || priority === 'URGENT' ? 'error' : 'info',
+          title: event,
+          message: typeof data === 'string' ? data : JSON.stringify(data),
+          read: false,
+          timestamp: new Date().toISOString(),
+          data: { event, priority, ...(typeof data === 'object' && data ? data : {}) }
+        }
+      })
     }
 
     if (['IMMEDIATE','URGENT'].includes(priority)) {

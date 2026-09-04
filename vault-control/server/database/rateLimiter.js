@@ -4,34 +4,11 @@ const MAX_REQUESTS = 100; // per window
 // In-memory rate limiting (primary — no DB query per request)
 const memoryStore = new Map();
 
-// Periodic flush to DB (every 60s) for persistence across restarts
-let flushTimer = null;
-
-function flushToDB() {
-  // Dynamic import to avoid circular deps
-  import('./connection.js').then(({ query }) => {
-    for (const [key, record] of memoryStore.entries()) {
-      if (record.count > 0) {
-        const [identifier, endpoint] = key.split(':');
-        query(
-          `INSERT INTO rate_limits (identifier, endpoint, window_start, request_count)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (identifier, endpoint, window_start)
-           DO UPDATE SET request_count = $4`,
-          [identifier, endpoint, new Date(record.windowStart), record.count]
-        ).catch(() => {});
-      }
-    }
-  }).catch(() => {});
-}
-
-// Start periodic flush (lazy — only when first rate limiter is used)
-function ensureFlushRunning() {
-  if (!flushTimer) {
-    flushTimer = setInterval(flushToDB, 60000);
-    if (flushTimer.unref) flushTimer.unref(); // Don't keep process alive
-  }
-}
+// NOTE: this used to flush the in-memory counters into a `rate_limits` table
+// every 60 seconds. Nothing ever read that table back — the memory store above
+// is the only source of truth — and the write kept the Neon compute awake
+// permanently (it suspends only after ~5 min of zero queries), which is what
+// burned the compute quota. Rate limits reset on restart, same as before.
 
 export function rateLimiter(options = {}) {
   const {
@@ -39,8 +16,6 @@ export function rateLimiter(options = {}) {
     max = MAX_REQUESTS,
     message = 'Too many requests, please try again later.',
   } = options;
-
-  ensureFlushRunning();
 
   return (req, res, next) => {
     const identifier = req.ip || req.connection.remoteAddress || 'unknown';

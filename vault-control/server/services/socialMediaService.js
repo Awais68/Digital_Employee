@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { execFile } from 'child_process'
 
 // ── Facebook (direct Graph API, no MCP) ──
 
@@ -132,30 +133,58 @@ export async function postToInstagram(content, imageSource = null) {
       throw new Error('Instagram container creation failed: ' + JSON.stringify(containerData))
     }
 
-    await new Promise(r => setTimeout(r, 3000))
+    // Meta has to download the image before the container is publishable.
+    // A fixed 3s sleep raced that download and produced random failures;
+    // poll status_code instead (up to 60s).
+    let ready = false
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      const statusResp = await fetch(
+        `https://graph.facebook.com/v19.0/${containerData.id}` +
+        `?fields=status_code,status&access_token=${encodeURIComponent(token)}`
+      )
+      const status = await statusResp.json()
+      if (status.status_code === 'FINISHED') { ready = true; break }
+      if (status.status_code === 'ERROR') {
+        throw new Error('Instagram container ERROR: ' + JSON.stringify(status))
+      }
+      console.log(`[Instagram] Container ${status.status_code || 'PENDING'} (${i + 1}/20)...`)
+    }
+    if (!ready) throw new Error('Instagram container never reached FINISHED (60s timeout)')
 
     console.log('[Instagram] Publishing...')
-    const publishResp = await fetch(
-      `https://graph.facebook.com/v19.0/${igAccId}/media_publish`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          creation_id: containerData.id,
-          access_token: token
-        })
-      }
-    )
-    const publishData = await publishResp.json()
-    console.log('[Instagram] Publish response:', JSON.stringify(publishData))
+    let publishData = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const publishResp = await fetch(
+        `https://graph.facebook.com/v19.0/${igAccId}/media_publish`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            creation_id: containerData.id,
+            access_token: token
+          })
+        }
+      )
+      publishData = await publishResp.json()
+      console.log('[Instagram] Publish response:', JSON.stringify(publishData))
+      if (publishData.id) break
+      if (attempt < 3) await new Promise(r => setTimeout(r, 5000 * attempt))
+    }
 
-    if (publishData.id) {
-      return {
-        success: true,
-        url: `https://www.instagram.com/p/${publishData.id}`,
-        platform: 'instagram',
-        hasImage: true
-      }
+    if (publishData?.id) {
+      // media_publish returns a media id, not a shortcode — ask for the permalink.
+      let url = `https://www.instagram.com/p/${publishData.id}`
+      try {
+        const permaResp = await fetch(
+          `https://graph.facebook.com/v19.0/${publishData.id}` +
+          `?fields=permalink&access_token=${encodeURIComponent(token)}`
+        )
+        const perma = await permaResp.json()
+        if (perma.permalink) url = perma.permalink
+      } catch { /* permalink is cosmetic */ }
+
+      return { success: true, url, platform: 'instagram', hasImage: true }
     }
     throw new Error('Instagram publish failed: ' + JSON.stringify(publishData))
 
@@ -165,7 +194,7 @@ export async function postToInstagram(content, imageSource = null) {
   }
 }
 
-// ── LinkedIn (via MCP server) ──
+// ── LinkedIn (via API MCP server) ──
 
 export async function postToLinkedIn(content, imageSource = null) {
   const { getPublicImageUrl } = await import('./imageHosting.js')
@@ -180,15 +209,7 @@ export async function postToLinkedIn(content, imageSource = null) {
   if (!result.success) {
     const errMsg = result.error?.message || JSON.stringify(result.error)
     console.warn('[LinkedIn] MCP error:', errMsg)
-    console.warn('[LinkedIn] Falling back — returning skipped')
-    return {
-      platform: 'linkedin',
-      id: 'skipped',
-      url: null,
-      skipped: true,
-      success: false,
-      message: `LinkedIn MCP error: ${errMsg}`,
-    }
+    return { platform: 'linkedin', id: 'skipped', url: null, skipped: true, success: false, message: errMsg }
   }
 
   return {

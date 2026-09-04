@@ -11,23 +11,36 @@ export default function Accounting() {
   const [summary, setSummary] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [refreshing, setRefreshing] = useState(false)
+  // The real time of the last successful fetch. The header used to render
+  // `new Date().toLocaleTimeString()` inline, which re-evaluates on every render
+  // and so always claimed the ledger had just synced — including while it was
+  // failing to sync at all.
+  const [lastSync, setLastSync] = useState(null)
 
   const fetchData = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     else setLoading(true)
-    
+
     setError(null)
     try {
       const [summaryRes, transRes] = await Promise.all([
         axios.get('/api/odoo/summary', { timeout: 30000 }),
         axios.get('/api/odoo/transactions?limit=20', { timeout: 30000 })
       ])
-      
+
       setSummary(summaryRes.data && typeof summaryRes.data === 'object' ? summaryRes.data : {})
       setTransactions(transRes.data.transactions || [])
+      setLastSync(new Date())
     } catch (err) {
       console.error('Failed to fetch Odoo data:', err)
-      setError('Live ledger is offline right now — showing cached figures. It will reconnect automatically.')
+      // Say which of the two it is. The old copy always promised "cached figures"
+      // even on a first load, where there is nothing cached and the page renders
+      // $0.00 — a zero balance that reads as real.
+      setError(
+        summary
+          ? 'Live ledger is offline — the figures below are from the last successful sync.'
+          : 'Live ledger is offline and nothing has synced yet, so no figures can be shown.'
+      )
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -38,11 +51,11 @@ export default function Accounting() {
     fetchData()
   }, [])
 
-  const subscriptions = [
-    { id: 1, name: 'Slack Pro', cost: 99, lastUsed: '2 days ago', action: 'Keep' },
-    { id: 2, name: 'Unused Tool', cost: 49, lastUsed: '3 months ago', action: 'Cancel' },
-    { id: 3, name: 'GitHub Enterprise', cost: 231, lastUsed: '1 hour ago', action: 'Keep' },
-  ]
+  // NOTE: a hardcoded `subscriptions` array (Slack Pro / GitHub Enterprise /
+  // "Unused Tool") used to live here. Nothing rendered it, and it was invented
+  // data on a page whose whole job is reporting real money. Removed rather than
+  // left around for someone to wire up by mistake — if subscription tracking is
+  // wanted, it has to come from Odoo like every other figure on this page.
 
   if (loading) {
     return (
@@ -80,7 +93,7 @@ export default function Accounting() {
                 {error ? 'Reconnecting…' : 'Running'}
               </span>
               <span className="text-xs dark:text-[#7A7A85] text-gray-500 ml-4">
-                Last sync: {new Date().toLocaleTimeString()}
+                Last sync: {lastSync ? lastSync.toLocaleTimeString() : 'never'}
               </span>
             </div>
           </div>

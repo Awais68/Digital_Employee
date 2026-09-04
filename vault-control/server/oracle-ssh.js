@@ -11,11 +11,15 @@ const CACHE_TTL = 15000
 
 let cache = { data: null, at: 0 }
 
-function ssh(cmd) {
-  const escaped = cmd.replace(/"/g, '\\"')
+function ssh(cmd, timeoutMs = ORACLE_TIMEOUT) {
+  // exec() runs this through the local /bin/sh, so anything the local shell
+  // would expand inside double quotes ($, `, \) has to survive intact and be
+  // interpreted by the *remote* shell instead — otherwise `awk '{print $4}'`
+  // silently arrives as `awk '{print }'`.
+  const escaped = cmd.replace(/([\\$`"])/g, '\\$1')
   return execAsync(
     `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes -i ${ORACLE_KEY} ${ORACLE_USER}@${ORACLE_HOST} "${escaped}"`,
-    { timeout: ORACLE_TIMEOUT }
+    { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }
   ).then(r => r.stdout.trim())
 }
 
@@ -169,6 +173,66 @@ export async function getOracleStats() {
 
   cache = { data: result, at: now }
   return result
+}
+
+// ── Disk / cache cleanup ─────────────────────────────────────────────────────
+//
+// Every step is non-destructive to application data: package caches, rotated
+// and journal logs, temp files, and (optionally) unused Docker layers. Nothing
+// under /home or a running container's volumes is touched.
+const CLEAN_STEP_TIMEOUT = 90000
+
+const CLEAN_STEPS = [
+  { name: 'apt cache',        cmd: 'sudo apt-get clean -y 2>/dev/null; sudo apt-get autoclean -y 2>/dev/null' },
+  { name: 'apt orphans',      cmd: 'sudo apt-get autoremove -y 2>/dev/null' },
+  { name: 'journal logs',     cmd: 'sudo journalctl --vacuum-time=3d 2>/dev/null' },
+  { name: 'rotated logs',     cmd: "sudo find /var/log -type f \\( -name '*.gz' -o -name '*.1' -o -name '*.old' \\) -delete 2>/dev/null" },
+  { name: 'tmp files',        cmd: "sudo find /tmp /var/tmp -type f -atime +2 -delete 2>/dev/null" },
+  { name: 'pm2 logs',        cmd: 'pm2 flush 2>/dev/null' },
+  { name: 'npm cache',        cmd: 'npm cache clean --force 2>/dev/null' },
+  { name: 'docker prune',     cmd: 'command -v docker >/dev/null && docker system prune -af --volumes=false 2>/dev/null' },
+  { name: 'thumbnail cache',  cmd: 'rm -rf ~/.cache/* 2>/dev/null' },
+]
+
+function diskBytes() {
+  // Bytes free on / — used to report how much the run actually recovered.
+  return "df -B1 / | tail -1 | awk '{print $4}'"
+}
+
+export async function cleanOracleDisk({ includeDocker = true } = {}) {
+  const steps = CLEAN_STEPS.filter(s => includeDocker || s.name !== 'docker prune')
+
+  const before = parseInt(await ssh(diskBytes()), 10) || 0
+
+  const results = []
+  for (const step of steps) {
+    try {
+      await ssh(step.cmd, CLEAN_STEP_TIMEOUT)
+      results.push({ step: step.name, ok: true })
+    } catch (e) {
+      // One failing step (e.g. no docker installed) must not abort the rest.
+      results.push({ step: step.name, ok: false, error: e.message.slice(0, 200) })
+    }
+  }
+
+  const after = parseInt(await ssh(diskBytes()), 10) || 0
+  const df = await ssh('df -h / | tail -1')
+
+  // The stats cache would otherwise keep serving pre-clean numbers.
+  cache = { data: null, at: 0 }
+
+  const freed = Math.max(0, after - before)
+  return {
+    success: results.some(r => r.ok),
+    host: ORACLE_HOST,
+    freedBytes: freed,
+    freedFormatted: formatBytes(freed),
+    freeBefore: formatBytes(before),
+    freeAfter: formatBytes(after),
+    df,
+    steps: results,
+    timestamp: new Date().toISOString(),
+  }
 }
 
 export async function checkOracleReachable() {

@@ -41,14 +41,14 @@ export function markRead(id) {
   const n = store.find(x => x.id === id)
   if (n) {
     n.read = true
-    query('UPDATE notifications SET read=true WHERE id=$1', [id]).catch(() => {})
+    query('UPDATE notifications SET read=true, is_read=true WHERE id=$1', [id]).catch(() => {})
   }
   return n
 }
 
 export function markAllRead() {
   store.forEach(n => { n.read = true })
-  query('UPDATE notifications SET read=true').catch(() => {})
+  query('UPDATE notifications SET read=true, is_read=true').catch(() => {})
 }
 
 export function getUnreadCount() {

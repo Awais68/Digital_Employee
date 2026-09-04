@@ -6,99 +6,55 @@ import { sendMessage, getStatus } from './whatsappService.js'
 
 const OWNER_WHATSAPP = process.env.OWNER_PHONE || '923XXXXXXXXX'
 
-cron.schedule('* * * * *', async () => {
-  try {
-    const result = await query(`
-      SELECT * FROM todos 
-      WHERE reminder_at <= NOW() 
-        AND reminder_at > NOW() - INTERVAL '24 hours'
-        AND status = 'pending'
-        AND (notification_sent = false OR notification_sent IS NULL)
-    `)
-    
-    for (const todo of result.rows) {
-      createNotification(
-        'warning',
-        `⏰ Reminder: ${todo.title}`,
-        todo.description || 'Task due now',
-        { todoId: todo.id }
-      )
-      
-      if (getStatus() === 'connected') {
-        await sendMessage(OWNER_WHATSAPP,
-          `⏰ *Task Reminder*\n\n*${todo.title}*\n${todo.description || ''}\n\nPriority: ${todo.priority.toUpperCase()}`
-        ).catch(e => console.error('WA reminder failed:', e.message))
-      }
-      
-      await query(`UPDATE todos SET notification_sent=true WHERE id=$1`, [todo.id])
-      
-      if (todo.recurrence && todo.recurrence !== 'none') {
-        const nextDate = getNextRecurrence(todo.recurrence, new Date(todo.reminder_at))
-        await query(
-          `UPDATE todos SET reminder_at=$1, notification_sent=false WHERE id=$2`,
-          [nextDate, todo.id]
-        )
-      }
-    }
-  } catch (e) {
-    console.error('[Scheduler] Reminder check error:', e.message)
-  }
-})
-
-function getNextRecurrence(type, fromDate) {
-  const next = new Date(fromDate)
-  switch (type) {
-    case 'daily':   next.setDate(next.getDate() + 1); break
-    case 'weekly':  next.setDate(next.getDate() + 7); break
-    case 'monthly': next.setMonth(next.getMonth() + 1); break
-  }
-  return next
-}
+// ─── Todo reminders ────────────────────────────────────────────────────────
+// Moved to services/dueScheduler.js. This used to be `cron.schedule('* * * * *')`,
+// i.e. a DB query every 60 seconds, which alone kept the Neon compute from ever
+// scaling to zero. Reminders now fire on an exact-time timer with the same
+// latency and near-zero idle cost. Do not add a minute-cron back here.
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STRICT DAILY POSTING RULE:
-//   - Minimum 3 posts per day, each at a different time slot
-//   - Each slot uses a DIFFERENT topic (no topic repeats within a day)
-//   - Each post goes to LinkedIn + Facebook + Instagram
-//   - Every post has web research with VERIFIED sources + AI-generated image
-//   - Missed slots are caught up by an hourly check
+//   - EXACTLY ONE post per day. Not a minimum — a hard ceiling.
+//   - That one post is generated ONCE and broadcast to LinkedIn + Facebook +
+//     Instagram, so the whole day costs a single research/generation call plus
+//     a single image. The old 3-slots x 3-platforms layout burned nine LLM
+//     generations a day and is what exhausted the Groq TPM quota.
+//   - Because it is the only post of the day it has to earn attention: the
+//     generator is asked for an eye-catching hook (see postGenerator.js).
+//   - Web research with VERIFIED sources + AI-generated image still required.
+//   - One catch-up window only, and it re-checks the same hard ceiling.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const DAILY_SLOTS = [
-  { label: 'morning',   hour: 10, cron: '0 10 * * *' },
-  { label: 'afternoon', hour: 14, cron: '30 14 * * *' },
-  { label: 'evening',   hour: 19, cron: '0 19 * * *' },
-]
+const DAILY_SLOT = { label: 'daily', hour: 10, cron: '0 10 * * *' }
 const POST_PLATFORMS = ['linkedin', 'facebook', 'instagram']
 
-for (const slot of DAILY_SLOTS) {
-  cron.schedule(slot.cron, async () => {
-    console.log(`[Scheduler] ${slot.label} slot — generating multi-platform posts`)
-    await generateAndSchedulePost(slot.label)
-  })
-}
-
-// Catch-up: every hour at :45, check if any past slot today produced no posts
-cron.schedule('45 * * * *', async () => {
-  try {
-    const nowHour = new Date().getHours()
-    for (const slot of DAILY_SLOTS) {
-      if (slot.hour > nowHour) continue
-      const done = await query(`
-        SELECT COUNT(*) FROM scheduled_posts
-        WHERE created_at::date = CURRENT_DATE
-          AND EXTRACT(HOUR FROM created_at) >= $1
-          AND EXTRACT(HOUR FROM created_at) < $1 + 2
-      `, [slot.hour]).catch(() => null)
-      if (done && parseInt(done.rows[0].count) === 0) {
-        console.log(`[Scheduler] Catch-up: ${slot.label} slot missed — generating now`)
-        await generateAndSchedulePost(slot.label)
-      }
-    }
-  } catch (e) {
-    console.error('[Scheduler] Catch-up check error:', e.message)
-  }
+cron.schedule(DAILY_SLOT.cron, async () => {
+  console.log('[Scheduler] daily slot — generating the one post for today')
+  await generateAndSchedulePost(DAILY_SLOT.label)
 })
+
+// Single catch-up, 3h after the slot. Anything more is another Neon query and
+// another chance to double-post; the ceiling check below makes it a no-op on a
+// normal day anyway.
+cron.schedule('0 13 * * *', async () => {
+  console.log('[Scheduler] catch-up window — checking if today has a post')
+  await generateAndSchedulePost('catch-up')
+})
+
+// The hard ceiling. Every path into generation goes through here, so neither the
+// slot cron, the catch-up, nor a manual trigger can produce a second day's worth
+// of posts. Counts rows rather than trusting an in-memory flag: the process
+// restarts (PM2 cron_restart) and an in-memory flag would reset with it.
+// Configurable only so an operator can raise it deliberately; the default is the
+// rule, and nothing in the codebase writes this value.
+const MAX_POSTS_PER_DAY = Math.max(1, parseInt(process.env.MAX_POSTS_PER_DAY || '1', 10) || 1)
+
+async function postsCreatedToday() {
+  const r = await query(
+    `SELECT COUNT(*)::int AS n FROM scheduled_posts WHERE created_at::date = CURRENT_DATE`
+  )
+  return r.rows[0].n
+}
 
 // Pick a topic not yet used today (strict different-topic rule)
 async function pickFreshTopic() {
@@ -118,37 +74,55 @@ async function pickFreshTopic() {
 
 async function generateAndSchedulePost(timeSlot) {
   try {
+    // Hard ceiling first, before any LLM or image call is made.
+    let already
+    try {
+      already = await postsCreatedToday()
+    } catch (e) {
+      // Can't prove the day is empty => don't post. Failing closed costs one
+      // skipped day; failing open costs quota and a duplicate feed.
+      console.error(`[Scheduler] [${timeSlot}] Could not verify daily count (${e.message}) — skipping to stay under the 1/day rule`)
+      return
+    }
+    // One DB row per platform, so the day's single post counts as POST_PLATFORMS.length.
+    if (already >= MAX_POSTS_PER_DAY * POST_PLATFORMS.length) {
+      console.log(`[Scheduler] [${timeSlot}] Skipped — ${already} row(s) already created today (limit is ${MAX_POSTS_PER_DAY} post/day)`)
+      return
+    }
+
     const topic = await pickFreshTopic()
-    console.log(`[Scheduler] [${timeSlot}] Auto-generating posts for topic: ${topic}`)
+    console.log(`[Scheduler] [${timeSlot}] Generating today's single post — topic: ${topic}`)
 
     const { researchAndGeneratePost } = await import('./postGenerator.js')
     const { generatePostImage } = await import('./imageGenerator.js')
 
-    // Generate ONE image for the topic, shared across platforms
-    let imageUrl = null
+    // ONE research/generation call and ONE image for the whole day. The copy is
+    // reused across platforms instead of regenerating per platform — that per-
+    // platform loop was 3x the token spend for near-identical text.
+    let postData, imageUrl = null
     try {
-      const probe = await researchAndGeneratePost(topic, 'linkedin', 1)
-      imageUrl = await generatePostImage(probe.imagePrompt || topic)
-      // Insert the LinkedIn post we already generated
-      await insertPendingPost(topic, 'linkedin', probe, imageUrl)
-
-      // Then the remaining platforms with platform-tuned copy
-      for (const platform of POST_PLATFORMS.slice(1)) {
-        const postData = await researchAndGeneratePost(topic, platform, 1)
-        await insertPendingPost(topic, platform, postData, imageUrl)
-      }
+      postData = await researchAndGeneratePost(topic, 'linkedin', 1, { soloDaily: true })
+      imageUrl = await generatePostImage(postData.imagePrompt || topic)
     } catch (genErr) {
       console.error(`[Scheduler] [${timeSlot}] Generation error:`, genErr.message)
       return
     }
 
-    createNotification('info', '📱 Posts Ready for Approval',
-      `${POST_PLATFORMS.length} posts (${POST_PLATFORMS.join(', ')}) about "${topic}" need your approval`,
+    for (const platform of POST_PLATFORMS) {
+      try {
+        await insertPendingPost(topic, platform, postData, imageUrl)
+      } catch (insErr) {
+        console.error(`[Scheduler] [${timeSlot}] Insert failed for ${platform}:`, insErr.message)
+      }
+    }
+
+    createNotification('info', '📱 Today\'s Post Ready for Approval',
+      `Your 1 post for today (${POST_PLATFORMS.join(', ')}) about "${topic}" needs approval`,
       { topic, platforms: POST_PLATFORMS, timeSlot })
 
     if (getStatus() === 'connected') {
       await sendMessage(OWNER_WHATSAPP,
-        `📱 *New Posts Ready (${timeSlot})*\n\nPlatforms: ${POST_PLATFORMS.map(p => p.toUpperCase()).join(', ')}\nTopic: ${topic}\n\nPlease approve in dashboard.`
+        `📱 *Today's Post Ready (${timeSlot})*\n\nPlatforms: ${POST_PLATFORMS.map(p => p.toUpperCase()).join(', ')}\nTopic: ${topic}\n\nPlease approve in dashboard.`
       ).catch(() => {})
     }
   } catch (e) {
@@ -176,7 +150,7 @@ cron.schedule('0 10 * * *', async () => {
   const todayTopics = shuffled.slice(0, 3)
   const msg = `🌅 *Good Morning!*\n\n*Digital FTE — Daily Topics*\n\n` +
     todayTopics.map((t, i) => `${i + 1}. ${t}`).join('\n') +
-    `\n\nReply with a number or type your own topic.\nPosts auto-generate at 10 AM, 2:30 PM & 7 PM (LinkedIn + Facebook + Instagram).`
+    `\n\nReply with a number or type your own topic.\nOne post per day, auto-generated at 10 AM (LinkedIn + Facebook + Instagram).`
 
   try {
     await sendMessage(OWNER_WHATSAPP, msg)

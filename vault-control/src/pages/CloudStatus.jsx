@@ -1,21 +1,29 @@
 import { useState, useEffect, useCallback } from 'react'
 import { AlertTriangle, GitBranch, RefreshCw } from 'lucide-react'
 import axios from 'axios'
+import usePolling from '../hooks/usePolling'
 
-const REFRESH_INTERVAL = 10000 // 10s live refresh
+const REFRESH_INTERVAL = 30000 // 30s, and only while the tab is visible
 
-function formatUptime(seconds) {
-  if (!seconds && seconds !== 0) return '—'
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (d > 0) return `${d}d ${h}h`
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
+// Utilisation colour follows the number, not the metric. Storage used to be
+// hardcoded orange, so even a healthy VM looked like it was running out of space.
+const OK = 70   // below this: healthy
+const WARN = 90 // at/above this: critical
+
+function usageBarColor(percent) {
+  if (percent === null || percent === undefined) return 'bg-gray-400'
+  if (percent >= WARN) return 'bg-red-500'
+  if (percent >= OK) return 'bg-orange-500'
+  return 'bg-green-500'
 }
 
 export default function CloudStatus() {
   const [vmInfo, setVmInfo] = useState(null)
+  // Real VM numbers come from /api/oracle/stats (SSH into the box). vmInfo.metrics
+  // looks like VM data but getVmInfo() fills it from getSystemMetrics(), i.e. *this*
+  // machine's os/df — rendering it here made a full local disk read as "cloud storage
+  // full". Never fall back to it for CPU/RAM/disk/uptime.
+  const [stats, setStats] = useState(null)
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -23,12 +31,14 @@ export default function CloudStatus() {
 
   const fetchVmInfo = useCallback(async () => {
     try {
-      const [vmRes, statsRes] = await Promise.all([
+      const [vmRes, statsRes, oracleRes] = await Promise.all([
         axios.get('/api/system/vm-info'),
         axios.get('/api/system/stats').catch(() => null),
+        axios.get('/api/oracle/stats').catch(() => null),
       ])
       setVmInfo(vmRes.data && typeof vmRes.data === 'object' ? vmRes.data : {})
       if (statsRes?.data?.services) setServices(statsRes.data.services)
+      setStats(oracleRes?.data || null)
       setLastUpdated(new Date())
       setError(null)
     } catch (err) {
@@ -38,14 +48,13 @@ export default function CloudStatus() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchVmInfo()
-    const interval = setInterval(fetchVmInfo, REFRESH_INTERVAL)
-    return () => clearInterval(interval)
-  }, [fetchVmInfo])
+  usePolling(fetchVmInfo, REFRESH_INTERVAL)
 
   const vmOnline = vmInfo?.online
-  const metrics = vmInfo?.metrics
+  const cpu = stats?.cpu || {}
+  const mem = stats?.memory || {}
+  const disk = stats?.disk || {}
+  const pct = (v) => (v === null || v === undefined ? '\u2014' : `${v}%`)
 
   const cloudServices = services.filter(s =>
     ['Email MCP', 'Gmail Watcher', 'LinkedIn MCP'].includes(s.name)
@@ -150,12 +159,12 @@ export default function CloudStatus() {
           </div>
           <div>
             <p className="dark:text-[#7A7A85] text-gray-500">Uptime</p>
-            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">{formatUptime(metrics?.uptime)}</p>
+            <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">{stats?.uptime || '\u2014'}</p>
           </div>
           <div>
             <p className="dark:text-[#7A7A85] text-gray-500">CPU</p>
             <p className="font-semibold dark:text-[#E0E0E6] text-gray-900">
-              {metrics?.cpu?.cores || '—'} cores
+              {cpu.cores || '—'} cores
             </p>
           </div>
         </div>
@@ -163,23 +172,24 @@ export default function CloudStatus() {
         {/* Resource Usage — live data */}
         <div className="space-y-3">
           <ProgressBar
-            used={metrics?.cpu?.percent ?? 0}
+            used={cpu.percent ?? 0}
             total={100}
-            label={`CPU (load ${metrics?.cpu?.loadavg?.[0] ?? '—'})`}
-            color="bg-blue-500"
+            label={`CPU (load ${cpu.loadAvg?.['1m'] ?? '\u2014'})`}
+            color={usageBarColor(cpu.percent)}
             unit="%"
           />
           <ProgressBar
-            used={metrics?.memory?.used ?? 0}
-            total={metrics?.memory?.total ?? 0}
-            label={`RAM (${metrics?.memory?.percent ?? 0}%)`}
-            color="bg-purple-500"
+            used={mem.used ?? 0}
+            total={mem.total ?? 0}
+            label={`RAM (${pct(mem.percent)})`}
+            color={usageBarColor(mem.percent)}
+            unit="MB"
           />
           <ProgressBar
-            used={metrics?.disk?.used ?? 0}
-            total={metrics?.disk?.total ?? 0}
-            label={`Storage (${metrics?.disk?.percent ?? 0}%)`}
-            color="bg-orange-500"
+            used={disk.used ?? 0}
+            total={disk.total ?? 0}
+            label={`Storage (${pct(disk.percent)})`}
+            color={usageBarColor(disk.percent)}
           />
         </div>
       </div>

@@ -16,6 +16,7 @@ async function getClient(name) {
   const transport = new StdioClientTransport({
     command: 'node',
     args: [serverPath],
+    env: { ...process.env },
   })
 
   const client = new Client({ name: 'vault-control', version: '1.0.0' })

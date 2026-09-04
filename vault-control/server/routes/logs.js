@@ -170,6 +170,163 @@ router.get('/', (req, res) => {
   })
 })
 
+// ---------- Storage management ----------
+
+const LOG_EXTENSIONS = ['.log', '.json', '.old', '.txt', '.gz', '.1', '.2']
+
+function isLogArtifact(name) {
+  return LOG_EXTENSIONS.some(ext => name.endsWith(ext)) || /\.log\.\d+$/.test(name)
+}
+
+// Files a running process (pm2, watchers) may still hold open.
+// Those are truncated instead of deleted so the disk space is actually freed.
+function isActiveLog(name) {
+  return name.endsWith('.log')
+}
+
+// Resolves a client-supplied name (may include a subdirectory such as
+// "audit/audit_log.archive.2.json") and rejects anything escaping LOGS_DIR.
+function safeLogPath(name) {
+  const root = path.resolve(LOGS_DIR)
+  const full = path.resolve(root, name)
+  if (full !== root && !full.startsWith(root + path.sep)) return null
+  return full
+}
+
+function walkLogDir(dir, prefix = '') {
+  let entries = []
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+  } catch (err) {
+    return []
+  }
+
+  const out = []
+  for (const entry of entries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name
+    const full = path.join(dir, entry.name)
+
+    if (entry.isDirectory()) {
+      out.push(...walkLogDir(full, rel))
+      continue
+    }
+    if (!entry.isFile() || !isLogArtifact(entry.name)) continue
+
+    try {
+      const stat = fs.statSync(full)
+      out.push({
+        name: rel,
+        bytes: stat.size,
+        mtime: stat.mtime,
+        ageDays: Math.floor((Date.now() - stat.mtime.getTime()) / 86400000),
+        active: isActiveLog(entry.name),
+      })
+    } catch (err) {
+      // Skip files that vanished mid-scan
+    }
+  }
+  return out
+}
+
+function statLogFiles() {
+  if (!fs.existsSync(LOGS_DIR)) return []
+  return walkLogDir(LOGS_DIR).sort((a, b) => b.bytes - a.bytes)
+}
+
+function invalidateCache() {
+  logsCache = null
+  logsCacheTime = 0
+}
+
+// GET storage usage of the Logs directory
+router.get('/storage/stats', (req, res) => {
+  const files = statLogFiles()
+  const totalBytes = files.reduce((sum, f) => sum + f.bytes, 0)
+  const staleBytes = files.filter(f => f.ageDays >= 7).reduce((sum, f) => sum + f.bytes, 0)
+
+  res.json({
+    totalBytes,
+    staleBytes,
+    fileCount: files.length,
+    files: files.slice(0, 30),
+  })
+})
+
+// DELETE / clear logs from disk
+// mode=truncate -> empty every log file, keep the files (safe for running services)
+// mode=old      -> only touch files not modified for `days` days (default 7)
+// mode=all      -> truncate active .log files, delete every other log artifact
+router.delete('/storage', (req, res) => {
+  const mode = req.query.mode || req.body?.mode || 'truncate'
+  const days = parseInt(req.query.days || req.body?.days || 7, 10)
+
+  if (!['truncate', 'old', 'all'].includes(mode)) {
+    return res.status(400).json({ error: 'Invalid mode. Use truncate, old or all.' })
+  }
+
+  const files = statLogFiles()
+  const targets = mode === 'old' ? files.filter(f => f.ageDays >= days) : files
+
+  let freedBytes = 0
+  const truncated = []
+  const deleted = []
+  const failed = []
+
+  for (const file of targets) {
+    const full = safeLogPath(file.name)
+    if (!full) continue
+    try {
+      if (mode === 'truncate' || file.active) {
+        fs.truncateSync(full, 0)
+        truncated.push(file.name)
+      } else {
+        fs.unlinkSync(full)
+        deleted.push(file.name)
+      }
+      freedBytes += file.bytes
+    } catch (err) {
+      failed.push({ name: file.name, error: err.message })
+    }
+  }
+
+  invalidateCache()
+
+  res.json({
+    success: failed.length === 0,
+    mode,
+    days: mode === 'old' ? days : undefined,
+    freedBytes,
+    truncated,
+    deleted,
+    failed,
+  })
+})
+
+// DELETE a single log file
+router.delete('/storage/file/*', (req, res) => {
+  const name = req.params[0] || ''
+  const full = safeLogPath(name)
+  if (!full || !isLogArtifact(path.basename(name))) {
+    return res.status(400).json({ error: 'Invalid log file name' })
+  }
+  if (!fs.existsSync(full)) {
+    return res.status(404).json({ error: 'Log file not found' })
+  }
+
+  try {
+    const bytes = fs.statSync(full).size
+    if (isActiveLog(path.basename(full))) {
+      fs.truncateSync(full, 0)
+    } else {
+      fs.unlinkSync(full)
+    }
+    invalidateCache()
+    res.json({ success: true, name: path.basename(full), freedBytes: bytes })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET single log details
 router.get('/:id', (req, res) => {
   const logs = parseLogFiles()

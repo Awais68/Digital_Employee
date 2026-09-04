@@ -284,14 +284,24 @@ export default function WhatsApp() {
                 className="dark:text-[#00FF88] text-blue-500"
               />
             </button>
-            <div>
-              <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold dark:text-[#E0E0E6] text-gray-900 truncate">
                 {selectedConversation.name}
               </h3>
               <p className="text-xs dark:text-[#7A7A85] text-gray-500">
                 {selectedConversation.messageCount} message(s)
               </p>
             </div>
+            {isAdmin && (
+              <button
+                onClick={() => handleDeleteChat(selectedConversation)}
+                title="Delete entire conversation"
+                aria-label="Delete entire conversation"
+                className="p-2 rounded-full shrink-0 dark:bg-red-500/10 hover:dark:bg-red-500/20 transition-colors"
+              >
+                <Trash2 size={18} className="text-red-400" />
+              </button>
+            )}
           </div>
 
           {/* Messages */}
@@ -392,14 +402,19 @@ export default function WhatsApp() {
         <div className="flex-1 overflow-y-auto">
           {conversations.length > 0 ? (
             conversations.map((conv) => (
-              <button
+              // Was a <button>. The per-row delete control is itself a button and
+              // a button cannot nest inside a button, so the row is a div with
+              // the same keyboard/role semantics.
+              <div
                 key={conv.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => handleSelectConversation(conv)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ")
                     handleSelectConversation(conv);
                 }}
-                className="w-full text-left px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer hover:dark:bg-[#1A1A24] transition-colors"
+                className="group w-full text-left px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer hover:dark:bg-[#1A1A24] transition-colors"
               >
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex items-center gap-3">
@@ -429,9 +444,21 @@ export default function WhatsApp() {
                         {conv.unread}
                       </span>
                     )}
+                    {isAdmin && (
+                      <button
+                        // stopPropagation: without it the row's onClick also fires
+                        // and opens the chat we are about to delete.
+                        onClick={(e) => { e.stopPropagation(); handleDeleteChat(conv); }}
+                        title="Delete this chat from history"
+                        aria-label={`Delete chat with ${conv.name}`}
+                        className="p-1 rounded text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
-              </button>
+              </div>
             ))
           ) : (
             <div className="p-8 text-center text-[#7A7A85] font-mono italic text-sm">
@@ -745,15 +772,19 @@ export default function WhatsApp() {
 
             {(searchQuery ? filteredConversations : conversations).length > 0 ? (
               (searchQuery ? filteredConversations : conversations).map((conv) => (
-                <button
+                // See the note on the mobile list: a div, not a button, so the
+                // delete control can live inside the row.
+                <div
                   key={conv.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleSelectConversation(conv)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ")
                       handleSelectConversation(conv);
                   }}
                   className={`
-                  w-full text-left px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer transition-colors
+                  group w-full text-left px-4 py-3 border-b dark:border-[#1A1A24] border-gray-100 cursor-pointer transition-colors
                   ${
                     selectedConversation?.id === conv.id
                       ? "dark:bg-[#00FF88]/10 bg-blue-50"
@@ -787,9 +818,21 @@ export default function WhatsApp() {
                           {conv.unread}
                         </span>
                       )}
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteChat(conv); }}
+                          title="Delete this chat from history"
+                          aria-label={`Delete chat with ${conv.name}`}
+                          // Always visible, not hover-only: hover does not exist on
+                          // touch, and a delete you cannot find is not a feature.
+                          className="p-1 rounded text-red-400/70 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
-                </button>
+                </div>
               ))
             ) : searchQuery ? (
               <div className="p-12 text-center text-[#7A7A85] font-mono italic text-xs">
