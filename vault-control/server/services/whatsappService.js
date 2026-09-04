@@ -252,6 +252,30 @@ export async function initWhatsApp() {
       notify('info', `WhatsApp: ${contactName}`, msg.body.substring(0, 80))
     })
 
+    // The linked WhatsApp account is the owner's own number, so every approval
+    // we send lands in their "Message yourself" chat — and their reply there is
+    // an OUTGOING message. whatsapp-web.js never fires 'message' for it, only
+    // 'message_create' with fromMe = true, which is why "1 APPROVE" was
+    // silently lost. Commands only; nothing here creates a task file.
+    waClient.on('message_create', async (msg) => {
+      if (!msg.fromMe) return                    // incoming is handled by 'message'
+      if (!msg.body?.trim()) return
+      if (wasSentByUs(msg.body)) return          // our own reply, not an instruction
+
+      try {
+        const { handleOwnerCommand, isOwner } = await import('./hitl.js')
+        const chat = msg.to || msg.from
+        if (!isOwner(chat)) return               // only the owner's own chat
+        const reply = await handleOwnerCommand(chat, msg.body)
+        if (reply) {
+          await sendMessage(chat, reply)
+          chatsCache = null
+        }
+      } catch (e) {
+        console.error('[WhatsApp] Self-chat command handling failed:', e.message)
+      }
+    })
+
     waClient.on('disconnected', (reason) => {
       waStatus = 'disconnected'
       console.warn('[WhatsApp] Disconnected:', reason)
@@ -405,11 +429,25 @@ ${msg.body}
   }
 }
 
+// Everything we send comes back to us as a fromMe 'message_create'. None of our
+// replies parse as a command today, but one word added to a reply template
+// should not be able to start an echo loop, so remember what we sent.
+const recentlySent = new Set()
+function rememberSent(text) {
+  const key = String(text).slice(0, 200)
+  recentlySent.add(key)
+  setTimeout(() => recentlySent.delete(key), 60000).unref?.()
+}
+function wasSentByUs(text) {
+  return recentlySent.has(String(text).slice(0, 200))
+}
+
 export async function sendMessage(to, text) {
   if (waStatus !== 'connected' || !waClient) {
     throw new Error(`WhatsApp not connected (status: ${waStatus})`)
   }
   const chatId = to.includes('@') ? to : `${to}@c.us`
+  rememberSent(text)
   await waClient.sendMessage(chatId, text)
   return { success: true }
 }
