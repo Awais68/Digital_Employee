@@ -20,6 +20,7 @@ import re
 import json
 import time
 import uuid
+import hashlib
 import shutil
 import subprocess
 from pathlib import Path
@@ -73,6 +74,11 @@ FOLDERS = {
     "plans": BASE_DIR / "Plans",
     "pending_approval": BASE_DIR / "Pending_Approval",
     "approved": BASE_DIR / "Approved",
+    # Quarantine for approved files that cannot be processed. Without it a single
+    # unparseable file sits in Approved/ and is retried on every run forever — that
+    # is where the 2.2M "lifetime errors" came from (one file, every 3 minutes,
+    # for months). See quarantine_failed_approval().
+    "failed": BASE_DIR / "Failed",
     "logs": BASE_DIR / "Logs",
     "metrics": BASE_DIR / "Metrics",
 }
@@ -1305,6 +1311,47 @@ def generate_whatsapp_reply_draft(sender: str, message_body: str, message_id: st
     }
 
 
+def whatsapp_message_key(whatsapp_data: Dict) -> str:
+    """
+    Stable per-message key used to name and dedup WhatsApp approval drafts.
+
+    Derived from the source message, never from the clock. The approval filename
+    used to be `WHATSAPP_{datetime.now()}_{sender}.md`, so a re-delivered trigger
+    always produced a fresh, non-colliding name and no existence check could dedup
+    it — one Areeba conversation became 10 approval drafts from 7 real messages.
+    """
+    key = re.sub(r'[^\w-]', '', str(whatsapp_data.get("message_id") or ""))[-16:]
+    if key:
+        return key
+    # Older vault triggers carry no id. Hash the content instead so the name is
+    # still stable for the same message.
+    return hashlib.sha256(
+        f"{whatsapp_data.get('sender','')}:{whatsapp_data.get('body','')}".encode()
+    ).hexdigest()[:16]
+
+
+def existing_whatsapp_approval(msg_key: str) -> Optional[Path]:
+    """
+    Return the artifact for this message if one already exists anywhere in the
+    approval lifecycle, else None.
+
+    Matches on the key appearing in the filename rather than on an exact path: the
+    approve/reject handlers re-prefix the file (REPLY_/REJECTED_), so an exact-path
+    check would miss every already-handled message and redraft it forever.
+    """
+    for folder in ("pending_approval", "approved", "done", "rejected", "failed"):
+        d = FOLDERS.get(folder)
+        if not d or not d.exists():
+            continue
+        try:
+            for f in d.iterdir():
+                if f.is_file() and msg_key in f.name:
+                    return f
+        except OSError:
+            continue
+    return None
+
+
 def create_whatsapp_approval_file(filename: str, whatsapp_data: Dict) -> Optional[Path]:
     """
     Create WhatsApp approval file in /Pending_Approval/.
@@ -1323,10 +1370,16 @@ def create_whatsapp_approval_file(filename: str, whatsapp_data: Dict) -> Optiona
         Path to created approval file or None on error
     """
     try:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_sender = re.sub(r'[^\w\s-]', '', whatsapp_data.get('sender', 'unknown')[:40])
         safe_sender = re.sub(r'[-\s]+', '_', safe_sender.strip()).lower()
-        approval_filename = f"WHATSAPP_{timestamp}_{safe_sender}.md"
+
+        # The approval filename is derived from the SOURCE MESSAGE, not from the
+        # clock. It used to be `WHATSAPP_{datetime.now()}_{sender}.md`, which meant a
+        # re-processed trigger always landed on a fresh, non-colliding name — so no
+        # existence check could ever dedup it, and one Areeba conversation produced
+        # 10 approval drafts from 7 real messages.
+        msg_key = whatsapp_message_key(whatsapp_data)
+        approval_filename = f"WHATSAPP_{safe_sender}_{msg_key}.md"
         approval_path = FOLDERS["pending_approval"] / approval_filename
 
         sender = whatsapp_data.get("sender", "Unknown")
@@ -2119,6 +2172,100 @@ class MetricsManager:
 # FILE OPERATIONS
 # =============================================================================
 
+# =============================================================================
+# APPROVED-FILE QUARANTINE
+# =============================================================================
+# An approved file that fails to send stays in Approved/ and is picked up again on
+# the next run. For a transient failure (SMTP down) that retry is exactly right.
+# For a permanent one — a file the parser cannot read at all — it is an infinite
+# loop: `INVOICE_1787396433760____.md` failed with "Could not extract email data"
+# every 3 minutes for months and is what drove Lifetime Errors to 2,275,937 while
+# the last 100 runs each recorded 0. Attempts are counted per file; once a file
+# exhausts them it is moved to Failed/ so the queue can drain.
+
+ATTEMPTS_FILE = BASE_DIR / "Logs" / ".approval_attempts.json"
+MAX_APPROVAL_ATTEMPTS = 3
+
+# Failures that re-reading the same bytes can never fix. Retrying these wastes a
+# run; quarantine on the first one instead of burning three.
+PERMANENT_FAILURE_MARKERS = (
+    "could not extract email data",
+    "no recipient",
+    "invalid email address",
+)
+
+
+def _load_attempts() -> Dict[str, int]:
+    try:
+        if ATTEMPTS_FILE.exists():
+            return json.loads(ATTEMPTS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def _save_attempts(data: Dict[str, int]) -> None:
+    try:
+        ATTEMPTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ATTEMPTS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except OSError as e:
+        logger.warning(f"Could not persist approval attempts: {e}")
+
+
+def quarantine_failed_approval(file_path: Path, reason: str) -> bool:
+    """
+    Decide what to do with an approved file that just failed to send.
+
+    Returns True if the file was quarantined (caller should stop retrying it),
+    False if it is still eligible for another attempt on a later run.
+    """
+    attempts = _load_attempts()
+    name = file_path.name
+    count = attempts.get(name, 0) + 1
+    attempts[name] = count
+
+    permanent = any(m in (reason or "").lower() for m in PERMANENT_FAILURE_MARKERS)
+    if not permanent and count < MAX_APPROVAL_ATTEMPTS:
+        _save_attempts(attempts)
+        logger.warning(
+            f"   ↻ Attempt {count}/{MAX_APPROVAL_ATTEMPTS} failed for {name} — will retry next run"
+        )
+        return False
+
+    FOLDERS["failed"].mkdir(parents=True, exist_ok=True)
+    destination = FOLDERS["failed"] / name
+    if move_file(file_path, destination):
+        try:
+            with open(destination, "a", encoding="utf-8") as f:
+                f.write(
+                    f"\n\n---\n## ⛔ Quarantined\n"
+                    f"- **At:** {datetime.now().isoformat()}\n"
+                    f"- **Attempts:** {count}\n"
+                    f"- **Reason:** {reason}\n"
+                    f"- **Classification:** {'permanent — retrying cannot help' if permanent else 'retry budget exhausted'}\n"
+                    f"\nFix the file and move it back to `/Approved/` to try again.\n"
+                )
+        except OSError as e:
+            logger.warning(f"Could not annotate quarantined file: {e}")
+        attempts.pop(name, None)
+        _save_attempts(attempts)
+        logger.error(f"   ⛔ Quarantined to Failed/: {name} ({reason})")
+        return True
+
+    # The move itself failed — leave the count so the next run tries again rather
+    # than silently dropping the file.
+    _save_attempts(attempts)
+    logger.error(f"   ⛔ Could not quarantine {name}; it will be retried")
+    return False
+
+
+def clear_approval_attempts(file_name: str) -> None:
+    """Forget a file's failure history once it finally succeeds."""
+    attempts = _load_attempts()
+    if attempts.pop(file_name, None) is not None:
+        _save_attempts(attempts)
+
+
 def move_file(source: Path, destination: Path) -> bool:
     """Safely move a file with audit logging."""
     audit = get_audit_manager()
@@ -2477,12 +2624,21 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
                 body_lines = []
                 in_body = False
 
+                seen_fence = False
                 for line in lines:
                     if line.strip() == "---":
-                        if not in_frontmatter:
+                        if not seen_fence:
+                            # Opening fence — everything until the next one is frontmatter.
+                            seen_fence = True
                             in_frontmatter = True
-                        else:
+                        elif in_frontmatter:
+                            # Closing fence. in_frontmatter MUST be cleared here:
+                            # leaving it set made the `elif in_body` branch below
+                            # unreachable, so body_lines stayed empty and every
+                            # WhatsApp approval was generated with a blank message.
+                            in_frontmatter = False
                             in_body = True
+                        # A later `---` is a markdown horizontal rule inside the body.
                         continue
 
                     if in_frontmatter:
@@ -2492,9 +2648,28 @@ def process_needs_action_files(metrics: MetricsManager) -> int:
                     elif in_body and line.strip():
                         body_lines.append(line)
 
-                whatsapp_data["body"] = "\n".join(body_lines).strip()
+                # Prefer the explicit `body:` field the WhatsApp service writes into
+                # frontmatter; fall back to the rendered markdown body only if absent.
+                markdown_body = "\n".join(body_lines).strip()
+                whatsapp_data["body"] = (whatsapp_data.get("body") or markdown_body).strip()
                 whatsapp_data.setdefault("sender", whatsapp_data.get("from", "Unknown"))
                 whatsapp_data.setdefault("priority", whatsapp_data.get("priority", "medium"))
+                # The vault writes `msg_id`/`received`; the approval template reads
+                # `message_id`/`received_iso`. Without this bridge both render "N/A".
+                whatsapp_data.setdefault("message_id", whatsapp_data.get("msg_id", ""))
+                whatsapp_data.setdefault("received_iso", whatsapp_data.get("received", ""))
+
+                # Already drafted on an earlier pass? Then this trigger is a
+                # re-delivery (whatsapp-web.js replays history on reconnect). Retire
+                # it without spending an LLM call or another 60s of rate-limit sleep.
+                dup_key = whatsapp_message_key(whatsapp_data)
+                existing = existing_whatsapp_approval(dup_key)
+                if existing:
+                    logger.info(
+                        f"⏭️  Duplicate WhatsApp trigger — approval already exists as {existing.name}"
+                    )
+                    move_file(file_path, FOLDERS["done"] / file_path.name)
+                    continue
 
                 # Create approval file — HUMAN must review before any reply is sent
                 approval_path = create_whatsapp_approval_file(
@@ -3480,6 +3655,7 @@ def process_approval_folder(metrics: MetricsManager) -> Dict[str, int]:
                     if success:
                         # Move to Done after successful send
                         done_path = FOLDERS["done"] / file_path.name
+                        clear_approval_attempts(file_path.name)
                         if move_file(file_path, done_path):
                             results["sent"] += 1
                             metrics.record_approval_triggered()
@@ -3496,6 +3672,10 @@ def process_approval_folder(metrics: MetricsManager) -> Dict[str, int]:
                     else:
                         results["errors"] += 1
                         logger.error(f"❌ Failed to process: {file_path.name} - {message}")
+                        # Retry a transient failure, quarantine a hopeless one. Left
+                        # unbounded this branch re-ran the same broken file every
+                        # 3 minutes indefinitely.
+                        quarantine_failed_approval(file_path, message)
         else:
             logger.info("📭 No approved files to process")
     

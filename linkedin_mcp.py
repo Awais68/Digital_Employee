@@ -229,14 +229,51 @@ class LinkedInMCP:
         except Exception as e:
             logger.error(f"Error loading session: {e}")
 
-    def _save_session(self) -> None:
-        """Save LinkedIn session to file for persistence."""
+    def _save_session(self, expires_in: Optional[int] = None) -> None:
+        """Save LinkedIn session to file for persistence.
+
+        `expires_in` should be the REAL value returned by LinkedIn in the token
+        response (30-60 days depending on app). When absent we keep the previous
+        stored expiry if we have one, otherwise we fall back to a conservative
+        55-day estimate.
+        """
         session_file = SESSION_DIR / "session.json"
         
         try:
-            # Calculate expiration time. LinkedIn access tokens last ~60 days;
-            # use 55 to leave a safety margin before LinkedIn's hard expiry.
-            expires_in_seconds = 4752000  # 55 days
+            if expires_in is not None:
+                expires_in_seconds = int(expires_in)
+                # Keep a small safety margin (refreshing slightly early beats refreshing late)
+                expires_in_seconds = max(int(expires_in * 0.95), 86400)
+            else:
+                previous_expiry = None
+                if session_file.exists():
+                    try:
+                        prev = json.loads(session_file.read_text(encoding="utf-8"))
+                        pe = prev.get("expires_at")
+                        if pe:
+                            previous_expiry = datetime.fromisoformat(pe)
+                    except Exception:
+                        previous_expiry = None
+                if previous_expiry and previous_expiry > datetime.now():
+                    # Preserve the previously recorded (accurate) expiry
+                    expires_at = previous_expiry
+                    session_data = {
+                        'access_token': self.access_token,
+                        'refresh_token': self.refresh_token,
+                        'person_urn': self.person_urn,
+                        'client_id': self.client_id,
+                        'client_secret': self.client_secret,
+                        'expires_at': expires_at.isoformat(),
+                        'saved_at': datetime.now().isoformat()
+                    }
+                    with open(session_file, 'w', encoding='utf-8') as f:
+                        json.dump(session_data, f, indent=2)
+                    os.chmod(session_file, 0o600)
+                    logger.info("💾 LinkedIn session saved successfully (preserved expiry)")
+                    logger.info(f"   Session expires: {expires_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                    return
+                # Fallback: LinkedIn access tokens last ~60 days; use 55 as margin
+                expires_in_seconds = 4752000  # 55 days
             expires_at = datetime.now() + timedelta(seconds=expires_in_seconds)
             
             session_data = {
@@ -287,6 +324,13 @@ class LinkedInMCP:
                 return True
             
             expires_datetime = datetime.fromisoformat(expires_at)
+            # Treat as "needs refresh" once inside a 10-day window so a refresh
+            # token can be used well before LinkedIn's hard expiry. Without this
+            # an expiring token fails at the exact moment the API starts
+            # rejecting it (EXPIRED_ACCESS_TOKEN).
+            if self.refresh_token and (expires_datetime - datetime.now()) < timedelta(days=10):
+                logger.info("🔄 Access token inside 10-day window — will refresh")
+                return True
             return datetime.now() > expires_datetime
             
         except Exception:
@@ -357,18 +401,91 @@ class LinkedInMCP:
         if refresh_result['success']:
             self.access_token = refresh_result['access_token']
             self.refresh_token = refresh_result['refresh_token']
+            expires_in = refresh_result.get('expires_in')
             
             # Update session headers
             self.session.headers.update({
                 'Authorization': f'Bearer {self.access_token}'
             })
             
-            # Save refreshed session
-            self._save_session()
+            # Save refreshed session with the REAL expires_in from LinkedIn
+            self._save_session(expires_in=expires_in)
+            self._sync_token_to_stores()
             return True
         else:
             logger.error(f"❌ Auto-refresh failed: {refresh_result['message']}")
+            self._alert_refresh_needed()
             return False
+
+    def _sync_token_to_stores(self) -> None:
+        """Propagate the current access/refresh token into .env and config JSONs,
+        so the rest of the system (vault-control, token_manager, orchestrator)
+        always sees the freshest token."""
+        try:
+            env_files = [BASE_DIR / ".env", BASE_DIR / "vault-control" / "server" / ".env"]
+            for env_file in env_files:
+                if not env_file.exists():
+                    continue
+                lines = env_file.read_text(encoding="utf-8").splitlines()
+                updates = {"LINKEDIN_ACCESS_TOKEN": self.access_token}
+                if self.refresh_token:
+                    updates["LINKEDIN_REFRESH_TOKEN"] = self.refresh_token
+                out = []
+                seen = set()
+                for line in lines:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#") and "=" in stripped:
+                        key = stripped.split("=", 1)[0].strip()
+                        if key in updates:
+                            out.append(f"{key}={updates[key]}")
+                            seen.add(key)
+                            continue
+                    out.append(line)
+                for k, v in updates.items():
+                    if k not in seen:
+                        out.append(f"{k}={v}")
+                env_file.write_text("\n".join(out) + "\n", encoding="utf-8")
+                logger.info(f"💾 Tokens synced to {env_file}")
+        except Exception as e:
+            logger.error(f"Token sync to .env failed: {e}")
+
+        try:
+            config_file = BASE_DIR / "config" / "linkedin_config.json"
+            if config_file.exists():
+                cfg = json.loads(config_file.read_text(encoding="utf-8"))
+                cfg["access_token"] = self.access_token
+                config_file.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+                logger.info("💾 Tokens synced to config/linkedin_config.json")
+        except Exception as e:
+            logger.error(f"Token sync to config failed: {e}")
+
+    def _alert_refresh_needed(self) -> None:
+        """Drop a Needs_Action alert file when LinkedIn auto-refresh is impossible."""
+        try:
+            alert_dir = BASE_DIR / "Needs_Action"
+            alert_dir.mkdir(parents=True, exist_ok=True)
+            fname = alert_dir / f"TOKEN_ALERT_LINKEDIN_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+            content = (
+                "---\n"
+                "type: token_alert\n"
+                "platform: linkedin\n"
+                f"created: {datetime.now().isoformat()}\n"
+                "priority: high\n"
+                "---\n\n"
+                "# LinkedIn Token Alert\n\n"
+                "LinkedIn access token expired and no refresh token is available.\n\n"
+                "## Fix\n\n"
+                "```bash\n"
+                "python3 renew_linkedin_token.py\n"
+                "```\n\n"
+                "Open https://www.linkedin.com/developers/tools/oauth/token-generator,\n"
+                "select the app and scopes (w_member_social, r_liteprofile, r_emailaddress),\n"
+                "generate, then paste the JSON when prompted.\n"
+            )
+            fname.write_text(content, encoding="utf-8")
+            logger.warning(f"⚠ Needs_Action alert written: {fname.name}")
+        except Exception as e:
+            logger.error(f"Could not write alert: {e}")
 
     def _validate_config(self) -> None:
         """Validate LinkedIn configuration."""
@@ -949,8 +1066,9 @@ class LinkedInMCP:
                         'Authorization': f'Bearer {self.access_token}'
                     })
                     
-                    # Save the refreshed session
-                    self._save_session()
+                    # Save the refreshed session with the REAL expires_in
+                    self._save_session(expires_in=result["expires_in"])
+                    self._sync_token_to_stores()
             else:
                 result["message"] = f"Token refresh failed: {response.text}"
                 logger.error(result["message"])

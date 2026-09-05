@@ -48,6 +48,7 @@ GMAIL_WATCHER_INTERVAL = 30  # seconds (handled by script, not cron)
 # Log files
 CRON_LOG = LOGS_DIR / "cron_orchestrator.log"
 GMAIL_WATCHER_LOG = LOGS_DIR / "gmail_watcher_cron.log"
+TOKEN_MANAGER_LOG = LOGS_DIR / "token_manager_cron.log"
 
 
 # =============================================================================
@@ -122,16 +123,24 @@ def generate_crontab() -> str:
     """Generate new crontab content for Digital Employee."""
     # Get existing crontab (to preserve other jobs)
     existing = get_current_crontab()
-    
-    # Remove any existing Digital Employee cron jobs
+
+    # Remove ONLY lines that are actual job lines we manage (orchestrator/gmail
+    # watcher). Critically: do NOT strip lines matching 'Digital_Employee' — the
+    # log-retention job's quoted path contains it, and nuking that line re-breaks
+    # the retention rule every time someone runs --install.
     lines = existing.split('\n')
     filtered_lines = [
         line for line in lines
-        if 'Digital_Employee' not in line and 'orchestrator.py' not in line
-        and 'gmail_watcher.py' not in line
+        if not (line.startswith('*/') or line.startswith('* * * * *') or line.startswith('# [disabled'))
+        and 'orchestrator.py' not in line and 'gmail_watcher.py' not in line
+        and 'token_manager.py' not in line and 'TOKEN_MANAGER_LOG' not in line
     ]
     existing_cleaned = '\n'.join(filtered_lines)
-    
+
+    # Quote every path — BASE_DIR contains spaces and unquoted cron paths fail
+    # silently (the exact bug the log-retention comment warns about).
+    q = lambda p: f'"{p}"' if ' ' in str(p) else str(p)
+
     # Build new crontab
     crontab_content = f"""{existing_cleaned}
 
@@ -141,13 +150,19 @@ def generate_crontab() -> str:
 # =============================================================================
 
 # Orchestrator - Runs every 5 minutes to process tasks
-{ORCHESTRATOR_CRON} cd {BASE_DIR} && python3 orchestrator.py >> {CRON_LOG} 2>&1
+{ORCHESTRATOR_CRON} cd {q(BASE_DIR)} && python3 orchestrator.py >> {q(CRON_LOG)} 2>&1
 
 # Gmail Watcher - Runs every minute (monitors every {GMAIL_WATCHER_INTERVAL}s internally)
-* * * * * cd {BASE_DIR} && python3 gmail_watcher.py >> {GMAIL_WATCHER_LOG} 2>&1
+* * * * * cd {q(BASE_DIR)} && python3 gmail_watcher.py >> {q(GMAIL_WATCHER_LOG)} 2>&1
 
-# Daily log rotation at midnight
-0 0 * * * find {LOGS_DIR} -name "*.log" -mtime +7 -delete
+# Token Manager - Validates & auto-renews social tokens every 6 hours
+# Writes Needs_Action/TOKEN_ALERT_*.md when manual re-auth is required
+# `;` not `&&` — check exits 1 when a token is broken, and `&&` then skipped
+# renew, i.e. auto-renewal never ran in exactly the case it exists for.
+17 */6 * * * cd {q(BASE_DIR)} && {{ python3 token_manager.py renew; python3 token_manager.py check --alert; }} >> {q(TOKEN_MANAGER_LOG)} 2>&1
+
+# Daily log rotation at midnight (only dated rotations, quoted path)
+0 0 * * * find {q(LOGS_DIR)} -maxdepth 1 -type f -name "*_20[0-9][0-9][0-9][0-9][0-9][0-9].log" -mtime +7 -delete
 
 # =============================================================================
 """

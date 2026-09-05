@@ -165,7 +165,6 @@ def post_to_linkedin(content, image_path=None):
     try:
         sys.path.insert(0, str(BASE_DIR))
         from linkedin_mcp import create_post as _api_post
-        # LinkedIn API needs media registered as URN - skip local file paths
         media_urls = None
         if image_path and image_path.startswith("http"):
             media_urls = [image_path]

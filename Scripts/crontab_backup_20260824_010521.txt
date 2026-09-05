@@ -1,0 +1,53 @@
+# Edit this file to introduce tasks to be run by cron.
+# 
+# Each task to run has to be defined through a single line
+# indicating with different fields when the task will be run
+# and what command to run for the task
+# 
+# To define the time you can provide concrete values for
+# minute (m), hour (h), day of month (dom), month (mon),
+# and day of week (dow) or use '*' in these fields (for 'any').
+# 
+# Notice that tasks will be started based on the cron's system
+# daemon's notion of time and timezones.
+# 
+# Output of the crontab jobs (including errors) is sent through
+# email to the user the crontab file belongs to (unless redirected).
+# 
+# For example, you can run a backup of all your user accounts
+# at 5 a.m every week with:
+# 0 5 * * 1 tar -zcf /var/backups/home.tgz /home/
+# 
+# For more information see the manual pages of crontab(5) and cron(8)
+# 
+# m h  dom mon dow   command
+# Orchestrator - Har 3 minute mein chale
+# Orchestrator now runs under PM2 (ecosystem.config.js, cron_restart */3).
+# Keeping it here too caused every task to be processed twice.
+
+# Gmail Watcher - Har 4 minute mein
+
+# WhatsApp Watcher - Har 2 minute mein
+# AI Employee — Health check every 5 min
+# AI Employee — CEO Briefing every Sunday 8am
+# AI Employee — Vault sync every 2 min
+
+# Daily housekeeping: rotate logs, prune plans/state, flush pm2 logs
+0 4 * * * /bin/bash ~/local_maintenance.sh >> ~/local_maintenance.log 2>&1
+
+
+# =============================================================================
+# Digital Employee - Automated Cron Jobs
+# Added: 2026-08-24 00:48:03
+# =============================================================================
+
+# Orchestrator - Runs every 5 minutes to process tasks
+*/5 * * * * cd /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee && python3 orchestrator.py >> /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Logs/cron_orchestrator.log 2>&1
+
+# Gmail Watcher - Runs every minute (monitors every 30s internally)
+* * * * * cd /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee && python3 gmail_watcher.py >> /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Logs/gmail_watcher_cron.log 2>&1
+
+# Daily log rotation at midnight
+0 0 * * * find /media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee/Logs -name "*.log" -mtime +7 -delete
+
+# =============================================================================

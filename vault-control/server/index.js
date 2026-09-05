@@ -34,6 +34,7 @@ import postsRouter from './routes/posts.js'
 import adminRouter from './routes/admin.js'
 import oracleCloudRouter from './routes/oracle-cloud.js'
 import analyticsRouter from './routes/analytics.js'
+import tokensRouter from './routes/tokens.js'
 import { bus as chatbotEventBus } from './services/eventBus.js'
 
 // Chatbot router lives at repo root server/ as CommonJS — bridge via createRequire
@@ -157,6 +158,9 @@ if (ENABLE_AUTH) {
     // Skip auth for routes registered above
     if (req.path.startsWith('/chat/') || req.path.startsWith('/notifications/') || req.path.startsWith('/whatsapp/') ||
         req.path.startsWith('/internal/') || req.path.startsWith('/csrf-token') ||
+        // LinkedIn redirects the browser here with no Bearer header; the
+        // single-use `state` minted by /tokens/linkedin/auth-url is the auth.
+        req.path === '/tokens/linkedin/callback' ||
         req.path.startsWith('/health') || req.path.startsWith('/auth/') ||
         req.path === '/admin/login') {   // admin panel has its own password gate
       return next()
@@ -182,6 +186,7 @@ app.use('/api/admin/login', authRateLimiter())
 app.use('/api/admin', adminRouter)
 app.use('/api/oracle', oracleCloudRouter)
 app.use('/api/analytics', analyticsRouter)
+app.use('/api/tokens', tokensRouter)
 
 // Chatbot SSE — eventBus injected after import (already initialized above)
 // optionalAuth (not authenticateToken) so chat stays usable without login, but

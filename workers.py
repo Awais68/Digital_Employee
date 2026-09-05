@@ -1,201 +1,195 @@
 #!/usr/bin/env python3
 """
-workers.py - Background worker manager for Digital Employee
-Starts and monitors all background workers: orchestrator, whatsapp_watcher, gmail_watcher
+workers.py - Worker manager for Digital Employee.
+
+This is now a thin PM2 proxy. It used to Popen() orchestrator.py and
+gmail_watcher.py directly, which double-processed everything because PM2 and
+cron were already running the same scripts. PM2 (ecosystem.config.js) is the
+single supervisor; this script exists so systemd, the dashboard and the CLI all
+drive the same mechanism.
 
 Usage:
-    python3 workers.py start    # Start all workers
-    python3 workers.py stop     # Stop all workers
-    python3 workers.py status   # Check worker status
-    python3 workers.py restart  # Restart all workers
+    python3 workers.py start    # Start/reload all PM2 apps and persist the dump
+    python3 workers.py stop     # Stop all PM2 apps
+    python3 workers.py status   # Show status
+    python3 workers.py restart  # Restart all PM2 apps
 """
 
-import os
-import sys
-import subprocess
-import signal
 import json
-import time
-from pathlib import Path
+import os
+import shutil
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-PID_FILE = BASE_DIR / ".workers.pid"
+ECOSYSTEM = BASE_DIR / "ecosystem.config.js"
 LOG_FILE = BASE_DIR / "Logs" / "workers.log"
-LOCK_FILE = BASE_DIR / ".workers.lock"
+PID_FILE = BASE_DIR / ".workers.pid"
 
-# NOTE: whatsapp_watcher removed 2026-07-23. Vault-control's embedded
-# whatsapp-web.js (LocalAuth) handles WhatsApp. The Playwright watcher
-# competed for the same phone session.
-WORKERS = {
-    "orchestrator": {
-        "script": "orchestrator.py",
-        "enabled_env": "ENABLE_ORCHESTRATOR",
-        "description": "Main orchestrator - processes approvals, manages workflows"
-    },
-    "gmail_watcher": {
-        "script": "gmail_watcher.py",
-        "enabled_env": "GMAIL_ENABLED",
-        "description": "Gmail watcher - monitors for new emails"
-    }
-}
 
 def log(message):
-    """Log message to file and stdout."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     msg = f"[{timestamp}] {message}"
     print(msg)
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(LOG_FILE, 'a') as f:
+        with open(LOG_FILE, "a") as f:
             f.write(msg + "\n")
     except Exception:
         pass
 
-def get_pid():
-    """Get stored PID file contents."""
-    if not PID_FILE.exists():
-        return {}
-    try:
-        with open(PID_FILE) as f:
-            return json.load(f)
-    except Exception:
-        return {}
 
-def save_pid(pids):
-    """Save PIDs to file."""
-    with open(PID_FILE, 'w') as f:
-        json.dump(pids, f)
+def _pm2_bin():
+    """Locate pm2. systemd user units start with a minimal PATH."""
+    found = shutil.which("pm2")
+    if found:
+        return found
+    for candidate in Path.home().glob(".nvm/versions/node/*/bin/pm2"):
+        return str(candidate)
+    for candidate in ("/usr/local/bin/pm2", "/usr/bin/pm2"):
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
-def is_running(pid):
-    """Check if a process is running."""
-    try:
-        os.kill(pid, 0)
-        return True
-    except (OSError, ProcessLookupError):
-        return False
+
+def _pm2(*args, check=False):
+    pm2 = _pm2_bin()
+    if not pm2:
+        log("  ✗ pm2 not found on PATH — install it or fix PATH in the systemd unit")
+        return None
+    node_bin = str(Path(pm2).parent)
+    env = dict(os.environ)
+    env["PATH"] = node_bin + os.pathsep + env.get("PATH", "")
+    env.setdefault("PM2_HOME", str(Path.home() / ".pm2"))
+    return subprocess.run(
+        [pm2, *args],
+        cwd=str(BASE_DIR),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=check,
+        timeout=120,
+    )
+
 
 def start_workers():
-    """Start all enabled workers."""
-    log("Starting workers...")
-    pids = get_pid()
-    started = []
-    
-    for name, config in WORKERS.items():
-        # Check if enabled
-        enabled = os.environ.get(config["enabled_env"], "true").lower() == "true"
-        if not enabled:
-            log(f"  ⏭  {name}: disabled by env")
-            continue
-        
-        # Check if already running
-        if name in pids and is_running(pids[name]):
-            log(f"  ✓ {name}: already running (PID {pids[name]})")
-            started.append(name)
-            continue
-        
-        # Start the worker
-        script_path = BASE_DIR / config["script"]
-        if not script_path.exists():
-            log(f"  ✗ {name}: script not found ({script_path})")
-            continue
-        
-        log(f"  ▶ {name}: starting ({config['description']})")
-        
-        try:
-            # Pass --continuous for background watchers so they stay running
-            args = [sys.executable, str(script_path)]
-            if config.get("script") in ("whatsapp_watcher.py", "gmail_watcher.py", "orchestrator.py"):
-                args.append("--continuous")
-            process = subprocess.Popen(
-                args,
-                cwd=str(BASE_DIR),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True
-            )
-            pids[name] = process.pid
-            started.append(name)
-            log(f"  ✓ {name}: started (PID {process.pid})")
-        except Exception as e:
-            log(f"  ✗ {name}: failed to start ({e})")
-    
-    save_pid(pids)
-    log(f"Workers started: {', '.join(started) if started else 'none'}")
-    return started
+    log("Starting workers via PM2...")
+    # startOrReload is idempotent: it starts what is missing and reloads the rest,
+    # so it is safe for the boot service and the 5-minute self-heal timer alike.
+    result = _pm2("startOrReload", str(ECOSYSTEM), "--update-env")
+    if result is None:
+        return []
+    if result.returncode != 0:
+        log(f"  ✗ pm2 startOrReload failed: {result.stderr.strip()[:400]}")
+        return []
+    # Persist the process list so `pm2 resurrect` actually has something to restore.
+    _pm2("save", "--force")
+
+    running = [w["name"] for w in _list_apps() if w["running"]]
+    # Kept only so anything still reading .workers.pid sees the truth.
+    try:
+        PID_FILE.write_text(json.dumps({w["name"]: w["pid"] for w in _list_apps() if w["running"]}))
+    except Exception:
+        pass
+    log(f"Workers running: {', '.join(running) if running else 'none'}")
+    return running
+
 
 def stop_workers():
-    """Stop all workers."""
-    log("Stopping workers...")
-    pids = get_pid()
-    stopped = []
-    
-    for name, pid in pids.items():
-        if is_running(pid):
-            try:
-                os.kill(pid, signal.SIGTERM)
-                log(f"  ⏹  {name}: stopped (PID {pid})")
-                stopped.append(name)
-            except Exception as e:
-                log(f"  ✗ {name}: failed to stop ({e})")
-        else:
-            log(f"  ⏭  {name}: not running")
-    
-    # Clear PID file
+    log("Stopping workers via PM2...")
+    result = _pm2("stop", str(ECOSYSTEM))
+    if result is None:
+        return []
+    _pm2("save", "--force")
     if PID_FILE.exists():
         PID_FILE.unlink()
-    
-    log(f"Workers stopped: {', '.join(stopped) if stopped else 'none'}")
-    return stopped
+    log("Workers stopped")
+    return []
+
+
+def _list_apps():
+    result = _pm2("jlist")
+    if result is None or result.returncode != 0:
+        return []
+    try:
+        raw = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        return []
+    apps = []
+    for proc in raw:
+        env = proc.get("pm2_env", {})
+        apps.append({
+            "name": proc.get("name"),
+            "running": env.get("status") == "online",
+            "status": env.get("status"),
+            "pid": proc.get("pid") or None,
+            "restarts": env.get("restart_time", 0),
+            "uptime": env.get("pm_uptime"),
+        })
+    return apps
+
 
 def check_status():
-    """Check status of all workers."""
-    pids = get_pid()
+    """Return {name: info} for every app declared in ecosystem.config.js."""
+    live = {a["name"]: a for a in _list_apps()}
+    declared = _declared_apps()
     status = {}
-    
-    for name, config in WORKERS.items():
-        pid = pids.get(name)
-        running = pid and is_running(pid)
-        
+    for name in declared:
+        info = live.get(name)
         status[name] = {
             "name": name,
-            "description": config["description"],
-            "running": running,
-            "pid": pid if running else None,
-            "enabled": os.environ.get(config["enabled_env"], "true").lower() == "true",
-            "script": config["script"]
+            "description": declared[name],
+            "running": bool(info and info["running"]),
+            "pid": info["pid"] if info and info["running"] else None,
+            "enabled": True,
+            "status": info["status"] if info else "missing",
+            "restarts": info["restarts"] if info else 0,
         }
-    
     return status
 
+
+def _declared_apps():
+    """Read app names out of ecosystem.config.js without needing node."""
+    descriptions = {
+        "vault-control": "Dashboard API + WhatsApp client",
+        "gmail-watcher": "Gmail watcher - monitors for new emails",
+        "email-mcp": "Email MCP server",
+        "orchestrator": "Main orchestrator - runs every 3 minutes",
+    }
+    try:
+        text = ECOSYSTEM.read_text()
+        import re
+        names = re.findall(r"name:\s*'([^']+)'", text)
+        return {n: descriptions.get(n, n) for n in names}
+    except Exception:
+        return descriptions
+
+
 def print_status():
-    """Print formatted status."""
     status = check_status()
-    
     print("\n" + "=" * 60)
-    print("DIGITAL EMPLOYEE - WORKER STATUS")
+    print("DIGITAL EMPLOYEE - WORKER STATUS (PM2)")
     print("=" * 60)
-    
     for name, info in status.items():
         icon = "✓" if info["running"] else "✗"
-        status_text = "RUNNING" if info["running"] else "STOPPED"
-        pid_text = f" (PID {info['pid']})" if info["running"] else ""
-        
-        print(f"  {icon} {name:20} {status_text:10}{pid_text}")
+        text = "RUNNING" if info["running"] else info["status"].upper()
+        pid = f" (PID {info['pid']})" if info["running"] else ""
+        print(f"  {icon} {name:20} {text:10}{pid}")
         print(f"    {info['description']}")
         print()
-    
-    running_count = sum(1 for s in status.values() if s["running"])
-    print(f"Workers running: {running_count}/{len(status)}")
+    running = sum(1 for s in status.values() if s["running"])
+    print(f"Workers running: {running}/{len(status)}")
     print("=" * 60)
+
 
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 workers.py [start|stop|status|restart]")
         sys.exit(1)
-    
+
     command = sys.argv[1].lower()
-    
     if command == "start":
         start_workers()
     elif command == "stop":
@@ -203,12 +197,15 @@ def main():
     elif command == "status":
         print_status()
     elif command == "restart":
-        stop_workers()
-        time.sleep(2)
-        start_workers()
+        result = _pm2("restart", str(ECOSYSTEM), "--update-env")
+        if result is not None and result.returncode != 0:
+            log(f"  ✗ pm2 restart failed: {result.stderr.strip()[:400]}")
+        _pm2("save", "--force")
+        print_status()
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

@@ -636,6 +636,154 @@ def create_journal_entry(
     }
 
 
+def list_invoices(
+    limit: int = 20,
+    state: str = "",
+    invoice_type: str = "out_invoice",
+) -> dict:
+    """List invoices so a caller can pick one to post or send."""
+    client = get_client()
+
+    domain: list = [["move_type", "=", invoice_type]]
+    if state:
+        domain.append(["state", "=", state])
+
+    rows = client.search_read(
+        "account.move",
+        domain,
+        fields=[
+            "name", "state", "partner_id", "invoice_date", "invoice_date_due",
+            "amount_total", "amount_residual", "payment_state", "currency_id",
+        ],
+        limit=limit,
+        order="id desc",
+    )
+    return {
+        "status": "success",
+        "message": f"Found {len(rows)} invoice(s)",
+        "count": len(rows),
+        "invoices": rows,
+    }
+
+
+def send_invoice(invoice_id: int, force_post: bool = True, email_to: str = "") -> dict:
+    """
+    Post (validate) an invoice if it is still a draft, then email it to the
+    customer. Odoo 17+ routes this through the account.move.send.wizard; older
+    databases fall back to a plain message_post with the PDF attached.
+    """
+    client = get_client()
+    invoice_id = int(invoice_id)
+
+    rows = client.search_read(
+        "account.move",
+        [["id", "=", invoice_id]],
+        fields=["name", "state", "move_type", "partner_id", "amount_total"],
+        limit=1,
+    )
+    if not rows:
+        return {"status": "error", "message": f"Invoice id={invoice_id} not found"}
+    invoice = rows[0]
+
+    if invoice["move_type"] not in ("out_invoice", "out_refund"):
+        return {
+            "status": "error",
+            "message": f"account.move id={invoice_id} is a {invoice['move_type']}, not a customer invoice",
+        }
+
+    # Resolve the recipient up front — a silent send to nobody is worse than an error.
+    partner_id = invoice["partner_id"][0] if invoice["partner_id"] else None
+    if not partner_id:
+        return {"status": "error", "message": f"Invoice {invoice_id} has no customer set"}
+
+    partner = client.read("res.partner", [partner_id], ["name", "email"])[0]
+    recipient = email_to or partner.get("email")
+    if not recipient:
+        return {
+            "status": "error",
+            "message": f"Customer '{partner.get('name')}' has no email address; "
+                       f"set one in Odoo or pass email_to=",
+        }
+
+    posted = False
+    if invoice["state"] == "draft":
+        if not force_post:
+            return {
+                "status": "error",
+                "message": f"Invoice {invoice_id} is still a draft; pass force_post=1 to validate it first",
+            }
+        client.execute_kw("account.move", "action_post", [[invoice_id]])
+        posted = True
+        logger.info("Posted invoice account.move id=%d", invoice_id)
+    elif invoice["state"] == "cancel":
+        return {"status": "error", "message": f"Invoice {invoice_id} is cancelled"}
+
+    refreshed = client.read("account.move", [invoice_id], ["name", "state"])[0]
+
+    send_method = None
+    send_error = None
+    try:
+        wizard_id = client.execute_kw(
+            "account.move.send.wizard",
+            "create",
+            [{"move_id": invoice_id}],
+            {"context": {
+                "active_model": "account.move",
+                "active_ids": [invoice_id],
+                "active_id": invoice_id,
+                "discard_logo_check": True,
+            }},
+        )
+        client.execute_kw(
+            "account.move.send.wizard",
+            "action_send_and_print",
+            [[wizard_id]],
+            {"context": {
+                "active_model": "account.move",
+                "active_ids": [invoice_id],
+                "active_id": invoice_id,
+                "discard_logo_check": True,
+            }},
+        )
+        send_method = "account.move.send.wizard"
+    except Exception as exc:  # noqa: BLE001 - fall back rather than fail the call
+        send_error = str(exc)
+        logger.warning("send wizard failed (%s), falling back to message_post", exc)
+        try:
+            client.execute_kw(
+                "account.move",
+                "message_post",
+                [[invoice_id]],
+                {
+                    "body": f"Invoice {refreshed['name'] or invoice_id} sent to {recipient}.",
+                    "partner_ids": [partner_id],
+                    "subtype_xmlid": "mail.mt_comment",
+                },
+            )
+            send_method = "message_post"
+        except Exception as exc2:  # noqa: BLE001
+            return {
+                "status": "error",
+                "message": f"Could not send invoice {invoice_id}: {exc2}",
+                "posted": posted,
+                "wizard_error": send_error,
+            }
+
+    return {
+        "status": "success",
+        "message": f"Invoice {refreshed['name'] or invoice_id} sent to {recipient}",
+        "invoice_id": invoice_id,
+        "invoice_name": refreshed["name"],
+        "state": refreshed["state"],
+        "posted_now": posted,
+        "recipient": recipient,
+        "customer": partner.get("name"),
+        "amount_total": invoice.get("amount_total"),
+        "send_method": send_method,
+        "wizard_error": send_error,
+    }
+
+
 # ── MCP Protocol ─────────────────────────────────────────────────────────────
 # MCP servers communicate via stdin/stdout using JSON-RPC 2.0 messages.
 # This implementation follows the Model Context Protocol spec.
@@ -724,6 +872,31 @@ TOOLS = [
         },
     },
     {
+        "name": "list_invoices",
+        "description": "List invoices (newest first) with state, customer and amounts",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max rows (default 20)"},
+                "state": {"type": "string", "description": "draft | posted | cancel (optional)"},
+                "invoice_type": {"type": "string", "description": "out_invoice (default) | in_invoice | out_refund"},
+            },
+        },
+    },
+    {
+        "name": "send_invoice",
+        "description": "Post an invoice if it is a draft, then email it to the customer",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "invoice_id": {"type": "integer", "description": "account.move id"},
+                "force_post": {"type": "boolean", "description": "Validate a draft before sending (default true)"},
+                "email_to": {"type": "string", "description": "Override recipient email (optional)"},
+            },
+            "required": ["invoice_id"],
+        },
+    },
+    {
         "name": "get_bank_balance",
         "description": "Get bank/cash journal balance summary from Odoo accounting",
         "inputSchema": {
@@ -789,6 +962,8 @@ TOOL_HANDLERS = {
     "get_accounting_summary": get_accounting_summary,
     "get_recent_transactions": get_recent_transactions,
     "create_journal_entry": create_journal_entry,
+    "list_invoices": list_invoices,
+    "send_invoice": send_invoice,
 }
 
 
@@ -991,7 +1166,19 @@ if __name__ == "__main__":
         for arg in sys.argv[2:]:
             if "=" in arg:
                 key, value = arg.split("=", 1)
-                # Try int / float
+                # JSON first: list/dict arguments such as invoice_line_ids were
+                # previously passed through as raw strings, which blew up inside
+                # create_invoice with "'str' object has no attribute 'get'".
+                stripped = value.strip()
+                if stripped[:1] in ("[", "{"):
+                    try:
+                        cli_kwargs[key] = json.loads(stripped)
+                        continue
+                    except json.JSONDecodeError:
+                        pass
+                if stripped.lower() in ("true", "false"):
+                    cli_kwargs[key] = stripped.lower() == "true"
+                    continue
                 try:
                     cli_kwargs[key] = int(value)
                 except ValueError:

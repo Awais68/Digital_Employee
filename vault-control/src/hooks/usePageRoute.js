@@ -25,6 +25,7 @@ export const PAGES = [
   'logs',
   'vault',
   'admin',
+  'tokens',
 ]
 
 export const DEFAULT_PAGE = 'dashboard'

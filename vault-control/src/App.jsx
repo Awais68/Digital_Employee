@@ -22,6 +22,7 @@ const OracleCloud = lazy(() => import("./pages/OracleCloud"));
 const Logs = lazy(() => import("./pages/Logs"));
 const VaultEditor = lazy(() => import("./pages/VaultEditor"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
+const Tokens = lazy(() => import("./pages/Tokens"));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -248,6 +249,8 @@ function AppContent() {
         return <ErrorBoundary fallbackTitle="Vault Editor Error"><VaultEditor /></ErrorBoundary>;
       case "admin":
         return <ErrorBoundary fallbackTitle="Admin Panel Error"><AdminPanel /></ErrorBoundary>;
+      case "tokens":
+        return <ErrorBoundary fallbackTitle="Tokens Error"><Tokens /></ErrorBoundary>;
       default:
         return <ErrorBoundary fallbackTitle="Dashboard Error"><Dashboard setCurrentPage={setCurrentPage} /></ErrorBoundary>;
     }

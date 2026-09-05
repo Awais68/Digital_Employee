@@ -905,7 +905,13 @@ class WhatsAppWatcher:
 
     @staticmethod
     def _msg_id(sender: str, body: str, ts: str) -> str:
-        raw = f"{sender}:{body[:120]}:{ts}"
+        # `ts` is deliberately truncated to the DAY. It used to be the full
+        # `datetime.now().isoformat()` of the scan, which made every id unique per
+        # scan — so processed_messages.json could never match and the same chat was
+        # re-flagged on every cycle, producing duplicate approval drafts downstream.
+        # A day bucket still lets the same wording be flagged again tomorrow.
+        day = (ts or "")[:10]
+        raw = f"{sender}:{body[:120]}:{day}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     @staticmethod

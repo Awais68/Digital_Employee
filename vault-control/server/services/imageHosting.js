@@ -126,6 +126,15 @@ export async function uploadToCloudinary(imageBuffer) {
  */
 export async function getPublicImageUrl(source, needsPublicUrl = false) {
 
+  // Normalize legacy Pollinations URLs. The old /prompt/... host now returns an
+  // HTML shell (content-type: text/html) which breaks Cloudinary ("Invalid image
+  // file") and Meta. The working image endpoint is image.pollinations.ai.
+  if (typeof source === 'string' && /^https?:\/\/pollinations\.ai\/prompt\//.test(source)) {
+    const normalized = source.replace(/^https?:\/\/pollinations\.ai\/prompt\//, 'https://image.pollinations.ai/prompt/')
+    console.log('[ImageHost] Normalized legacy Pollinations URL:', normalized.substring(0, 90))
+    source = normalized
+  }
+
   // If platform NEEDS a real image file (Facebook/Instagram/LinkedIn),
   // ALWAYS download and re-host — raw Pollinations URLs won't work.
   if (needsPublicUrl) {

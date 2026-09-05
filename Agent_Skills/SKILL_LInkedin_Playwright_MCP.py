@@ -289,14 +289,16 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
 
             # Click "Start a post" trigger - use multiple strategies
             start_post_selectors = [
-                "a:has-text('start a post')",
-                "div:has-text('start a post')",
-                "a[href*='post']",
                 "div[role='button']:has-text('Start a post')",
+                "div[role='button']:has-text('start a post')",
+                "a:has-text('Start a post')",
+                "div:has-text('Start a post')",
+                "a[href*='post']",
                 "button:has-text('Start a post')",
                 "div.feed-shared-create-post__cta",
                 "span:has-text('Start a post')",
                 "div[data-control-name='create_post']",
+                "#draft-text-replaceable-component",
             ]
 
             for selector in start_post_selectors:
@@ -345,7 +347,7 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
             # Wait for any editor to appear
             if not editor_ready:
                 try:
-                    page.wait_for_selector('[contenteditable="true"], [role="dialog"], [role="textbox"]', timeout=8000)
+                    page.wait_for_selector('div.tiptap.ProseMirror[contenteditable="true"], div.ProseMirror.tiptap[contenteditable="true"], [class*="tiptap"][class*="ProseMirror"][contenteditable="true"], div[contenteditable="true"][role="textbox"], [contenteditable="true"], [role="dialog"], [role="textbox"]', timeout=8000)
                     editor_ready = True
                     print("   ✅ Editor appeared")
                 except:
@@ -359,7 +361,7 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
             try:
                 page.wait_for_function("""
                     () => {
-                        const ce = document.querySelectorAll('[contenteditable="true"], [contenteditable="plaintext-only"], .ql-editor, .ProseMirror, [role="textbox"]');
+                        const ce = document.querySelectorAll('div.tiptap.ProseMirror[contenteditable="true"], div.ProseMirror.tiptap[contenteditable="true"], [class*="tiptap"][class*="ProseMirror"][contenteditable="true"], div[contenteditable="true"][role="textbox"], [contenteditable="true"], [contenteditable="plaintext-only"], .ql-editor, .ProseMirror, [role="textbox"]');
                         for (const el of ce) {
                             if (el.offsetHeight > 20 && el.offsetWidth > 50) return true;
                         }
@@ -379,35 +381,49 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                     () => {
                         const candidates = [];
                         
-                        // 1. Contenteditable elements
-                        document.querySelectorAll('[contenteditable="true"], [contenteditable="plaintext-only"]').forEach(el => {
+                        // 1. Tiptap/ProseMirror editor (NEW LinkedIn UI)
+                        document.querySelectorAll('.tiptap.ProseMirror, .ProseMirror.tiptap, [class*="tiptap"][class*="ProseMirror"]').forEach(el => {
                             if (el.offsetHeight > 0 && el.offsetWidth > 0) {
-                                candidates.push({el, method: 'contenteditable', tag: el.tagName, cls: el.className.substring(0,40)});
+                                candidates.push({el, method: 'tiptap-prosemirror', tag: el.tagName, cls: el.className.substring(0,40)});
                             }
                         });
                         
-                        // 2. role="textbox" elements
-                        document.querySelectorAll('[role="textbox"]').forEach(el => {
-                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
-                                candidates.push({el, method: 'textbox', tag: el.tagName, cls: el.className.substring(0,40)});
-                            }
-                        });
-                        
-                        // 3. Quill editor
-                        document.querySelectorAll('.ql-editor').forEach(el => {
-                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
-                                candidates.push({el, method: 'ql-editor', tag: el.tagName, cls: el.className.substring(0,40)});
-                            }
-                        });
-                        
-                        // 4. ProseMirror editor
+                        // 2. ProseMirror editor
                         document.querySelectorAll('.ProseMirror').forEach(el => {
                             if (el.offsetHeight > 0 && el.offsetWidth > 0) {
                                 candidates.push({el, method: 'ProseMirror', tag: el.tagName, cls: el.className.substring(0,40)});
                             }
                         });
                         
-                        // 5. Any div with data-placeholder (common in rich editors)
+                        // 3. Contenteditable elements with role=textbox (NEW LinkedIn UI)
+                        document.querySelectorAll('[contenteditable="true"][role="textbox"], [contenteditable="plaintext-only"][role="textbox"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'contenteditable-textbox', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 4. Contenteditable elements
+                        document.querySelectorAll('[contenteditable="true"], [contenteditable="plaintext-only"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'contenteditable', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 5. role="textbox" elements
+                        document.querySelectorAll('[role="textbox"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'textbox', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 6. Quill editor
+                        document.querySelectorAll('.ql-editor').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'ql-editor', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 7. Any div with data-placeholder (common in rich editors)
                         document.querySelectorAll('[data-placeholder]').forEach(el => {
                             if (el.offsetHeight > 0 && el.offsetWidth > 0) {
                                 if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.getAttribute('role') === 'textbox') {
@@ -416,7 +432,7 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                             }
                         });
                         
-                        // 6. textarea elements
+                        // 8. textarea elements
                         document.querySelectorAll('textarea').forEach(el => {
                             if (el.offsetHeight > 0 && el.offsetWidth > 0 && !el.id.includes('captcha') && !el.id.includes('recaptcha')) {
                                 candidates.push({el, method: 'textarea', tag: el.tagName, id: el.id, placeholder: el.getAttribute('placeholder') || ''});
@@ -465,15 +481,30 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
                                 }
                             }
                         """, content)
-                    elif method == 'ProseMirror':
+                    elif method == 'ProseMirror' or method == 'tiptap-prosemirror':
                         page.evaluate("""
                             (content) => {
-                                const el = document.querySelector('.ProseMirror');
+                                const el = document.querySelector('.ProseMirror, .tiptap.ProseMirror, [class*="tiptap"][class*="ProseMirror"]');
                                 if (el) {
                                     el.focus();
                                     el.innerHTML = '<p>' + content.replace(/\n/g, '</p><p>') + '</p>';
                                     el.dispatchEvent(new Event('input', {bubbles: true}));
                                 }
+                            }
+                        """, content)
+                    elif method == 'contenteditable-textbox':
+                        page.evaluate("""
+                            (content) => {
+                                const editable = document.querySelectorAll('[contenteditable="true"][role="textbox"], [contenteditable="plaintext-only"][role="textbox"]');
+                                for (let el of editable) {
+                                    if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                        el.focus();
+                                        el.textContent = content;
+                                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                                        return true;
+                                    }
+                                }
+                                return false;
                             }
                         """, content)
                     else:
@@ -500,7 +531,11 @@ def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str
             # Fallback to selector approach
             if not editor_found:
                 editor_selectors = [
-                    "div[contenteditable='true']",
+                    "div.tiptap.ProseMirror[contenteditable='true']",
+                    "div.ProseMirror.tiptap[contenteditable='true']",
+                    "[class*='tiptap'][class*='ProseMirror'][contenteditable='true']",
+                    "div[contenteditable='true'][role='textbox']",
+                    "div.ProseMirror[contenteditable='true']",
                     "div.ql-editor",
                     ".ProseMirror",
                     "div[role='textbox']",

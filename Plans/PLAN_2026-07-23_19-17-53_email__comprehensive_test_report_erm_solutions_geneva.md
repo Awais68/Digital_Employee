@@ -1,6 +1,6 @@
 ---
 type: plan
-status: awaiting_approval
+status: done
 priority: medium
 task_type: email
 created: 2026-07-24 00:18:31

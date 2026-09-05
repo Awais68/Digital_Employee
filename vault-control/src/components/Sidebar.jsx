@@ -1,7 +1,7 @@
 import {
   Home, Mail, MessageCircle, CheckSquare, Share2,
   DollarSign, FileText, Menu, X, ChevronLeft, CheckCircle2,
-  FolderOpen, Shield, Activity, Server,
+  FolderOpen, Shield, Activity, Server, KeyRound,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import axios from 'axios'
@@ -54,6 +54,7 @@ const menuItems = [
   { id: 'accounting',label: 'Accounting',    icon: DollarSign,    badge: null   },
   { id: 'oracle',    label: 'Oracle Cloud',  icon: Server,        badge: null   },
   { id: 'admin',     label: 'Admin',         icon: Shield,        badge: null   },
+  { id: 'tokens',    label: 'Tokens',        icon: KeyRound,      badge: null   },
   { id: 'logs',      label: 'Logs',          icon: FileText,      badge: null   },
   { id: 'vault',     label: 'Vault Editor',  icon: FolderOpen,    badge: null   },
 ]

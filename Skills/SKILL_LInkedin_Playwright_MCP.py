@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
 """
-SKILL_LInkedin_Playwright_MCP.py  v3.0  — LinkedIn Posting via Playwright
-==========================================================================
-FIXED BUGS (vs v2.0):
-  BUG-1  fill() on contenteditable → use keyboard.type() instead
-  BUG-2  JS textContent bypass bypasses React state → use keyboard.type()
-  BUG-3  Disabled-button check was wrong (None ≠ disabled) → use is_enabled()
-  BUG-4  Stale CSS class selectors → replaced with aria-label + text matchers
-  BUG-5  Headless fingerprinting → added --disable-blink-features + stealth JS
-  BUG-6  domcontentloaded fires before React renders → wait_for_selector instead
+SKILL_LInkedin_Playwright_MCP.py v2.0 - LinkedIn Posting via Playwright with Saved Session
+
+Posts to LinkedIn using Playwright browser automation with persistent session.
+QR code scan happens ONLY once - session is saved and reused automatically.
+
+CRITICAL SAFETY RULES:
+- ALWAYS requires human approval before posting
+- NEVER auto-post without human moving file to /Approved/
+- Uses saved session from /linkedin_session/ folder
+- Respects LinkedIn rate limits (60s minimum between posts)
 
 Usage:
     from Agent_Skills.SKILL_LInkedin_Playwright_MCP import post_to_linkedin
-
+    
     result = post_to_linkedin(
         content="Your post text here...",
-        image_path=None,   # optional
-        target="personal"
+        image_path=None,  # Optional: path to image file
+        target="personal"  # "personal" or "company"
     )
-    # → {"success": True, "message": "...", "post_url": "..."}
 
-    python3 SKILL_LInkedin_Playwright_MCP.py save    # re-save session (login once)
-    python3 SKILL_LInkedin_Playwright_MCP.py test    # verify session
-    python3 SKILL_LInkedin_Playwright_MCP.py post 'content'
+Author: Digital Employee System
+Tier: Silver v2.0 - Human-in-the-Loop LinkedIn Posting
 """
 
+import os
 import sys
 import json
 import time
@@ -32,591 +32,1072 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-# ── audit shim ──────────────────────────────────────────────────────────────
+# Audit logging
 try:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from audit_log import get_audit_manager, AuditEntry, AuditCategory, AuditLevel
+    from audit_log import (
+        get_audit_manager,
+        AuditEntry,
+        AuditCategory,
+        AuditLevel,
+    )
     AUDIT_AVAILABLE = True
 except ImportError:
     AUDIT_AVAILABLE = False
 
-# ── playwright auto-install ──────────────────────────────────────────────────
+# Auto-install playwright if needed
 try:
-    from playwright.sync_api import sync_playwright, Page, BrowserContext
+    from playwright.sync_api import sync_playwright
 except ImportError:
     import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright", "-q"])
-    subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium", "--quiet"])
-    from playwright.sync_api import sync_playwright, Page
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright"])
+    subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+    from playwright.sync_api import sync_playwright
 
-# ── paths ────────────────────────────────────────────────────────────────────
-BASE_DIR    = Path(__file__).resolve().parent.parent
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# Base directory (vault root)
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Session persistence directory
 SESSION_DIR = BASE_DIR / "linkedin_session"
 SESSION_DIR.mkdir(parents=True, exist_ok=True)
-COOKIES_FILE = SESSION_DIR / "cookies.json"
-DEBUG_DIR    = BASE_DIR / "Logs" / "linkedin_debug"
-DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
-# ── stealth JavaScript injected before every page load ───────────────────────
-_STEALTH_JS = """
-() => {
-    // Hide webdriver property
-    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-    // Restore plugins length
-    Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
-    // Restore languages
-    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-    // Fix Chrome property
-    window.chrome = {runtime: {}};
-}
-"""
-
-# ── selectors: multiple fallbacks, ordered by reliability ────────────────────
-# LinkedIn A/B tests UI constantly; we try them all and use first that works.
-
-# "Start a post" trigger on the feed
-START_POST_SELECTORS = [
-    # Stable aria-label patterns
-    "button[aria-label*='Create a post']",
-    "button[aria-label*='start a post']",
-    "button[aria-label*='Start a post']",
-    # data attributes LinkedIn uses internally
-    "[data-control-name='share.post']",
-    # Text-based (Playwright :has-text is CSS-like, very reliable)
-    "div.share-box-feed-entry__trigger",
-    "button:has-text('Start a post')",
-    "div[role='button']:has-text('Start a post')",
-    # Older fallback class names
-    "div.feed-shared-create-post__trigger",
-]
-
-# The post text editor (contenteditable)
-EDITOR_SELECTORS = [
-    # Quill editor class LinkedIn uses
-    "div.ql-editor[contenteditable='true']",
-    # Generic contenteditable inside the modal
-    "div.editor-content div[contenteditable='true']",
-    "div[contenteditable='true'][role='textbox']",
-    "div[contenteditable='true'][data-placeholder]",
-    "[contenteditable='true']",
-]
-
-# "Post" submit button
-POST_BTN_SELECTORS = [
-    # Aria label is most stable
-    "button[aria-label='Post']",
-    "button[aria-label='Post now']",
-    # data-control-name LinkedIn uses
-    "button[data-control-name='share.post']",
-    # Class-name patterns (may change, kept as last resort)
-    "button.share-actions__primary-action",
-    "div.share-box_actions button[type='submit']",
-    # Text fallbacks
-    "button:has-text('Post'):not(:has-text('Schedule'))",
-]
+# Pending approval directory
+APPROVAL_DIR = BASE_DIR / "Pending_Approval"
+APPROVAL_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  HELPERS
-# ═══════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# LINKEDIN POSTING FUNCTION
+# =============================================================================
 
-def _screenshot(page: "Page", label: str) -> str:
-    """Save a debug screenshot; returns file path."""
-    ts   = datetime.now().strftime("%H%M%S")
-    path = str(DEBUG_DIR / f"{ts}_{label}.png")
-    try:
-        page.screenshot(path=path, full_page=False)
-    except Exception:
-        pass
-    return path
-
-
-def _first_visible(page: "Page", selectors: list, timeout: int = 8000):
-    """Return the first locator that is visible, or None."""
-    for sel in selectors:
-        try:
-            loc = page.locator(sel).first
-            loc.wait_for(state="visible", timeout=timeout)
-            return loc
-        except Exception:
-            continue
-    return None
-
-
-def _type_into_editor(page: "Page", content: str) -> bool:
-    """
-    Click the post editor and type content using keyboard.type().
-
-    WHY keyboard.type() instead of fill() or JS textContent:
-      - fill() is designed for <input>/<textarea>; on contenteditable it fires
-        no React synthetic events, so the Post button stays disabled.
-      - JS textContent assignment bypasses React's synthetic event system.
-        React 16+ uses nativeEvent.isTrusted; simulated events are rejected.
-      - keyboard.type() sends real OS-level key events that React's event
-        delegation picks up correctly, enabling the Post button.
-    """
-    editor = _first_visible(page, EDITOR_SELECTORS, timeout=10000)
-    if editor is None:
-        print("[DEBUG] Editor not found with any selector")
-        _screenshot(page, "editor_not_found")
-        return False
-
-    # Click to focus
-    editor.click()
-    page.wait_for_timeout(500)
-
-    # Clear any existing text (Select All + Delete)
-    page.keyboard.press("Control+A")
-    page.keyboard.press("Delete")
-    page.wait_for_timeout(300)
-
-    # Type content — delay=25ms keeps typing human-like and lets React keep up
-    page.keyboard.type(content, delay=25)
-    page.wait_for_timeout(800)   # let React re-render with new text
-
-    print(f"[DEBUG] Typed {len(content)} chars into editor")
-    return True
-
-
-def _click_post_button(page: "Page") -> bool:
-    """
-    Wait for the Post button to become enabled and click it.
-
-    WHY we wait for is_enabled():
-      - After keyboard.type(), React updates state asynchronously.
-      - LinkedIn disables the Post button until text is present.
-      - The old code checked get_attribute('disabled') which returns None
-        even when the button IS disabled via aria-disabled or CSS pointer-events.
-      - We poll is_enabled() with a real wait loop instead.
-    """
-    btn = None
-    for sel in POST_BTN_SELECTORS:
-        try:
-            loc = page.locator(sel).first
-            loc.wait_for(state="visible", timeout=5000)
-            btn = loc
-            print(f"[DEBUG] Post button found: {sel}")
-            break
-        except Exception:
-            continue
-
-    if btn is None:
-        print("[DEBUG] Post button not found with any selector")
-        _screenshot(page, "post_btn_missing")
-        return False
-
-    # Wait up to 10 s for button to become enabled
-    for i in range(20):
-        try:
-            if btn.is_enabled():
-                break
-        except Exception:
-            pass
-        page.wait_for_timeout(500)
-        if i == 19:
-            print("[DEBUG] Post button never became enabled (text may not have registered)")
-            _screenshot(page, "post_btn_disabled")
-            return False
-
-    btn.click()
-    print("[DEBUG] Post button clicked")
-    return True
-
-
-def _make_context(playwright, cookies: list) -> tuple:
-    """
-    Create a stealth Chromium context with saved cookies.
-
-    WHY these args:
-      --disable-blink-features=AutomationControlled  removes navigator.webdriver
-      --no-sandbox / --disable-setuid-sandbox        required in many Linux envs
-    """
-    browser = playwright.chromium.launch(
-        headless=True,
-        args=[
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-blink-features=AutomationControlled",
-            "--disable-infobars",
-            "--window-size=1280,800",
-        ],
-    )
-    context = browser.new_context(
-        user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        viewport={"width": 1280, "height": 800},
-        locale="en-US",
-    )
-    # Inject stealth JS before every page navigation
-    context.add_init_script(_STEALTH_JS)
-    # Restore session
-    if cookies:
-        context.add_cookies(cookies)
-    return browser, context
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  PUBLIC API
-# ═══════════════════════════════════════════════════════════════════════════
-
-def post_to_linkedin(
-    content: str,
-    image_path: Optional[str] = None,
-    target: str = "personal",
-) -> Dict[str, Any]:
+def post_to_linkedin(content: str, image_path: Optional[str] = None, target: str = "personal") -> Dict[str, Any]:
     """
     Post content to LinkedIn using Playwright with saved session.
-
-    REQUIRES human approval before this is called — orchestrator must move
-    the draft from /Pending_Approval/ to /Approved/ first.
-
-    Returns {"success": bool, "message": str, "post_url": str|None}
+    
+    CRITICAL: This function REQUIRES human approval before posting.
+    The orchestrator must save a draft to /Pending_Approval/ first,
+    wait for human to move it to /Approved/, then call this function.
+    
+    Parameters:
+    -----------
+    content : str
+        The text content to post on LinkedIn
+    image_path : str, optional
+        Path to image file to attach with the post
+    target : str
+        "personal" for personal profile, "company" for company page
+    
+    Returns:
+    --------
+    dict : Result dictionary with keys:
+        - success (bool): Whether the post was successful
+        - message (str): Human-readable result message
+        - post_url (str or None): URL of the posted content if successful
+    
+    Example:
+    --------
+    >>> result = post_to_linkedin("Hello LinkedIn! #AI #SaaS")
+    >>> if result['success']:
+    ...     print(f"Posted! URL: {result['post_url']}")
     """
+    # Initialize audit logging
     audit = get_audit_manager() if AUDIT_AVAILABLE else None
-    cid   = f"linkedin_pw_{int(datetime.now().timestamp())}"
+    correlation_id = f"linkedin_pw_{int(datetime.now().timestamp())}"
+    start_time = datetime.now()
 
-    def _fail(msg: str) -> dict:
-        print(f"[LINKEDIN] FAIL: {msg}")
-        if audit:
-            audit.log(AuditEntry(
-                category=AuditCategory.LINKEDIN, level=AuditLevel.ERROR,
-                action="post_to_linkedin", correlation_id=cid,
-                error={"message": msg}, source="SKILL_LInkedin_Playwright_MCP",
-            ))
-        return {"success": False, "message": msg, "post_url": None}
-
-    # ── validate ────────────────────────────────────────────────────────────
+    # Validate content
     if not content or not content.strip():
-        return _fail("Post content cannot be empty")
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={"content_length": 0, "target": target},
+                error={"type": "ValidationError", "message": "Post content cannot be empty"},
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
+        return {
+            "success": False,
+            "message": "Post content cannot be empty",
+            "post_url": None
+        }
+
     if len(content) > 3000:
-        return _fail(f"Post content too long ({len(content)}/3000 chars)")
-    if not COOKIES_FILE.exists():
-        return _fail(
-            "No saved LinkedIn session. Run: "
-            "python3 Agent_Skills/SKILL_LInkedin_Playwright_MCP.py save"
-        )
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={"content_length": len(content), "target": target},
+                error={"type": "ValidationError", "message": f"Post content exceeds 3000 character limit ({len(content)} chars)"},
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
+        return {
+            "success": False,
+            "message": f"Post content exceeds 3000 character limit ({len(content)} chars)",
+            "post_url": None
+        }
 
-    # ── load session ─────────────────────────────────────────────────────────
+    # Check for saved session
+    cookies_file = SESSION_DIR / "cookies.json"
+    if not cookies_file.exists():
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={"content_length": len(content), "target": target},
+                error={"type": "SessionError", "message": "No saved LinkedIn session found"},
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
+        return {
+            "success": False,
+            "message": "No saved LinkedIn session found. Please login first using test_linkedin_session.py",
+            "post_url": None
+        }
+
+    # Load saved session cookies
     try:
-        cookies = json.loads(COOKIES_FILE.read_text())
-        print(f"[LINKEDIN] Loaded {len(cookies)} session cookies")
-    except Exception as e:
-        return _fail(f"Failed to read cookies: {e}")
+        with open(cookies_file, 'r', encoding='utf-8') as f:
+            cookies = json.load(f)
+        print(f"✅ Loaded LinkedIn session from {cookies_file}")
 
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.INFO,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={
+                    "content_length": len(content),
+                    "target": target,
+                    "session_loaded": True,
+                    "cookie_count": len(cookies),
+                },
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
+    except Exception as e:
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={"content_length": len(content), "target": target},
+                error={"type": type(e).__name__, "message": str(e)},
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
+        return {
+            "success": False,
+            "message": f"Failed to load session cookies: {e}",
+            "post_url": None
+        }
+    
+    # Start Playwright browser with saved session
     browser = None
     try:
         with sync_playwright() as p:
-            browser, context = _make_context(p, cookies)
+            # Launch browser (headless for production)
+            print("🚀 Launching browser...")
+            browser = p.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']
+            )
+
+            # Create context with realistic user agent
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 720},
+                locale="en-US"
+            )
+
+            # Add saved cookies for session restoration
+            context.add_cookies(cookies)
+
+            # Create page
             page = context.new_page()
 
-            # ── navigate to feed ─────────────────────────────────────────────
-            print("[LINKEDIN] Navigating to LinkedIn feed…")
+            # Navigate directly to feed (post creation page)
+            print("🌐 Navigating to LinkedIn feed...")
             try:
-                page.goto(
-                    "https://www.linkedin.com/feed/",
-                    timeout=60_000,
-                    # FIX BUG-6: domcontentloaded is too early for React SPA.
-                    # We use commit (first byte) then wait for a real element.
-                    wait_until="commit",
-                )
-            except Exception as nav_err:
-                print(f"[LINKEDIN] Navigation warning (continuing): {nav_err}")
+                page.goto("https://www.linkedin.com/feed/", timeout=60000, wait_until="domcontentloaded")
+                print("✅ Feed loaded")
+            except Exception as e:
+                print(f"⚠️  Navigation warning: {str(e)[:100]}")
+            
+            # Wait for page to settle
+            page.wait_for_timeout(3000)
 
-            # Wait for a stable landmark that proves we're logged in
-            # FIX BUG-6 continued: this replaces the bare wait_for_timeout
+            # Check if we're logged in
+            current_url = page.url
+            print(f"   Current URL: {current_url}")
+            
+            if "login" in current_url.lower() or "signin" in current_url.lower():
+                return {
+                    "success": False,
+                    "message": "LinkedIn session expired. Please re-login using: python3 setup_linkedin_session.py",
+                    "post_url": None
+                }
+
+            print("✅ Logged in successfully")
+            
+            # Wait for LinkedIn's JavaScript to render the post box
+            print("⏳ Waiting for page to render...")
+            page.wait_for_timeout(10000)
+            
+            # Open post editor
+            print("📝 Opening post editor...")
+            editor_ready = False
+
+            # Debug: check what's on the page
             try:
-                page.wait_for_selector(
-                    "nav, .global-nav, [data-test-global-nav]",
-                    timeout=30_000,
-                )
-            except Exception:
-                pass  # may still be usable
+                debug_info = page.evaluate("""() => {
+                    const results = [];
+                    const candidates = document.querySelectorAll('a, div, span');
+                    for (const el of candidates) {
+                        const t = (el.textContent || '').trim().toLowerCase();
+                        if ((t.includes('start a post') || t.includes('start')) && el.offsetHeight > 0) {
+                            results.push({
+                                tag: el.tagName,
+                                text: t.substring(0, 40),
+                                cls: (el.className || '').substring(0, 30),
+                                href: el.getAttribute('href') || '',
+                                rect: el.getBoundingClientRect().top.toFixed(0),
+                                visible: el.offsetHeight > 0
+                            });
+                        }
+                        if (results.length > 10) break;
+                    }
+                    return results;
+                }""")
+                print(f"   'start' elements on page: {debug_info}")
+            except:
+                pass
 
-            page.wait_for_timeout(2000)
-            _screenshot(page, "01_feed_loaded")
-
-            # ── session check ────────────────────────────────────────────────
-            url = page.url
-            print(f"[LINKEDIN] URL after load: {url}")
-            if "login" in url or "checkpoint" in url or "uas/" in url:
-                _screenshot(page, "02_session_expired")
-                return _fail(
-                    "LinkedIn session expired. Re-run: "
-                    "python3 Agent_Skills/SKILL_LInkedin_Playwright_MCP.py save"
-                )
-            print("[LINKEDIN] Session valid ✓")
-
-            # ── open 'Start a post' ──────────────────────────────────────────
-            print("[LINKEDIN] Looking for 'Start a post' trigger…")
-            start_btn = _first_visible(page, START_POST_SELECTORS, timeout=15_000)
-            if start_btn is None:
-                _screenshot(page, "03_no_start_btn")
-                return _fail(
-                    "Could not find 'Start a post' button. "
-                    "Session may be expired or LinkedIn changed their UI. "
-                    f"Debug screenshot saved in {DEBUG_DIR}"
-                )
-
-            start_btn.click()
-            print("[LINKEDIN] 'Start a post' clicked")
-            page.wait_for_timeout(2000)
-            _screenshot(page, "04_editor_open")
-
-            # ── type content into editor ─────────────────────────────────────
-            # FIX BUG-1 + BUG-2: use keyboard.type() instead of fill()/JS
-            print("[LINKEDIN] Typing post content…")
-            if not _type_into_editor(page, content):
-                _screenshot(page, "05_type_failed")
-                return _fail(
-                    "Could not type into post editor. "
-                    f"Check debug screenshots in {DEBUG_DIR}"
-                )
-            _screenshot(page, "06_content_typed")
-
-            # ── upload image (optional) ──────────────────────────────────────
-            if image_path and Path(image_path).exists():
-                print(f"[LINKEDIN] Attaching image: {image_path}")
-                img_btn_selectors = [
-                    "button[aria-label*='Add a photo']",
-                    "button[aria-label*='photo']",
-                    "button[aria-label*='image']",
-                    "button[aria-label*='Image']",
-                    "[data-control-name='share.attach_image']",
-                ]
-                img_btn = _first_visible(page, img_btn_selectors, timeout=5000)
-                if img_btn:
-                    with page.expect_file_chooser() as fc_info:
-                        img_btn.click()
-                    fc_info.value.set_files(image_path)
-                    page.wait_for_timeout(3000)
-                    print("[LINKEDIN] Image attached")
-                else:
-                    print("[LINKEDIN] Image button not found — continuing without image")
-
-            # ── click Post button ─────────────────────────────────────────────
-            # FIX BUG-3: use is_enabled() polling instead of get_attribute
-            print("[LINKEDIN] Submitting post…")
-            if not _click_post_button(page):
-                _screenshot(page, "07_submit_failed")
-                return _fail(
-                    "Post button not found or stayed disabled. "
-                    "Content may not have registered in React state."
-                )
-
-            # ── wait for confirmation ────────────────────────────────────────
-            print("[LINKEDIN] Waiting for post confirmation…")
-            page.wait_for_timeout(5000)
-            _screenshot(page, "08_after_submit")
-
-            post_url = page.url
-
-            # Try to detect success indicators
-            success = False
-            success_texts = [
-                "Your post is now live",
-                "Your post was sent",
-                "Post published",
-                "View your post",
+            # Click "Start a post" trigger - use multiple strategies
+            start_post_selectors = [
+                "div[role='button']:has-text('Start a post')",
+                "div[role='button']:has-text('start a post')",
+                "a:has-text('Start a post')",
+                "div:has-text('Start a post')",
+                "a[href*='post']",
+                "button:has-text('Start a post')",
+                "div.feed-shared-create-post__cta",
+                "span:has-text('Start a post')",
+                "div[data-control-name='create_post']",
+                "#draft-text-replaceable-component",
             ]
-            for txt in success_texts:
+
+            for selector in start_post_selectors:
                 try:
-                    if page.locator(f"text={txt}").first.is_visible(timeout=2000):
-                        success = True
-                        print(f"[LINKEDIN] Success indicator: '{txt}'")
+                    el = page.locator(selector).first
+                    if el.count() > 0 and el.is_visible(timeout=2000):
+                        el.click()
+                        print(f"   ✅ Clicked: {selector}")
+                        page.wait_for_timeout(2000)
+                        try:
+                            page.wait_for_selector('[role="dialog"]', timeout=3000)
+                            editor_ready = True
+                            print("   ✅ Editor dialog opened")
+                        except:
+                            pass
                         break
                 except Exception:
                     continue
 
-            # If we're back on the feed and there was no error, assume success
-            if not success and ("feed" in page.url or "mynetwork" in page.url):
-                success = True
-                print("[LINKEDIN] Back on feed — assuming success")
+            # Fallback: evaluate JS to click the anchor directly
+            if not editor_ready:
+                try:
+                    clicked = page.evaluate("""() => {
+                        const anchors = document.querySelectorAll('a');
+                        for (const a of anchors) {
+                            const t = (a.textContent || '').trim().toLowerCase();
+                            if (t.includes('start a post') && a.offsetHeight > 0) {
+                                a.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    }""")
+                    if clicked:
+                        print("   ✅ Clicked anchor via JS")
+                        page.wait_for_timeout(2000)
+                        try:
+                            page.wait_for_selector('[role="dialog"]', timeout=5000)
+                            editor_ready = True
+                            print("   ✅ Editor dialog opened via JS")
+                        except:
+                            pass
+                except Exception as e:
+                    print(f"   JS click error: {e}")
 
+            # Wait for any editor to appear
+            if not editor_ready:
+                try:
+                    page.wait_for_selector('div.tiptap.ProseMirror[contenteditable="true"], div.ProseMirror.tiptap[contenteditable="true"], [class*="tiptap"][class*="ProseMirror"][contenteditable="true"], div[contenteditable="true"][role="textbox"], [contenteditable="true"], [role="dialog"], [role="textbox"]', timeout=8000)
+                    editor_ready = True
+                    print("   ✅ Editor appeared")
+                except:
+                    print("   ⚠️  No editor appeared")
+            
+            # Find the post editor and fill content
+            print("✍️  Filling post content...")
+            editor_found = False
+            
+            # Wait for editor elements to fully render inside the dialog
+            try:
+                page.wait_for_function("""
+                    () => {
+                        const ce = document.querySelectorAll('div.tiptap.ProseMirror[contenteditable="true"], div.ProseMirror.tiptap[contenteditable="true"], [class*="tiptap"][class*="ProseMirror"][contenteditable="true"], div[contenteditable="true"][role="textbox"], [contenteditable="true"], [contenteditable="plaintext-only"], .ql-editor, .ProseMirror, [role="textbox"]');
+                        for (const el of ce) {
+                            if (el.offsetHeight > 20 && el.offsetWidth > 50) return true;
+                        }
+                        return false;
+                    }
+                """, timeout=15000)
+                print("   ✅ Editor element found")
+            except Exception:
+                print("   ⚠️  Editor wait timed out, continuing...")
+            
+            page.wait_for_timeout(2000)
+            
+            # Use comprehensive JS to find any editable element
+            try:
+                print("   Searching for editor...")
+                editor_info = page.evaluate("""
+                    () => {
+                        const candidates = [];
+                        
+                        // 1. Tiptap/ProseMirror editor (NEW LinkedIn UI)
+                        document.querySelectorAll('.tiptap.ProseMirror, .ProseMirror.tiptap, [class*="tiptap"][class*="ProseMirror"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'tiptap-prosemirror', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 2. ProseMirror editor
+                        document.querySelectorAll('.ProseMirror').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'ProseMirror', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 3. Contenteditable elements with role=textbox (NEW LinkedIn UI)
+                        document.querySelectorAll('[contenteditable="true"][role="textbox"], [contenteditable="plaintext-only"][role="textbox"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'contenteditable-textbox', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 4. Contenteditable elements
+                        document.querySelectorAll('[contenteditable="true"], [contenteditable="plaintext-only"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'contenteditable', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 5. role="textbox" elements
+                        document.querySelectorAll('[role="textbox"]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'textbox', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 6. Quill editor
+                        document.querySelectorAll('.ql-editor').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                candidates.push({el, method: 'ql-editor', tag: el.tagName, cls: el.className.substring(0,40)});
+                            }
+                        });
+                        
+                        // 7. Any div with data-placeholder (common in rich editors)
+                        document.querySelectorAll('[data-placeholder]').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.getAttribute('role') === 'textbox') {
+                                    candidates.push({el, method: 'data-placeholder', tag: el.tagName, cls: el.className.substring(0,40), placeholder: el.getAttribute('data-placeholder')});
+                                }
+                            }
+                        });
+                        
+                        // 8. textarea elements
+                        document.querySelectorAll('textarea').forEach(el => {
+                            if (el.offsetHeight > 0 && el.offsetWidth > 0 && !el.id.includes('captcha') && !el.id.includes('recaptcha')) {
+                                candidates.push({el, method: 'textarea', tag: el.tagName, id: el.id, placeholder: el.getAttribute('placeholder') || ''});
+                            }
+                        });
+                        
+                        // Return the first suitable candidate
+                        if (candidates.length > 0) {
+                            const first = candidates[0];
+                            return {
+                                found: true,
+                                method: first.method,
+                                tag: first.tag,
+                                cls: first.cls || '',
+                                id: first.id || '',
+                                placeholder: first.placeholder || ''
+                            };
+                        }
+                        return {found: false};
+                    }
+                """)
+                
+                if editor_info.get('found'):
+                    print(f"   Found editor via {editor_info['method']}: <{editor_info['tag']}> cls={editor_info['cls']}")
+                    
+                    method = editor_info['method']
+                    # Use appropriate fill method based on editor type
+                    if method == 'textarea':
+                        page.evaluate("""
+                            (content) => {
+                                const ta = document.querySelector('textarea');
+                                if (ta) {
+                                    ta.value = content;
+                                    ta.dispatchEvent(new Event('input', {bubbles: true}));
+                                }
+                            }
+                        """, content)
+                    elif method == 'ql-editor':
+                        page.evaluate("""
+                            (content) => {
+                                const el = document.querySelector('.ql-editor');
+                                if (el) {
+                                    el.focus();
+                                    el.innerHTML = '<p>' + content.replace(/\n/g, '</p><p>') + '</p>';
+                                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                                }
+                            }
+                        """, content)
+                    elif method == 'ProseMirror' or method == 'tiptap-prosemirror':
+                        page.evaluate("""
+                            (content) => {
+                                const el = document.querySelector('.ProseMirror, .tiptap.ProseMirror, [class*="tiptap"][class*="ProseMirror"]');
+                                if (el) {
+                                    el.focus();
+                                    el.innerHTML = '<p>' + content.replace(/\n/g, '</p><p>') + '</p>';
+                                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                                }
+                            }
+                        """, content)
+                    elif method == 'contenteditable-textbox':
+                        page.evaluate("""
+                            (content) => {
+                                const editable = document.querySelectorAll('[contenteditable="true"][role="textbox"], [contenteditable="plaintext-only"][role="textbox"]');
+                                for (let el of editable) {
+                                    if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                        el.focus();
+                                        el.textContent = content;
+                                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }
+                        """, content)
+                    else:
+                        # Generic contenteditable fill
+                        page.evaluate("""
+                            (content) => {
+                                const editable = document.querySelectorAll('[contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"]');
+                                for (let el of editable) {
+                                    if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+                                        el.focus();
+                                        el.textContent = content;
+                                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }
+                        """, content)
+                    editor_found = True
+                    print("   ✅ Content filled")
+            except Exception as e:
+                print(f"   Editor search error: {e}")
+            
+            # Fallback to selector approach
+            if not editor_found:
+                editor_selectors = [
+                    "div.tiptap.ProseMirror[contenteditable='true']",
+                    "div.ProseMirror.tiptap[contenteditable='true']",
+                    "[class*='tiptap'][class*='ProseMirror'][contenteditable='true']",
+                    "div[contenteditable='true'][role='textbox']",
+                    "div.ProseMirror[contenteditable='true']",
+                    "div.ql-editor",
+                    ".ProseMirror",
+                    "div[role='textbox']",
+                    "p[contenteditable='true']",
+                    ".editor-content [contenteditable='true']",
+                    "[data-placeholder] [contenteditable='true']",
+                ]
+                
+                for selector in editor_selectors:
+                    try:
+                        editor = page.locator(selector).first
+                        if editor.is_visible(timeout=3000):
+                            editor.click()
+                            page.wait_for_timeout(500)
+                            editor.fill(content)
+                            editor_found = True
+                            print(f"   Filled content using selector: {selector}")
+                            break
+                    except Exception:
+                        continue
+            
+            if not editor_found:
+                return {
+                    "success": False,
+                    "message": "Could not find the post editor field on LinkedIn",
+                    "post_url": None
+                }
+
+            # Add image if provided
+            if image_path and os.path.exists(image_path):
+                print(f"📷 Uploading image: {image_path}")
+                
+                page.wait_for_timeout(1000)
+                file_choosers = []
+                def fc_handler(fc):
+                    file_choosers.append(fc)
+                page.on("filechooser", fc_handler)
+                
+                photo_clicked = False
+                for ps in [
+                    '[role="button"]:has-text("Photo")',
+                    'button:has-text("Photo")',
+                    '[data-control-name="photo-upload"]',
+                    '[aria-label*="Photo" i]',
+                    '[aria-label*="Add photo" i]',
+                    'li[data-control-name="photo-upload"]',
+                    'button[aria-label*="image" i]',
+                    'img[alt*="Photo" i]',
+                ]:
+                    try:
+                        pb = page.locator(ps).first
+                        if pb.is_visible(timeout=2000):
+                            pb.click()
+                            photo_clicked = True
+                            print(f"   Clicked: {ps}")
+                            page.wait_for_timeout(1000)
+                            break
+                    except Exception:
+                        continue
+                
+                if not photo_clicked:
+                    try:
+                        result = page.evaluate("""() => {
+                            const btns = document.querySelectorAll('button, div[role="button"], li, span');
+                            for (const b of btns) {
+                                const t = b.textContent.trim().toLowerCase();
+                                if ((t === 'photo' || t.includes('photo') || t.includes('image') || t.includes('add media')) && b.offsetHeight > 0) {
+                                    b.click(); return true;
+                                }
+                            }
+                            return false;
+                        }""")
+                        if result:
+                            photo_clicked = True
+                            print("   Clicked Photo via JS")
+                            page.wait_for_timeout(1000)
+                    except Exception:
+                        pass
+                
+                ul_ok = False
+                for _ in range(20):
+                    page.wait_for_timeout(500)
+                    if len(file_choosers) > 0:
+                        try:
+                            file_choosers[0].set_files(image_path)
+                            ul_ok = True
+                            print("   ✅ Image uploaded via file chooser")
+                            break
+                        except Exception as e:
+                            print(f"   File chooser error: {e}")
+                            break
+                
+                if not ul_ok:
+                    try:
+                        fi = page.locator('input[type="file"]')
+                        if fi.count() > 0:
+                            fi.first.set_input_files(image_path, timeout=10000)
+                            ul_ok = True
+                            print("   ✅ Image uploaded via direct file input")
+                    except Exception as e:
+                        print(f"   Direct file input error: {e}")
+                
+                if ul_ok:
+                    page.wait_for_timeout(3000)
+                else:
+                    print("⚠️  Could not upload image, continuing text-only")
+            
+            page.wait_for_timeout(3000)
+            
+            # Find and click the Post button
+            print("🚀 Publishing post...")
+            post_clicked = False
+            post_button_selectors = [
+                "button.share-actions__primary-action",
+                "button.artdeco-button--primary",
+                "button.share-actions__primary-action:not([disabled])",
+                "div.share-box_actions--primary button",
+                "div.share-box_actions button",
+                "button[aria-label='Post']",
+                "button[aria-label='Post now']",
+                "button[aria-label*='Post']",
+                "button[data-control-name='post']",
+                "div[data-control-name='post']",
+                "button:has-text('Post')",
+                "div[role='button']:has-text('Post')",
+                "button:has(span:has-text('Post'))",
+            ]
+
+            for selector in post_button_selectors:
+                try:
+                    btn = page.locator(selector).first
+                    if btn.is_visible(timeout=5000):
+                        is_disabled = btn.get_attribute('disabled')
+                        is_aria_disabled = btn.get_attribute('aria-disabled')
+                        if is_disabled or is_aria_disabled == 'true':
+                            print(f"   ⏳ Button disabled ({selector}), waiting 3s...")
+                            page.wait_for_timeout(3000)
+                            try:
+                                btn.click(force=True)
+                                post_clicked = True
+                                print(f"   ✅ Force-clicked Post button using: {selector}")
+                                break
+                            except Exception:
+                                continue
+                        else:
+                            btn.click()
+                            post_clicked = True
+                            print(f"   ✅ Clicked Post button using: {selector}")
+                            break
+                except Exception:
+                    continue
+
+            if not post_clicked:
+                print("   ⚠️  Selectors failed, trying JavaScript fallback...")
+                try:
+                    post_clicked = page.evaluate("""
+                        () => {
+                            const strategies = [
+                                () => {
+                                    const btns = document.querySelectorAll('button');
+                                    for (const b of btns) {
+                                        if (b.textContent.trim() === 'Post' && b.offsetHeight > 0 && !b.disabled) {
+                                            b.click(); return true;
+                                        }
+                                    } return false;
+                                },
+                                () => {
+                                    const divs = document.querySelectorAll('div[role="button"]');
+                                    for (const d of divs) {
+                                        if (d.textContent.trim() === 'Post' && d.offsetHeight > 0) {
+                                            d.click(); return true;
+                                        }
+                                    } return false;
+                                },
+                                () => {
+                                    const el = document.querySelector('.share-actions__primary-action');
+                                    if (el && el.offsetHeight > 0) { el.click(); return true; }
+                                    return false;
+                                },
+                                () => {
+                                    const spans = document.querySelectorAll('span');
+                                    for (const s of spans) {
+                                        if (s.textContent.trim() === 'Post') {
+                                            const btn = s.closest('button');
+                                            if (btn && !btn.disabled) { btn.click(); return true; }
+                                            const roleDiv = s.closest('div[role="button"]');
+                                            if (roleDiv) { roleDiv.click(); return true; }
+                                        }
+                                    } return false;
+                                },
+                                () => {
+                                    const all = document.querySelectorAll('button:not([disabled])');
+                                    for (const b of all) {
+                                        if (b.offsetHeight > 0 && b.offsetWidth > 0 && b.textContent.trim().includes('Post')) {
+                                            b.click(); return true;
+                                        }
+                                    } return false;
+                                },
+                            ];
+                            for (const fn of strategies) {
+                                try { if (fn()) return true; } catch (e) { }
+                            }
+                            return false;
+                        }
+                    """)
+                    if post_clicked:
+                        print("   ✅ Clicked Post button via JavaScript fallback")
+                except Exception as js_err:
+                    print(f"   ⚠️  JavaScript fallback error: {js_err}")
+
+            if not post_clicked:
+                print("   ⚠️  Trying page.get_by_text as last resort...")
+                try:
+                    post_btn = page.get_by_text("Post", exact=True).first
+                    if post_btn.is_visible(timeout=3000):
+                        post_btn.click()
+                        post_clicked = True
+                        print("   ✅ Clicked Post button via get_by_text")
+                except Exception:
+                    pass
+
+            if not post_clicked:
+                return {
+                    "success": False,
+                    "message": "Could not find or click the 'Post' button on LinkedIn",
+                    "post_url": None
+                }
+            
+            # Wait for post to be submitted
+            print("⏳ Waiting for post to publish...")
+            page.wait_for_timeout(5000)
+            
+            # Check if post was successful
+            success_indicators = [
+                "Your post has been published",
+                "Post published",
+                "Share what's on your mind",  # Back to main feed
+                "View your post",
+            ]
+            
+            post_success = False
+            for indicator in success_indicators:
+                try:
+                    if page.get_by_text(indicator).first.is_visible(timeout=3000):
+                        post_success = True
+                        print(f"   ✅ Success indicator found: {indicator}")
+                        break
+                except Exception:
+                    continue
+            
+            # Get the current URL (may be post URL or feed URL)
+            post_url = page.url
+            
+            # Close browser
             browser.close()
 
-            if success:
+            duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+            if post_success:
+                # Audit log success
                 if audit:
-                    audit.log(AuditEntry(
-                        category=AuditCategory.LINKEDIN, level=AuditLevel.SUCCESS,
-                        action="post_to_linkedin", correlation_id=cid,
-                        details={"post_url": post_url, "content_len": len(content)},
+                    entry = AuditEntry(
+                        category=AuditCategory.LINKEDIN,
+                        level=AuditLevel.SUCCESS,
+                        action="post_to_linkedin",
+                        correlation_id=correlation_id,
+                        details={
+                            "content_length": len(content),
+                            "target": target,
+                            "post_url": post_url,
+                            "method": "playwright_browser",
+                        },
+                        duration_ms=round(duration_ms, 2),
                         source="SKILL_LInkedin_Playwright_MCP",
-                    ))
-                print(f"[LINKEDIN] Posted successfully: {post_url}")
+                    )
+                    audit.log(entry)
+
                 return {
                     "success": True,
-                    "message": "Post published to LinkedIn",
-                    "post_url": post_url,
+                    "message": "Post successfully created on LinkedIn",
+                    "post_url": post_url
                 }
             else:
-                return _fail(
-                    f"Post submitted but success not confirmed. "
-                    f"Check debug screenshots in {DEBUG_DIR} and verify on LinkedIn."
-                )
+                # Audit log partial success
+                if audit:
+                    entry = AuditEntry(
+                        category=AuditCategory.LINKEDIN,
+                        level=AuditLevel.WARNING,
+                        action="post_to_linkedin",
+                        correlation_id=correlation_id,
+                        details={
+                            "content_length": len(content),
+                            "target": target,
+                            "post_url": post_url,
+                            "method": "playwright_browser",
+                            "success_confirmed": False,
+                        },
+                        duration_ms=round(duration_ms, 2),
+                        source="SKILL_LInkedin_Playwright_MCP",
+                    )
+                    audit.log(entry)
 
-    except Exception as exc:
+                return {
+                    "success": True,
+                    "message": "Post submitted (no error detected, but success indicator not confirmed)",
+                    "post_url": post_url
+                }
+
+    except Exception as e:
+        duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+
         if browser:
             try:
                 browser.close()
             except Exception:
                 pass
-        return _fail(f"Unexpected error: {exc}")
+
+        error_msg = f"Error posting to LinkedIn: {str(e)}"
+        print(f"❌ {error_msg}")
+
+        # Audit log error
+        if audit:
+            entry = AuditEntry(
+                category=AuditCategory.LINKEDIN,
+                level=AuditLevel.ERROR,
+                action="post_to_linkedin",
+                correlation_id=correlation_id,
+                details={
+                    "content_length": len(content),
+                    "target": target,
+                    "method": "playwright_browser",
+                },
+                error={"type": type(e).__name__, "message": error_msg},
+                duration_ms=round(duration_ms, 2),
+                source="SKILL_LInkedin_Playwright_MCP",
+            )
+            audit.log(entry)
+
+        return {
+            "success": False,
+            "message": error_msg,
+            "post_url": None
+        }
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  SESSION MANAGEMENT
-# ═══════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# SESSION MANAGEMENT HELPERS
+# =============================================================================
 
-def save_linkedin_session(visible: bool = True) -> bool:
+def save_linkedin_session(cookies_file: Optional[str] = None):
     """
-    Open a visible browser window, let the user log in, then save cookies.
-    Only needs to be done ONCE every ~30 days.
+    Interactive helper to save LinkedIn session cookies.
+    Opens visible browser for QR code scan, then saves cookies.
+    
+    Usage:
+        python3 -c "from Agent_Skills.SKILL_LInkedin_Playwright_MCP import save_linkedin_session; save_linkedin_session()"
     """
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("  LinkedIn Session Setup")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("A browser window will open. Log in to LinkedIn.")
-    print("The script will detect login and save your session.")
+    if cookies_file is None:
+        cookies_file = SESSION_DIR / "cookies.json"
+    
+    print("🔐 LinkedIn Session Setup")
+    print("=" * 60)
+    print("This will open a browser window for you to login to LinkedIn.")
+    print("After logging in, the session will be saved for future automated posts.")
     print()
-
+    
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=not visible)
+            # Launch visible browser
+            browser = p.chromium.launch(headless=False)
             context = browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 720}
             )
-            context.add_init_script(_STEALTH_JS)
             page = context.new_page()
-            page.goto("https://www.linkedin.com/login", timeout=30_000)
-
-            print("⏳ Waiting for you to log in (up to 3 minutes)…")
-            deadline = time.time() + 180
+            
+            print("🌐 Opening LinkedIn login page...")
+            page.goto("https://www.linkedin.com/login", timeout=30000)
+            
+            print("📱 Please login to LinkedIn (scan QR code or enter credentials)")
+            print("⏳ Waiting for you to login... (checking every 3 seconds)")
+            
+            # Wait for user to login (detect when they reach the feed)
+            max_wait = 120  # 2 minutes
             logged_in = False
-            while time.time() < deadline:
-                time.sleep(2)
-                url = page.url
-                if "feed" in url or ("linkedin.com" in url and "login" not in url and "uas/" not in url):
+            
+            for i in range(max_wait // 3):
+                time.sleep(3)
+                current_url = page.url
+                
+                if "login" not in current_url.lower() and "feed" in current_url.lower():
                     logged_in = True
                     print("✅ Login detected!")
                     break
-                print(f"   Still waiting… ({int(deadline - time.time())}s left)", end="\r")
-
+                else:
+                    print(f"   Still waiting... ({(i+1)*3}s)")
+            
             if not logged_in:
-                print("\n⚠️  Timeout. Saving whatever session exists anyway.")
-
-            # Extra pause to let LinkedIn finish setting all cookies
-            time.sleep(3)
+                print("⚠️  Timeout reached. Checking if session is valid anyway...")
+            
+            # Save cookies
             cookies = context.cookies()
-            COOKIES_FILE.write_text(json.dumps(cookies, indent=2))
-            COOKIES_FILE.chmod(0o600)
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(str(cookies_file)), exist_ok=True)
+            
+            with open(cookies_file, 'w', encoding='utf-8') as f:
+                json.dump(cookies, f, indent=2)
+            
+            # Set restrictive permissions (owner only)
+            os.chmod(cookies_file, 0o600)
+            
+            print(f"\n💾 Session saved to: {cookies_file}")
+            print("🔒 File permissions set to: 0600 (owner read/write only)")
+            print("✅ You can now close the browser")
+            
             browser.close()
-
-            print(f"\n💾 Session saved → {COOKIES_FILE}")
-            print(f"   {len(cookies)} cookies captured")
-            print("✅ Done! Future posts will use this session automatically.")
-            return True
-
+            
+            print("\n🎉 Session saved successfully!")
+            print("   Future posts will use this session automatically.")
+    
     except Exception as e:
         print(f"\n❌ Failed to save session: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def test_linkedin_session():
+    """
+    Test if saved LinkedIn session is still valid.
+
+    Usage:
+        python3 -c "from Agent_Skills.SKILL_LInkedin_Playwright_MCP import test_linkedin_session; test_linkedin_session()"
+    """
+    cookies_file = SESSION_DIR / "cookies.json"
+
+    if not cookies_file.exists():
+        print("❌ No saved session found. Run save_linkedin_session() first.")
         return False
 
+    print("🧪 Testing LinkedIn session...")
 
-def test_linkedin_session() -> bool:
-    """Verify the saved session is still valid without posting anything."""
-    if not COOKIES_FILE.exists():
-        print("❌ No saved session. Run: python3 SKILL_LInkedin_Playwright_MCP.py save")
-        return False
+    browser = None
+    max_retries = 2
+    
+    for attempt in range(max_retries):
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-setuid-sandbox']
+                )
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 720}
+                )
 
-    print("🧪 Testing LinkedIn session…")
-    try:
-        cookies = json.loads(COOKIES_FILE.read_text())
-    except Exception as e:
-        print(f"❌ Cannot read cookies: {e}")
-        return False
+                # Load cookies
+                with open(cookies_file, 'r', encoding='utf-8') as f:
+                    cookies = json.load(f)
+                context.add_cookies(cookies)
 
-    try:
-        with sync_playwright() as p:
-            browser, context = _make_context(p, cookies)
-            page = context.new_page()
-            page.goto(
-                "https://www.linkedin.com/feed/",
-                timeout=45_000,
-                wait_until="commit",
-            )
-            try:
-                page.wait_for_selector("nav, .global-nav", timeout=20_000)
-            except Exception:
-                pass
-            page.wait_for_timeout(2000)
+                page = context.new_page()
+                
+                if attempt > 0:
+                    print(f"   Retry attempt {attempt + 1}/{max_retries}...")
+                
+                # Navigate to LinkedIn with relaxed wait
+                page.goto("https://www.linkedin.com", timeout=30000, wait_until="domcontentloaded")
+                
+                # Wait for page to be mostly loaded (more lenient than networkidle)
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except Exception:
+                    pass  # Page may still be usable even if this times out
+                
+                # Give LinkedIn a moment to process authentication
+                page.wait_for_timeout(3000)
 
-            url = page.url
-            _screenshot(page, "session_test")
+                current_url = page.url
 
-            if "feed" in url or ("linkedin.com" in url and "login" not in url):
-                print(f"✅ Session is VALID  (url={url})")
-                # Check for Start a post button
-                btn = _first_visible(page, START_POST_SELECTORS, timeout=8000)
-                if btn:
-                    print("✅ 'Start a post' button found — ready to post")
+                if "login" in current_url.lower() or "signin" in current_url.lower():
+                    print("❌ Session expired. Please re-login using save_linkedin_session()")
+                    browser.close()
+                    return False
                 else:
-                    print("⚠️  Session valid but 'Start a post' not found — LinkedIn may have changed their UI")
-                browser.close()
-                return True
+                    print(f"✅ Session is valid! (URL: {current_url})")
+                    browser.close()
+                    return True
+
+        except Exception as e:
+            if browser:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+            
+            error_msg = str(e)
+            
+            # If it's a network error, retry
+            if "ERR_NETWORK" in error_msg or "net::" in error_msg:
+                if attempt < max_retries - 1:
+                    print("   ⚠️  Network error, retrying...")
+                    import time
+                    time.sleep(2)
+                    continue
+                else:
+                    print(f"⚠️  Network error after {max_retries} attempts: {error_msg}")
+                    print("   This may be a temporary network issue.")
+                    print("   Try running the test again or check your internet connection.")
+                    return False
             else:
-                print(f"❌ Session EXPIRED  (url={url})")
-                print("   Re-run: python3 SKILL_LInkedin_Playwright_MCP.py save")
-                browser.close()
+                # Other errors
+                print(f"❌ Session test failed: {error_msg}")
                 return False
+    
+    # Should not reach here
+    print("⚠️  Session test inconclusive")
+    return False
 
-    except Exception as e:
-        print(f"❌ Test error: {e}")
-        return False
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  CLI
-# ═══════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# CLI INTERFACE
+# =============================================================================
 
 if __name__ == "__main__":
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "help"
-
-    if cmd == "save":
-        ok = save_linkedin_session(visible=True)
-        sys.exit(0 if ok else 1)
-
-    elif cmd == "test":
-        ok = test_linkedin_session()
-        sys.exit(0 if ok else 1)
-
-    elif cmd == "post":
-        if len(sys.argv) < 3:
-            print("Usage: python3 SKILL_LInkedin_Playwright_MCP.py post 'content' [image_path]")
+    import sys
+    
+    if len(sys.argv) > 1:
+        command = sys.argv[1]
+        
+        if command == "save":
+            save_linkedin_session()
+        elif command == "test":
+            test_linkedin_session()
+        elif command == "post":
+            # Quick post from command line
+            if len(sys.argv) < 3:
+                print("Usage: python3 SKILL_LInkedin_Playwright_MCP.py post 'Your post content here'")
+                sys.exit(1)
+            
+            content = sys.argv[2]
+            image = sys.argv[3] if len(sys.argv) > 3 else None
+            
+            print("📱 Posting to LinkedIn...")
+            result = post_to_linkedin(content, image_path=image)
+            
+            if result['success']:
+                print(f"✅ {result['message']}")
+                if result['post_url']:
+                    print(f"   URL: {result['post_url']}")
+            else:
+                print(f"❌ {result['message']}")
+                sys.exit(1)
+        else:
+            print("Unknown command. Use: save, test, or post")
             sys.exit(1)
-        content   = sys.argv[2]
-        img       = sys.argv[3] if len(sys.argv) > 3 else None
-        result    = post_to_linkedin(content, image_path=img)
-        print(json.dumps(result, indent=2))
-        sys.exit(0 if result["success"] else 1)
-
-    elif cmd == "debug":
-        # Verbose session-check with screenshots
-        print("Running full diagnostic…")
-        test_linkedin_session()
-        print(f"\nDebug screenshots saved in: {DEBUG_DIR}")
-
     else:
-        print(__doc__)
+        print("LinkedIn Playwright MCP v2.0")
+        print("Usage:")
+        print("  python3 SKILL_LInkedin_Playwright_MCP.py save   - Save new session")
+        print("  python3 SKILL_LInkedin_Playwright_MCP.py test   - Test current session")
+        print("  python3 SKILL_LInkedin_Playwright_MCP.py post 'content' [image] - Quick post")
         print()
-        print("Commands:")
-        print("  save    — Open browser, log in, save session")
-        print("  test    — Check if saved session is still valid")
-        print("  post    — Quick post from command line")
-        print("  debug   — Verbose session check with screenshots")
+        print("⚠️  WARNING: Always require human approval before posting!")
