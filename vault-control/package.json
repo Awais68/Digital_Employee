@@ -5,7 +5,8 @@
   "main": "server/index.js",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run vite\"",
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run server:dev\" \"npm run vite\"",
+    "server:dev": "PORT=3100 node server/index.js",
     "server": "node server/index.js",
     "vite": "vite",
     "build": "vite build",

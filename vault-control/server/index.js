@@ -627,10 +627,32 @@ wss.on('connection', async (ws, req) => {
   ws.on('close', () => console.log('[WS] Client disconnected'))
 })
 
-// Vault file watcher - excluding session folders
-const vaultPath = process.env.VAULT_PATH
-if (vaultPath) {
-  const watcher = chokidar.watch(vaultPath, {
+// Vault file watcher.
+// Only the folders that actually drive the dashboard are watched. Watching the
+// whole vault root pulled in ~2200 inotify watches (the `md file ` archive alone
+// is 1500+ files) for folders nothing on screen ever reads.
+const WATCHED_VAULT_FOLDERS = [
+  'Inbox',
+  'Needs_Action',
+  'Pending_Approval',
+  'Approved',
+  'Done',
+  'Rejected',
+  'LinkedIn',
+  'Contacts',
+]
+
+function startVaultWatcher(vaultPath) {
+  const targets = WATCHED_VAULT_FOLDERS
+    .map((folder) => join(vaultPath, folder))
+    .filter((target) => existsSync(target))
+
+  if (targets.length === 0) {
+    console.warn('[Vault Watcher] No vault folders found under', vaultPath, '- watcher disabled')
+    return
+  }
+
+  const watcher = chokidar.watch(targets, {
     ignored: [
       /(^|[\/\\])\./,
       /node_modules/,
@@ -668,16 +690,37 @@ if (vaultPath) {
   }
 
   watcher.on('ready', () => {
-    console.log(`[Vault Watcher] Watching: ${vaultPath}`)
+    console.log(`[Vault Watcher] Watching ${targets.length} vault folders`)
   })
 
   watcher.on('add', () => debouncedRefresh())
   watcher.on('change', () => debouncedRefresh())
   watcher.on('unlink', () => debouncedRefresh())
 
+  // chokidar emits one error per file it cannot watch. When the host runs out of
+  // inotify watches that is thousands of identical stack traces, which buries
+  // every other line of output. Report each distinct cause once instead.
+  const seenWatchErrors = new Set()
   watcher.on('error', (error) => {
-    console.error('[Vault Watcher] Error:', error)
+    const code = error?.code || 'UNKNOWN'
+    if (seenWatchErrors.has(code)) return
+    seenWatchErrors.add(code)
+
+    if (code === 'ENOSPC') {
+      console.warn(
+        '[Vault Watcher] Out of inotify watches - live vault updates are off.\n' +
+        '                Raise the limit with:\n' +
+        '                  sudo sysctl fs.inotify.max_user_watches=524288\n' +
+        '                (persist it in /etc/sysctl.d/99-inotify.conf), or close some editor windows.'
+      )
+      return
+    }
+    console.error(`[Vault Watcher] ${code}:`, error?.message || error)
   })
+}
+
+if (process.env.VAULT_PATH) {
+  startVaultWatcher(process.env.VAULT_PATH)
 }
 
 // Start cron scheduler — imported dynamically AFTER everything is initialized
@@ -722,6 +765,17 @@ async function boot() {
   if (!freePort) {
     console.error('[ERROR] All ports are in use.')
     process.exit(1)
+  }
+
+  // A silent slide to a fallback port is worse than no server at all: the Vite
+  // proxy still points at the port you asked for, so the UI talks to whatever
+  // else is squatting there and your local changes never show up.
+  if (freePort !== startPort) {
+    console.warn(
+      `[HTTP] Port ${startPort} is already in use — falling back to ${freePort}.\n` +
+      `       Whatever is on ${startPort} will keep serving the dashboard, so stop it ` +
+      `(pm2 stop vault-control) if you meant to run this one.`
+    )
   }
 
   // Start HTTP + WS immediately — frontend can load, API returns 503
