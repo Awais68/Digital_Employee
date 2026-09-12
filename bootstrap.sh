@@ -10,7 +10,7 @@
 # run repeatedly, which is what the accompanying .timer does every 5 minutes.
 set -uo pipefail
 
-REPO="/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/150 GB DATA TRANSFER/hackathon series/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee"
+REPO="/media/awais/6372445e-8fda-42fa-9034-61babd7dafd1/My_work/0 FTE Hackathon/digital_FTE_qwen/Digital_Employee"
 WAIT_SECONDS="${BOOTSTRAP_WAIT:-600}"   # up to 10 min for the drive to appear
 LOG="/tmp/digital_employee_bootstrap.log"
 
