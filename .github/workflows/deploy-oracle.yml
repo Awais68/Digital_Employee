@@ -112,6 +112,6 @@ jobs:
       - name: Health check
         run: |
           sleep 8
-          curl -sfk -m 15 https://digitalfte.online/api/health \
+          curl -sf -m 15 https://api.digitalfte.online/api/health | grep -q "\"status\":\"ok\"" \
             && echo "✅ Health check passed" \
-            || echo "⚠️ Health check failed — check server logs"
+            || { echo "❌ Health check failed — api.digitalfte.online did not report status ok"; exit 1; }
