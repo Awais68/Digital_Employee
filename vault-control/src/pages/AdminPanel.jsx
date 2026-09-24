@@ -9,6 +9,7 @@ const API_KEYS = [
   { key: 'openrouter', label: 'OpenRouter API Key' },
   { key: 'claude', label: 'Claude / Anthropic API Key' },
   { key: 'groq', label: 'Groq API Key' },
+  { key: 'deepseek', label: 'DeepSeek API Key' },
   { key: 'facebook', label: 'Facebook System User Token' },
   { key: 'instagram', label: 'Instagram Access Token' },
   { key: 'linkedin', label: 'LinkedIn Access Token' },

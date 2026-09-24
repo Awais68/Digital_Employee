@@ -1,3 +1,5 @@
+import { deepSeekMode } from './deepseekPeak.js'
+
 // Global flag — set to true when ALL AI providers fail and mock content is returned.
 // Consumers (postGenerator.js etc.) must check this after callAI() and abort/log loudly.
 export let _lastCallUsedMock = false;
@@ -24,11 +26,60 @@ async function tryProvider(name, fn) {
   }
 }
 
+// DeepSeek (OpenAI-compatible). Tried first when DEEPSEEK_API_KEY is set: it is
+// the paid, non-rate-limited rung, so the free tiers below only carry overflow.
+async function callDeepSeek(systemPrompt, userPrompt, maxTokens) {
+  const key = process.env.DEEPSEEK_API_KEY
+  if (!key || !key.startsWith('sk-')) return null
+  const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '')
+  const model = process.env.DEEPSEEK_MODEL || 'deepseek-flash'
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), Number(process.env.DEEPSEEK_TIMEOUT_MS || 60000))
+  try {
+    const resp = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: Math.min(Math.max(maxTokens, 500), 8192),
+        temperature: 0.7,
+        // V4 models reason by default: ~2-3x the output tokens and, with a small
+        // max_tokens, an empty answer. Posts/JSON extraction don't need it.
+        thinking: { type: process.env.DEEPSEEK_THINKING || 'disabled' },
+      }),
+    })
+    const data = await resp.json().catch(() => ({}))
+    const text = data.choices?.[0]?.message?.content
+    if (text) {
+      console.log(`[aiProvider] DeepSeek OK with model: ${model}`)
+      return text
+    }
+    throw new Error(data.error?.message || `HTTP ${resp.status}`)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
   let result
   _resetMockFlag()
 
-  // Groq first — fastest and cheapest of the configured providers, and the only
+  // Peak-hours rule (peak-hours.md): off-peak DeepSeek goes first; in peak
+  // (2x price) it is tried last or not at all, per DEEPSEEK_PEAK_POLICY.
+  const dsMode = deepSeekMode()
+  if (dsMode === 'primary') {
+    result = await tryProvider('DeepSeek', () => callDeepSeek(systemPrompt, userPrompt, maxTokens))
+    if (result) return result
+  } else {
+    console.log(`[aiProvider] DeepSeek peak hours — policy: ${dsMode}`)
+  }
+
+  // Groq next — fastest and cheapest of the configured providers, and the only
   // one that keeps working when the OpenRouter balance runs dry.
   result = await tryProvider('Groq', async () => {
     if (!process.env.GROQ_API_KEY?.startsWith('gsk_')) return null
@@ -183,13 +234,18 @@ export async function callAI(systemPrompt, userPrompt, maxTokens = 1000) {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       systemInstruction: systemPrompt,
     });
     const r = await model.generateContent(userPrompt);
     return r.response.text();
   })
   if (result) return result
+
+  if (dsMode === 'last_resort') {
+    result = await tryProvider('DeepSeek', () => callDeepSeek(systemPrompt, userPrompt, maxTokens))
+    if (result) return result
+  }
 
   _lastCallUsedMock = true;
   console.error('[aiProvider] ⚠ ALL AI PROVIDERS FAILED — returning mock content. Check API keys and billing.');

@@ -22,11 +22,16 @@ import time
 import logging
 from pathlib import Path
 from typing import Optional
+
+# BASE_DIR used to be defined only in the ImportError branch below, so whenever
+# env_loader imported fine (i.e. always, in this repo) RouterLogger blew up with
+# NameError at import time and every consumer (ralph_wiggum, orchestrator) lost
+# its LLM brain silently.
+BASE_DIR = Path(__file__).resolve().parent
 try:
     import env_loader  # noqa: F401 — loads .env + .env.development/.env.production
 except ImportError:
     from dotenv import load_dotenv
-    BASE_DIR = Path(__file__).resolve().parent
     _env_path = BASE_DIR / ".env"
     if _env_path.exists():
         load_dotenv(_env_path)
@@ -128,6 +133,12 @@ class ModelConfig:
 
 # Default model priority order (first = highest priority)
 DEFAULT_MODEL_PRIORITY = [
+    ModelConfig(
+        name="DeepSeek",
+        model_id=os.getenv("DEEPSEEK_LITELLM_MODEL", "deepseek/" + os.getenv("DEEPSEEK_MODEL", "deepseek-flash")),
+        env_key="DEEPSEEK_API_KEY",
+        api_base=os.getenv("DEEPSEEK_BASE_URL") or None,
+    ),
     ModelConfig(
         name="Claude",
         model_id=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514"),
@@ -241,6 +252,17 @@ def configure_litellm():
 # Core Router
 # ---------------------------------------------------------------------------
 
+def _litellm_version() -> str:
+    """litellm >= 1.7x lazy-loads attributes and no longer exposes __version__."""
+    if not LITELLM_AVAILABLE:
+        return "not installed"
+    try:
+        from importlib.metadata import version
+        return version("litellm")
+    except Exception:
+        return getattr(litellm, "__version__", "unknown")
+
+
 class LLMRouter:
     """
     Smart LLM router with automatic failover.
@@ -269,10 +291,13 @@ class LLMRouter:
             )
 
         self.models = models or DEFAULT_MODEL_PRIORITY[:]
-        self.default_model = default_model or "Claude"
+        # Default primary = first *configured* rung in priority order, so an
+        # unset ANTHROPIC_API_KEY no longer makes "Claude" the nominal default.
+        first_configured = next((m.name for m in self.models if m.is_configured), self.models[0].name)
+        self.default_model = default_model or os.getenv("LLM_PRIMARY") or first_configured
 
         # Reorder if user specified a different default
-        if self.default_model != "Claude":
+        if self.default_model != self.models[0].name:
             self._reorder_priority(self.default_model)
 
         # Filter to only configured models
@@ -289,6 +314,22 @@ class LLMRouter:
 
         # Track which models failed this session
         self.failed_models: set[str] = set()
+
+    @staticmethod
+    def _peak_ordered(models: list) -> list:
+        """Apply the DeepSeek peak-hours rule (peak-hours.md) per call."""
+        try:
+            from deepseek_peak import deepseek_mode
+            mode = deepseek_mode()
+        except Exception:
+            return models
+        if mode == "primary":
+            return models
+        rest = [m for m in models if m.name != "DeepSeek"]
+        router_logger.info(f"DeepSeek peak hours — policy: {mode}")
+        if mode == "block":
+            return rest
+        return rest + [m for m in models if m.name == "DeepSeek"]
 
     def _reorder_priority(self, model_name: str):
         """Reorder model priority to make the specified model first."""
@@ -340,6 +381,11 @@ class LLMRouter:
         if model.api_base:
             kwargs["api_base"] = model.api_base
 
+        # DeepSeek V4 reasons by default: 2-3x output tokens and an empty answer
+        # when max_tokens is small. Off unless DEEPSEEK_THINKING=enabled.
+        if model.name == "DeepSeek":
+            kwargs["extra_body"] = {"thinking": {"type": os.getenv("DEEPSEEK_THINKING", "disabled")}}
+
         # Track start time
         start = time.time()
 
@@ -387,7 +433,7 @@ class LLMRouter:
         attempts = 0
         last_error = None
 
-        for model in self.available_models:
+        for model in self._peak_ordered(self.available_models):
             # Skip models that already failed this session (optional)
             # Uncomment the next line to skip permanently failed models:
             # if model.name in self.failed_models:
@@ -468,7 +514,7 @@ class LLMRouter:
                 for m in self.models
             ],
             "failed_models": list(self.failed_models),
-            "litellm_version": litellm.__version__ if LITELLM_AVAILABLE else "not installed",
+            "litellm_version": _litellm_version(),
         }
 
     def reset_failures(self):

@@ -7,6 +7,7 @@ export const ENV_MAP = {
   openrouter: 'OPENROUTER_API_KEY',
   claude: 'ANTHROPIC_API_KEY',
   groq: 'GROQ_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
   facebook: 'META_SYSTEM_USER_TOKEN',
   instagram: 'INSTAGRAM_ACCESS_TOKEN',
   linkedin: 'LINKEDIN_ACCESS_TOKEN',

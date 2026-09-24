@@ -1,0 +1,21 @@
+{
+  "_doc": "DeepSeek peak/off-peak calendar. Rules in peak-hours.md. All times are Beijing (Asia/Shanghai).",
+  "timezone": "Asia/Shanghai",
+  "peak_windows": [["09:00", "12:00"], ["14:00", "18:00"]],
+  "peak_weekdays": [0, 1, 2, 3, 4],
+  "holidays_off_peak": {
+    "2026-09-25": "Mid-Autumn Festival",
+    "2026-09-26": "Mid-Autumn Festival",
+    "2026-09-27": "Mid-Autumn Festival",
+    "2026-10-01": "National Day Golden Week",
+    "2026-10-02": "National Day Golden Week",
+    "2026-10-03": "National Day Golden Week",
+    "2026-10-04": "National Day Golden Week",
+    "2026-10-05": "National Day Golden Week",
+    "2026-10-06": "National Day Golden Week",
+    "2026-10-07": "National Day Golden Week"
+  },
+  "makeup_workdays_off_peak": {
+    "2026-10-10": "China make-up workday (Saturday) — treated as off-peak per the weekend rule"
+  }
+}

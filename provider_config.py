@@ -1,7 +1,7 @@
 """
 provider_config.py
 Auto-detects which AI provider to use.
-Priority: Claude Code CLI > Anthropic API > OpenAI > Gemini > OpenRouter
+Priority: Claude Code CLI > Anthropic API > DeepSeek > OpenAI > Gemini > OpenRouter
 """
 import os, shutil
 
@@ -33,6 +33,18 @@ def detect_provider():
     if anthropic_key and anthropic_key.startswith('sk-ant-'):
         return ('anthropic', anthropic_key)
     
+    # 2b. DeepSeek (OpenAI-compatible endpoint). Peak-hours rule (peak-hours.md):
+    # in peak it drops to last resort or is skipped, per DEEPSEEK_PEAK_POLICY.
+    deepseek_key = os.getenv('DEEPSEEK_API_KEY', '')
+    deepseek_ok = bool(deepseek_key and deepseek_key.startswith('sk-'))
+    try:
+        from deepseek_peak import deepseek_mode
+        ds_mode = deepseek_mode()
+    except Exception:
+        ds_mode = 'primary'
+    if deepseek_ok and ds_mode == 'primary':
+        return ('deepseek', deepseek_key)
+
     # 3. OpenAI key (also handles OpenRouter sk-or-v1- format)
     openai_key = os.getenv('OPENAI_API_KEY', '')
     if openai_key and openai_key.startswith('sk-'):
@@ -45,7 +57,11 @@ def detect_provider():
     gemini_key = os.getenv('GEMINI_API_KEY', '')
     if gemini_key:
         return ('gemini', gemini_key)
-    
+
+    # 5. Peak hours with nothing else configured: DeepSeek as last resort
+    if deepseek_ok and ds_mode == 'last_resort':
+        return ('deepseek', deepseek_key)
+
     return (None, None)
 
 def get_model_name(provider):
@@ -53,7 +69,8 @@ def get_model_name(provider):
         'claude_code': 'claude-sonnet-4-5',
         'anthropic':   'claude-sonnet-4-5',
         'openai':      os.getenv('OPENAI_MODEL', 'gpt-4o'),
-        'gemini':      os.getenv('GEMINI_MODEL', 'gemini-2.0-flash'),
+        'deepseek':    os.getenv('DEEPSEEK_MODEL', 'deepseek-flash'),
+        'gemini':      os.getenv('GEMINI_MODEL', 'gemini-2.5-flash'),
     }
     return models.get(provider, 'unknown')
 
@@ -72,9 +89,12 @@ def call_ai(system_prompt, user_prompt, max_tokens=2000):
         )
         return resp.content[0].text, provider
 
-    elif provider == 'openai':
+    elif provider in ('openai', 'deepseek'):
         from openai import OpenAI
-        base_url = os.getenv('OPENAI_BASE_URL') or os.getenv('LITELLM_API_BASE')
+        if provider == 'deepseek':
+            base_url = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com/v1')
+        else:
+            base_url = os.getenv('OPENAI_BASE_URL') or os.getenv('LITELLM_API_BASE')
         client_kwargs = {"api_key": key}
         if base_url:
             client_kwargs["base_url"] = base_url
@@ -85,7 +105,9 @@ def call_ai(system_prompt, user_prompt, max_tokens=2000):
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": user_prompt}
             ],
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            **({"extra_body": {"thinking": {"type": os.getenv("DEEPSEEK_THINKING", "disabled")}}}
+               if provider == 'deepseek' else {}),
         )
         return resp.choices[0].message.content, provider
 
@@ -102,7 +124,7 @@ def call_ai(system_prompt, user_prompt, max_tokens=2000):
     else:
         raise RuntimeError(
             "No AI provider found!\n"
-            "Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY"
+            "Set one of: ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY"
         )
 
 if __name__ == '__main__':

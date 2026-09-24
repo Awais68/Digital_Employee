@@ -102,19 +102,48 @@ function getOpenRouterKey() {
   );
 }
 
-async function* streamChatResponse(messages, context) {
+// Pick the chat backend. DeepSeek when its key is present (paid, no free-tier
+// 429s), otherwise OpenRouter. Both speak the OpenAI SSE format so the parser
+// below is shared.
+function pickChatBackend() {
+  const dsKey = process.env.DEEPSEEK_API_KEY;
+  if (dsKey && dsKey.startsWith('sk-')) {
+    const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+    return {
+      name: 'DeepSeek',
+      url: `${base}/chat/completions`,
+      key: dsKey,
+      model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+      headers: {},
+    };
+  }
   const orKey = getOpenRouterKey();
   if (!orKey) {
-    throw new Error('OPENROUTER_API_KEY is not set');
+    throw new Error('No chat provider configured: set DEEPSEEK_API_KEY or OPENROUTER_API_KEY');
   }
-  const model = process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4';
-  console.log(`[Chatbot] Using model: ${model}, key: ${orKey.slice(0, 12)}...`);
+  return {
+    name: 'OpenRouter',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    key: orKey,
+    // The old default was anthropic/claude-sonnet-4 — a paid model, and the
+    // OpenRouter balance is at zero, so every chat failed. gpt-4o-mini is the
+    // cheapest rung the account still answers on.
+    model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+    headers: { 'HTTP-Referer': 'https://digitalfte.online', 'X-Title': 'Digital FTE' },
+  };
+}
 
-  const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+async function* streamChatResponse(messages, context) {
+  const backend = pickChatBackend();
+  const { model } = backend;
+  console.log(`[Chatbot] Using ${backend.name} model: ${model}`);
+
+  const resp = await fetch(backend.url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${orKey}`,
+      Authorization: `Bearer ${backend.key}`,
       'Content-Type': 'application/json',
+      ...backend.headers,
     },
     body: JSON.stringify({
       model,
@@ -129,7 +158,7 @@ async function* streamChatResponse(messages, context) {
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
-    console.error(`[Chatbot] OpenRouter ${resp.status} for model ${model}: ${errText.slice(0, 200)}`);
+    console.error(`[Chatbot] ${backend.name} ${resp.status} for model ${model}: ${errText.slice(0, 200)}`);
     throw new Error(`Server error: ${resp.status}. Dobara try karein.`);
   }
 
