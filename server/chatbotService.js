@@ -69,7 +69,13 @@ ANSWER EXAMPLES (follow exactly):
     pending and failed posts that never went live — never answer this from drafts.
   → **LinkedIn** - [AI ka Future](posts/23) — Jun 10, published
   → If context.publishedPosts is empty: "Nothing has been published yet." and, if
-    context.counts.draftPosts > 0, add the number waiting.
+    context.counts.pendingApprovalPosts > 0, add the number waiting.
+
+- User: "kitne drafts / posts pending hain?"
+  → Numbers ONLY from context.counts, never from the length of a list — lists are
+    capped at 10 and are only the newest rows.
+  → **<counts.pendingApprovalPosts> posts** approval ke intezar mein, plus
+    counts.draftPosts if > 0 — [approvals dekhein](approvals/)
 
 - User: "koi email aayi?"
   → context.lastEmail se: **<subject>** from <from_address> — [open](inbox/<msg_id>)

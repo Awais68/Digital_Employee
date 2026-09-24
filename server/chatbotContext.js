@@ -49,6 +49,9 @@ const QUERIES = {
        (SELECT COUNT(*) FROM emails WHERE status = 'unread')           AS unread_emails,
        (SELECT COUNT(*) FROM scheduled_posts WHERE status = 'draft')   AS draft_posts,
        (SELECT COUNT(*) FROM scheduled_posts
+          WHERE status = 'pending_approval')                           AS pending_approval_posts,
+       (SELECT COUNT(*) FROM hitl_requests WHERE status = 'pending')   AS pending_hitl,
+       (SELECT COUNT(*) FROM scheduled_posts
           WHERE status IN ('published','posted','sent'))               AS published_posts`,
   ],
 };
@@ -90,7 +93,7 @@ async function getDashboardContext() {
     pendingApprovals: [],
     lastPublishedPost: null,
     lastEmail: null,
-    counts: { pendingTodos: 0, unreadEmails: 0, draftPosts: 0, publishedPosts: 0 },
+    counts: { pendingTodos: 0, unreadEmails: 0, draftPosts: 0, pendingApprovalPosts: 0, pendingHitl: 0, publishedPosts: 0 },
     errors: [],
   };
 
@@ -114,6 +117,8 @@ async function getDashboardContext() {
         pendingTodos: Number(c.pending_todos || 0),
         unreadEmails: Number(c.unread_emails || 0),
         draftPosts: Number(c.draft_posts || 0),
+        pendingApprovalPosts: Number(c.pending_approval_posts || 0),
+        pendingHitl: Number(c.pending_hitl || 0),
         publishedPosts: Number(c.published_posts || 0),
       };
     } else {
