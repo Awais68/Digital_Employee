@@ -468,6 +468,20 @@ export default function SocialMedia() {
     }
   }
 
+  const handleApproveSchedule = async (postId) => {
+    setPublishing(prev => ({ ...prev, [postId]: true }))
+    try {
+      const res = await axios.post(`/api/posts/${postId}/approve-schedule`)
+      success(`Scheduled for ${new Date(res.data.scheduled_for).toLocaleString()}`)
+      setPendingApproval(prev => prev.filter(p => p.id !== postId))
+      fetchData()
+    } catch (e) {
+      toastError(e.response?.data?.error || e.message)
+    } finally {
+      setPublishing(prev => ({ ...prev, [postId]: false }))
+    }
+  }
+
   const [topicSuggestions, setTopicSuggestions] = useState([])
   const [customTopics, setCustomTopics] = useState([])
   const [newTopic, setNewTopic] = useState('')
@@ -1045,6 +1059,13 @@ export default function SocialMedia() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {post.scheduled_for && new Date(post.scheduled_for) > new Date() && (
+                    <button onClick={() => handleApproveSchedule(post.id)} disabled={publishing[post.id]}
+                      className="flex items-center gap-2 px-4 py-2 rounded font-bold text-xs dark:bg-blue-500/20 dark:text-blue-400 bg-blue-50 text-blue-600 disabled:opacity-50">
+                      <Clock size={14} />
+                      Approve & Schedule
+                    </button>
+                  )}
                   <button onClick={() => handleApprove(post.id)} disabled={publishing[post.id]}
                     className="flex items-center gap-2 px-4 py-2 rounded font-bold text-xs dark:bg-[#00FF88] dark:text-[#0A0A0F] bg-green-500 text-white disabled:opacity-50">
                     {publishing[post.id] ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}

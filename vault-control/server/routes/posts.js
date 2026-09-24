@@ -294,25 +294,27 @@ router.post('/generate', requireAdmin, async (req, res) => {
     const result = await generateDailyPosts(topic, platforms)
     console.log('[PostGen] Success:', result.posts?.length, 'posts generated')
 
+    // AI-written posts are parked in pending_approval. The due scheduler only
+    // publishes status='scheduled', so nothing goes out until the owner either
+    // publishes it or approves it for its slot (/:id/approve-schedule).
+    const grouped = {}
     for (const post of result.posts) {
-      await query(`
+      const row = await query(`
         INSERT INTO scheduled_posts
           (topic, platform, content, image_url, scheduled_for, status, hashtags, mentions)
-        VALUES ($1,$2,$3,$4,$5,'scheduled',$6,$7)
+        VALUES ($1,$2,$3,$4,$5,'pending_approval',$6,$7)
+        RETURNING id
       `, [
         result.topic, post.platform, post.content, post.imageUrl,
         post.scheduledFor,
         JSON.stringify(post.hashtags || []),
         JSON.stringify(post.mentions || []),
       ])
-      // status='scheduled' — re-arm the exact-time publish timer
-      reschedule('post-scheduled').catch(() => {})
-    }
-
-    const grouped = {}
-    for (const post of result.posts) {
       if (!grouped[post.platform]) grouped[post.platform] = []
-      grouped[post.platform].push({ ...post, imageUrl: toClientImageUrl(post.imageUrl) })
+      grouped[post.platform].push({
+        ...post, id: row.rows[0].id, status: 'pending_approval',
+        imageUrl: toClientImageUrl(post.imageUrl),
+      })
     }
     res.json({ success: true, topic: result.topic, posts: grouped })
   } catch (e) {
@@ -391,6 +393,30 @@ router.post('/:id/approve-publish', requireAdmin, async (req, res) => {
     // "Failed to publish on 96" and dropped e.message, so the notification told
     // the user nothing about what actually broke.
     createNotification('error', 'Post Failed', `Post #${req.params.id} failed to publish: ${e.message}`, { source: 'post', id: req.params.id })
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// POST /:id/approve-schedule — the owner approves an AI-written post for its
+// planned slot. Only this (or /compose with a schedule time) makes a post
+// 'scheduled', i.e. eligible for unattended publishing.
+router.post('/:id/approve-schedule', requireAdmin, async (req, res) => {
+  try {
+    const r = await query(
+      `UPDATE scheduled_posts SET status='scheduled'
+        WHERE id=$1 AND status='pending_approval' AND scheduled_for > NOW()
+        RETURNING id, platform, scheduled_for`,
+      [req.params.id]
+    )
+    if (!r.rows[0]) {
+      const cur = (await query('SELECT status, scheduled_for FROM scheduled_posts WHERE id=$1', [req.params.id])).rows[0]
+      if (!cur) return res.status(404).json({ error: 'Post not found' })
+      if (cur.status !== 'pending_approval') return res.status(409).json({ error: `Post is already ${cur.status}` })
+      return res.status(400).json({ error: 'Scheduled time has passed — publish it now or edit the time' })
+    }
+    reschedule('post-approved').catch(() => {})
+    res.json({ success: true, ...r.rows[0] })
+  } catch (e) {
     res.status(500).json({ error: e.message })
   }
 })

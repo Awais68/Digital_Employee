@@ -644,7 +644,7 @@ export async function generateDailyPosts(topicInput, platforms = ['linkedin', 'f
         resizedImages,
         scheduledFor: scheduledTime.toISOString(),
         timeLabel: time.label,
-        status: 'scheduled',
+        status: 'pending_approval',
       });
     }
 
