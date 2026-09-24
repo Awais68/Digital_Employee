@@ -235,11 +235,67 @@ export async function postToTwitter(text, imageUrl = null) {
 }
 
 // ── Unified publish dispatcher ──
+//
+// Every code path that puts something on a social network goes through here
+// (dueScheduler, HITL approval, /api/posts approve, chatbot), so this is where
+// the project's hard rules live:
+//   • DRY_RUN=true          → nothing leaves the building, a simulated result comes back
+//   • ≤ N posts/day/platform (MAX_POSTS_PER_DAY_PER_PLATFORM, default 5)
+//   • ≥ 60 s between posts on the same platform (MIN_POST_SPACING_SECONDS)
+// The limits fail CLOSED: if the DB cannot be asked, the post is refused.
+
+const MAX_POSTS_PER_DAY_PER_PLATFORM = Math.max(1, parseInt(process.env.MAX_POSTS_PER_DAY_PER_PLATFORM || '5', 10) || 5)
+const MIN_POST_SPACING_MS = Math.max(0, parseInt(process.env.MIN_POST_SPACING_SECONDS || '60', 10) || 60) * 1000
+const lastPublishAt = new Map()   // platform → epoch ms, in-process backstop for the DB check
+
+export class PublishLimitError extends Error {
+  constructor(message, code) { super(message); this.name = 'PublishLimitError'; this.code = code }
+}
+
+export async function assertPublishAllowed(platform) {
+  const { query } = await import('../database/connection.js')
+  const r = await query(
+    `SELECT COUNT(*)::int AS n, MAX(published_at) AS last
+       FROM scheduled_posts
+      WHERE platform = $1 AND status = 'published'
+        AND published_at >= date_trunc('day', NOW())`,
+    [platform]
+  )
+  const row = r.rows[0] || { n: 0, last: null }
+  if (row.n >= MAX_POSTS_PER_DAY_PER_PLATFORM) {
+    throw new PublishLimitError(
+      `Daily limit reached for ${platform}: ${row.n}/${MAX_POSTS_PER_DAY_PER_PLATFORM} posts already published today`,
+      'daily_limit'
+    )
+  }
+  const lastDb  = row.last ? new Date(row.last).getTime() : 0
+  const lastMem = lastPublishAt.get(platform) || 0
+  const since   = Date.now() - Math.max(lastDb, lastMem)
+  if (since < MIN_POST_SPACING_MS) {
+    throw new PublishLimitError(
+      `Too soon for ${platform}: last post ${Math.round(since / 1000)}s ago, minimum spacing is ${MIN_POST_SPACING_MS / 1000}s`,
+      'spacing'
+    )
+  }
+}
 
 export async function publishPost(post) {
   const platform = post.platform?.toLowerCase()
   const text = post.content
   const imageUrl = post.image_url || null
+
+  if (!['facebook', 'linkedin', 'instagram', 'twitter'].includes(platform)) {
+    throw new Error(`Unknown platform: ${platform}. Supported: facebook, linkedin, instagram, twitter`)
+  }
+
+  if (process.env.DRY_RUN === 'true') {
+    console.log(`[DRY RUN] Would publish to ${platform}:`, String(text || '').substring(0, 80))
+    return { success: true, dry_run: true, id: 'dry-run', url: null, post_url: null,
+             message: `DRY_RUN=true — ${platform} post simulated, nothing published` }
+  }
+
+  await assertPublishAllowed(platform)
+  lastPublishAt.set(platform, Date.now())
 
   if (platform === 'facebook') return postToFacebook(text, imageUrl)
   if (platform === 'linkedin') return postToLinkedIn(text, imageUrl)

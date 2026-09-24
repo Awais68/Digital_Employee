@@ -143,3 +143,11 @@ Metrics/*.json
 Signals/*.json
 processed_messages.json
 Dashboard.md
+
+# Generated at runtime / never source
+*.bak
+.whatsapp_session/
+.wwebjs_auth/
+.wwebjs_cache/
+vault-control/public/generated/
+.deploy-stamps/

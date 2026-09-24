@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync } from 'fs'
 import net from 'net'
+import crypto from 'crypto'
 import chokidar from 'chokidar'
 import compression from 'compression'
 import { refreshAndBroadcast, getVaultCounts, getRecentActivity, getPendingApprovals, getServiceStatus } from './system-status.js'
@@ -86,19 +87,26 @@ app.use((req, res, next) => {
   next()
 })
 
-// CORS - configurable (supports * or specific origin)
+// CORS. CORS_ORIGIN is a comma-separated allow-list; '*' reflects any origin.
+// Default in production is the dashboard's own domains — the old default
+// reflected every Origin AND sent Allow-Credentials, which is the one
+// combination browsers otherwise refuse to allow.
+const CORS_ALLOWED = (process.env.CORS_ORIGIN ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://digitalfte.online,https://www.digitalfte.online'
+    : '*'))
+  .split(',').map(s => s.trim()).filter(Boolean)
+const CORS_ANY = CORS_ALLOWED.includes('*')
 app.use((req, res, next) => {
-  const allowedOrigin = process.env.CORS_ORIGIN || '*'
   const origin = req.headers.origin
-  if (allowedOrigin === '*') {
-    res.header('Access-Control-Allow-Origin', origin || '*')
-  } else {
-    res.header('Access-Control-Allow-Origin', allowedOrigin)
+  if (origin && (CORS_ANY || CORS_ALLOWED.includes(origin))) {
+    res.header('Access-Control-Allow-Origin', origin)
+    res.header('Vary', 'Origin')
+    if (!CORS_ANY) res.header('Access-Control-Allow-Credentials', 'true')
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key')
-  res.header('Access-Control-Allow-Credentials', 'true')
-  if (req.method === 'OPTIONS') return res.sendStatus(200)
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key, X-Internal-Token')
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
   next()
 })
 
@@ -110,9 +118,14 @@ app.use('/api/generated', express.static(join(__dirname, '../public/generated'),
 
 app.use('/api', rateLimiter({ windowMs: 15 * 60 * 1000, max: 1000 }))
 
-// ─── AUTH-FREE ROUTES (registered before auth middleware) ──────
-app.use('/api/notifications', notificationsRouter)
-app.use('/api/whatsapp',      optionalAuth, whatsappRouter)  // optionalAuth => req.user set so requireAdmin enforces admin on write routes; GET reads stay public
+// ─── ROUTES MOUNTED BEFORE THE GLOBAL AUTH MIDDLEWARE ──────────
+// With ENABLE_AUTH these still require a login: the old "reads stay public"
+// mount leaked the WhatsApp QR, every chat/message row and all notifications
+// to anyone who could reach the API host. Without ENABLE_AUTH (local dev)
+// optionalAuth keeps them open but still populates req.user for requireAdmin.
+const dashboardGate = ENABLE_AUTH ? authenticateToken : optionalAuth
+app.use('/api/notifications', dashboardGate, notificationsRouter)
+app.use('/api/whatsapp',      dashboardGate, whatsappRouter)
 app.use('/api/auth',          authRouter)
 
 // CSRF token endpoint
@@ -160,9 +173,10 @@ app.get('/api/health', (req, res) => {
 // ─── AUTH MIDDLEWARE (optional - enabled via ENABLE_AUTH=true) ──
 if (ENABLE_AUTH) {
   app.use('/api', (req, res, next) => {
-    // Skip auth for routes registered above
-    if (req.path.startsWith('/chat/') || req.path.startsWith('/notifications/') || req.path.startsWith('/whatsapp/') ||
-        req.path.startsWith('/internal/') || req.path.startsWith('/csrf-token') ||
+    // Skip auth only for routes that carry their own gate: /internal/* is
+    // protected by internalOnly (shared token) below, the rest are public by
+    // design. /chat, /notifications and /whatsapp are NOT exempt any more.
+    if (req.path.startsWith('/internal/') || req.path.startsWith('/csrf-token') ||
         // LinkedIn redirects the browser here with no Bearer header; the
         // single-use `state` minted by /tokens/linkedin/auth-url is the auth.
         req.path === '/tokens/linkedin/callback' ||
@@ -193,14 +207,43 @@ app.use('/api/oracle', oracleCloudRouter)
 app.use('/api/analytics', analyticsRouter)
 app.use('/api/tokens', tokensRouter)
 
-// Chatbot SSE — eventBus injected after import (already initialized above)
-// optionalAuth (not authenticateToken) so chat stays usable without login, but
-// req.user is populated — the router uses it to gate outward-facing actions
-// (send email / publish post / WhatsApp) to admins when ENABLE_AUTH is on.
+// Chatbot SSE — eventBus injected after import (already initialized above).
+// With ENABLE_AUTH the global middleware above already demands a login (every
+// chat turn is a paid DeepSeek call, so it must not be reachable anonymously);
+// optionalAuth here populates req.user for the admin gate on outward actions.
 setChatbotEventBus(chatbotEventBus)
 app.use('/api', optionalAuth, chatbotRouter)
 
-// Internal notification endpoint (localhost only, no auth)
+// ─── INTERNAL ENDPOINTS (gmail_watcher.py → server) ────────────
+// These used to be "localhost only" in name only: nginx proxies /api/ from the
+// internet and the handlers never checked the caller. They are now gated by a
+// shared secret (INTERNAL_API_TOKEN in .env, sent by gmail_watcher.py as
+// X-Internal-Token). When the token is unset, only true loopback sockets pass —
+// behind nginx every request looks like loopback, so production MUST set it
+// (remote_deploy.sh refuses to start otherwise) and nginx also denies
+// /api/internal at the edge as a second layer.
+const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
+if (!INTERNAL_API_TOKEN) {
+  console.warn('[Security] INTERNAL_API_TOKEN is not set — /api/internal/* only accepts loopback callers')
+}
+function internalOnly(req, res, next) {
+  const presented = req.headers['x-internal-token']
+  if (INTERNAL_API_TOKEN) {
+    const a = Buffer.from(String(presented || ''))
+    const b = Buffer.from(INTERNAL_API_TOKEN)
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return next()
+    return res.status(401).json({ success: false, error: 'internal endpoint' })
+  }
+  const ip = req.socket?.remoteAddress || ''
+  const loopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
+  // Proxied traffic carries X-Forwarded-For / X-Real-IP; refuse it even when
+  // the socket itself is local.
+  if (loopback && !req.headers['x-forwarded-for'] && !req.headers['x-real-ip']) return next()
+  return res.status(401).json({ success: false, error: 'internal endpoint' })
+}
+app.use('/api/internal', internalOnly)
+
+// Internal notification endpoint
 app.post('/api/internal/notify', express.json(), async (req, res) => {
   const { notify } = await import('./services/notificationService.js')
   const { type, title, message, data } = req.body

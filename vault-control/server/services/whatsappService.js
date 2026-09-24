@@ -115,7 +115,23 @@ let chatsFailStreak = 0
 const FAIL_BACKOFF_MS  = 15000
 const FAIL_BACKOFF_MAX = 120000
 
+// Single switch for this host. ecosystem.config.js passes ENABLE_WHATSAPP
+// through from .env; the 1 GB VM keeps it 'false'. Every entry point
+// (startup, /restart, /scan-qr, reconnect) must honour it — previously only
+// startup did, so one admin click on "Scan QR" started a headless Chrome on
+// the VM that then crash-looped ("Target closed") at load 7+.
+export const isWhatsAppEnabled = () => process.env.ENABLE_WHATSAPP !== 'false'
+
+// How many reconnects to attempt while there is no saved session. Without a
+// session every attempt just launches Chrome to draw a QR nobody scans.
+const MAX_RECONNECTS_WITHOUT_SESSION = 3
+
 export async function initWhatsApp() {
+  if (!isWhatsAppEnabled()) {
+    waStatus = 'disabled'
+    console.log('[WhatsApp] Disabled via ENABLE_WHATSAPP=false — client not started')
+    return
+  }
   if (initTried && waClient) {
     console.log('[WhatsApp] Already initialized, status:', waStatus)
     return
@@ -304,6 +320,19 @@ export async function initWhatsApp() {
 // client emits a fresh QR — either way the service never stays dead.
 function scheduleReconnect(reason) {
   if (reconnectTimer) return
+  if (!isWhatsAppEnabled()) {
+    console.log('[WhatsApp] Reconnect skipped — ENABLE_WHATSAPP=false')
+    return
+  }
+  if (!hasSavedSession() && reconnectAttempts >= MAX_RECONNECTS_WITHOUT_SESSION) {
+    console.warn(
+      `[WhatsApp] No saved session after ${reconnectAttempts} attempts — giving up until an admin` +
+      ' triggers POST /api/whatsapp/scan-qr'
+    )
+    waStatus = 'disconnected'
+    broadcast('whatsapp:status', { status: 'disconnected', reason: 'no-session' })
+    return
+  }
   const delay = Math.min(10000 * Math.pow(2, reconnectAttempts), 300000)
   reconnectAttempts += 1
   console.log(
@@ -652,6 +681,10 @@ export async function getLiveChatMessages(chatId, limit = 50) {
 }
 
 export async function forceQRRegen() {
+  if (!isWhatsAppEnabled()) {
+    console.log('[WhatsApp] QR regeneration refused — ENABLE_WHATSAPP=false on this host')
+    return { success: false, error: 'WhatsApp is disabled on this host (ENABLE_WHATSAPP=false)' }
+  }
   console.log('[WhatsApp] Force QR regeneration requested — clearing session...')
   if (waClient) {
     try { waClient.destroy() } catch {}

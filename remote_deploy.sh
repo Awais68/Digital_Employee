@@ -49,6 +49,14 @@ if systemctl list-unit-files digitalfte-server.service >/dev/null 2>&1 \
   sudo systemctl disable --now digitalfte-server || true
 fi
 
+# 3b. /api/internal/* is gated by a shared secret; mint one on first deploy so
+# the server never runs with the endpoints unprotected.
+if ! grep -q '^INTERNAL_API_TOKEN=.\+' .env 2>/dev/null; then
+  echo "🔑 Generating INTERNAL_API_TOKEN in .env" | tee -a "$LOG"
+  sed -i '/^INTERNAL_API_TOKEN=$/d' .env 2>/dev/null || true
+  printf '\nINTERNAL_API_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
+fi
+
 # 4. Reload under PM2 (starts missing apps, restarts changed ones, re-reads .env)
 echo "🔄 pm2 startOrReload ecosystem.config.js" | tee -a "$LOG"
 chmod +x "$PROJECT"/*.sh 2>/dev/null || true

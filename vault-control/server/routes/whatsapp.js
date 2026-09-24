@@ -257,6 +257,9 @@ router.post('/:id/read', requireAdmin, (req, res) => {
 
 // POST /restart — restart WhatsApp service (generates new QR)
 router.post('/restart', requireAdmin, async (req, res) => {
+  if (process.env.ENABLE_WHATSAPP === 'false') {
+    return res.status(409).json({ success: false, error: 'WhatsApp is disabled on this host (ENABLE_WHATSAPP=false)' })
+  }
   try {
     const ws = await import('../services/whatsappService.js')
     await ws.initWhatsApp()
@@ -268,6 +271,9 @@ router.post('/restart', requireAdmin, async (req, res) => {
 
 // POST /scan-qr — force QR regeneration (destroy session, restart client)
 router.post('/scan-qr', requireAdmin, async (req, res) => {
+  if (process.env.ENABLE_WHATSAPP === 'false') {
+    return res.status(409).json({ success: false, error: 'WhatsApp is disabled on this host (ENABLE_WHATSAPP=false)' })
+  }
   try {
     const ws = await import('../services/whatsappService.js')
     await ws.forceQRRegen()

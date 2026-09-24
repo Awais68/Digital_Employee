@@ -11,7 +11,8 @@ const ENABLE_AUTH = process.env.ENABLE_AUTH === "true";
 
 // Actions that leave the building (real mail, real posts). When auth is on these
 // require an admin; read-only + vault-local actions stay open like the rest of /chat.
-const OUTWARD_ACTIONS = new Set(["SEND_EMAIL", "PUBLISH_POST", "SEND_WHATSAPP"]);
+// APPROVE_DRAFT releases a post to the scheduler, so it counts as outward too.
+const OUTWARD_ACTIONS = new Set(["SEND_EMAIL", "PUBLISH_POST", "SEND_WHATSAPP", "APPROVE_DRAFT"]);
 
 // DB connection (ESM with named exports — Node >= 22.12 supports require() of ESM)
 let db = null;
@@ -86,10 +87,15 @@ async function handleCreateDraft(action, eventBus) {
 }
 
 async function handleApproveDraft(action, eventBus) {
+  // status='scheduled' + scheduled_for is what dueScheduler publishes. The old
+  // status='approved' was a dead end: nothing in the system ever picked it up,
+  // so every draft approved from the chat silently never went out.
   const db = await getDb();
   const result = await db.query(
-    `UPDATE scheduled_posts SET status='approved' WHERE id=$1
-     RETURNING id, platform, content, status`,
+    `UPDATE scheduled_posts
+        SET status='scheduled', scheduled_for = COALESCE(scheduled_for, NOW())
+      WHERE id=$1 AND status IN ('pending_approval','approved','draft','failed')
+     RETURNING id, platform, content, status, scheduled_for`,
     [action.draftId],
   );
   if (result.rows.length === 0)
@@ -277,8 +283,10 @@ async function handleSendEmail(action, eventBus) {
 }
 
 // ─── PUBLISH_POST ─────────────────────────────────────────────────────────────
-// Actually publishes to the platform(s), then records each attempt in
-// scheduled_posts — mirrors what POST /api/posts/publish-now does.
+// Queues one pending_approval row per platform. It does NOT publish: every
+// social post needs a human approval (dashboard "Approve" or the WhatsApp HITL
+// flow), same as the daily scheduler's own drafts. The old handler called
+// publishPost() straight from a chat message.
 const SUPPORTED_PLATFORMS = ["facebook", "linkedin", "instagram", "twitter"];
 
 async function handlePublishPost(action, eventBus) {
@@ -296,70 +304,49 @@ async function handlePublishPost(action, eventBus) {
   }
 
   const db = await getDb();
-  const { publishPost } = await import(
-    "../vault-control/server/services/socialMediaService.js"
-  );
-
   const imageUrl = action.imageUrl || null;
   const results = [];
 
   for (const platform of platforms) {
-    // Instagram's Graph API has no text-only post; fail loudly instead of
-    // surfacing a raw API error through the chat.
     if (platform === "instagram" && !imageUrl) {
-      results.push({
-        platform,
-        success: false,
-        error: "Instagram needs an image — provide imageUrl.",
-      });
+      results.push({ platform, success: false, error: "Instagram needs an image — provide imageUrl." });
       continue;
     }
-
     try {
-      const r = await publishPost({ platform, content, image_url: imageUrl });
-      if (r?.success) {
-        const inserted = await db.query(
-          `INSERT INTO scheduled_posts (platform, content, topic, image_url, status, post_url, published_at)
-           VALUES ($1, $2, $3, $4, 'published', $5, NOW())
-           RETURNING id, platform, status, post_url, published_at`,
-          [platform, content, action.topic || null, imageUrl, r.url || null],
-        );
-        const post = inserted.rows[0];
-        results.push({ platform, success: true, url: r.url || null, id: post.id });
-        eventBus?.emit("post:published", post);
-        global.wsBroadcast?.({ type: "post:published", post });
-      } else {
-        const error = r?.message || r?.error || "Unknown platform error";
-        await db
-          .query(
-            `INSERT INTO scheduled_posts (platform, content, topic, image_url, status)
-             VALUES ($1, $2, $3, $4, 'failed')`,
-            [platform, content, action.topic || null, imageUrl],
-          )
-          .catch(() => {});
-        results.push({ platform, success: false, error });
-      }
+      const inserted = await db.query(
+        `INSERT INTO scheduled_posts (platform, content, topic, image_url, scheduled_for, status)
+         VALUES ($1, $2, $3, $4, NOW(), 'pending_approval')
+         RETURNING id, platform, status, scheduled_for`,
+        [platform, content, action.topic || null, imageUrl],
+      );
+      const post = inserted.rows[0];
+      results.push({ platform, success: true, id: post.id, status: "pending_approval" });
+      eventBus?.emit("post:pending_approval", post);
+      global.wsBroadcast?.({ type: "post:pending_approval", post });
     } catch (e) {
       results.push({ platform, success: false, error: e.message });
     }
   }
 
-  const summary = results
-    .map((r) => `${r.platform}: ${r.success ? "posted" : "failed — " + r.error}`)
-    .join(" | ");
-  const anySuccess = results.some((r) => r.success);
-
-  await notifyDashboard(
-    anySuccess ? "success" : "error",
-    anySuccess ? "Post published from chat" : "Post publish failed",
-    summary,
-    { results },
-  );
-
-  return { success: anySuccess, results, summary };
+  const queued = results.filter((r) => r.success);
+  if (queued.length) {
+    await notifyDashboard(
+      "warning",
+      "Post awaiting approval",
+      `${queued.map((r) => r.platform).join(", ")}: ${content.substring(0, 60)}`,
+      { source: "chatbot", ids: queued.map((r) => r.id) },
+    );
+  }
+  return {
+    success: queued.length > 0,
+    pending_approval: true,
+    message: queued.length
+      ? "Queued for human approval — approve it from the dashboard (Posts → Pending) or via WhatsApp HITL. Nothing is live yet."
+      : "No post could be queued.",
+    results,
+  };
 }
 
-// ─── GET_LAST_POST ────────────────────────────────────────────────────────────
 async function handleGetLastPost(action) {
   const db = await getDb();
   const platform = action.platform ? String(action.platform).toLowerCase() : null;
@@ -380,12 +367,45 @@ async function handleGetLastPost(action) {
 }
 
 async function handleSendWhatsApp(action, eventBus) {
-  // WhatsApp send — eventBus se handle hota hai (whatsappService)
-  eventBus?.emit("chatbot:send_whatsapp", {
-    phone: action.phone,
-    message: action.message,
-  });
-  return { success: true, queued: true };
+  // WhatsApp replies are NEVER sent automatically (hard rule: strict rate
+  // limits, human-in-the-loop always). The old handler emitted an event that
+  // nothing listened to and reported "queued". Now it writes a draft to
+  // Pending_Approval/ with YAML frontmatter; the owner moves it to Approved/.
+  const phone = String(action.phone || "").replace(/[^\d+]/g, "");
+  const message = String(action.message || "").trim();
+  if (!phone || !message) return { success: false, error: "phone and message are required" };
+
+  const dir = path.join(PROJECT_ROOT, "Pending_Approval");
+  fs.mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const file = path.join(dir, `whatsapp_reply_${stamp}.md`);
+  const body = [
+    "---",
+    "type: whatsapp_reply",
+    "source: chatbot",
+    `to: "${phone}"`,
+    `created: ${new Date().toISOString()}`,
+    "status: pending_approval",
+    "auto_send: false",
+    "---",
+    "",
+    `# WhatsApp reply to ${phone}`,
+    "",
+    message,
+    "",
+    "> Move this file to Approved/ to release it. WhatsApp messages are never sent without a human.",
+    "",
+  ].join("\n");
+  fs.writeFileSync(file, body);
+  await notifyDashboard("warning", "WhatsApp reply awaiting approval",
+    `To ${phone}: ${message.substring(0, 60)}`, { source: "chatbot", file: path.basename(file) });
+  eventBus?.emit("chatbot:whatsapp_draft", { phone, file });
+  return {
+    success: true,
+    pending_approval: true,
+    file: path.basename(file),
+    message: "Draft saved to Pending_Approval/. It will NOT be sent until a human approves it.",
+  };
 }
 
 // ─── Main action executor ─────────────────────────────────────────────────────

@@ -849,6 +849,7 @@ thread_id: {email.thread_id}
             try:
                 notify_resp = requests.post(
                     f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/notify",
+                    headers=_internal_headers(),
                     json={
                         'type': 'urgent' if email.priority == 'high' else 'info',
                         'title': f'📧 {"🔴 URGENT" if email.priority == "high" else "New"} Email',
@@ -1063,6 +1064,7 @@ thread_id: {email.thread_id}
         try:
             resp = _http_session.post(
                 f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/process-email",
+                headers=_internal_headers(),
                 json={
                     'subject': email.subject,
                     'sender': email.from_addr,
@@ -1180,7 +1182,15 @@ thread_id: {email.thread_id}
 
         try:
             while self.running:
-                self.run()
+                # run() only has try/finally: any uncaught error (Gmail API
+                # 5xx, socket reset, JSON decode) used to escape here and kill
+                # the daemon — PM2 then restarted it every few minutes.
+                try:
+                    self.run()
+                except KeyboardInterrupt:
+                    raise
+                except Exception as exc:
+                    logger.exception(f"Watcher iteration failed, retrying next cycle: {exc}")
                 logger.info(f"Next check in {self.check_interval} seconds...")
 
                 # Sleep with interrupt check
@@ -1202,6 +1212,13 @@ thread_id: {email.thread_id}
 # STANDALONE PROCESSING FUNCTIONS
 # =============================================================================
 
+def _internal_headers() -> dict:
+    """Shared-secret header for /api/internal/* on the vault-control server.
+    Must match INTERNAL_API_TOKEN in the server's .env."""
+    token = os.getenv('INTERNAL_API_TOKEN', '').strip()
+    return {'X-Internal-Token': token} if token else {}
+
+
 def classify_email(email: EmailData, ai_endpoint: str = None) -> str:
     """Use AI to classify email into a category (Support, Invoice, etc.)."""
     endpoint = ai_endpoint or (
@@ -1210,6 +1227,7 @@ def classify_email(email: EmailData, ai_endpoint: str = None) -> str:
     try:
         resp = requests.post(
             endpoint,
+            headers=_internal_headers(),
             json={
                 'subject': email.subject,
                 'sender': email.from_addr,
@@ -1271,6 +1289,7 @@ def notify_dashboard(event_type: str, title: str, message: str,
     try:
         resp = requests.post(
             f"http://localhost:{os.getenv('PORT', '3000')}/api/internal/notify",
+            headers=_internal_headers(),
             json={
                 'type': event_type,
                 'title': title,
