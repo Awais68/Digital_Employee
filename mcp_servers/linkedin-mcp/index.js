@@ -163,6 +163,31 @@ function makeUrn(urn) {
   return `urn:li:person:${urn}`;
 }
 
+// A post can only be authored by the member who owns the access token, so the
+// author id comes from that token (/userinfo `sub`) rather than from config.
+// LINKEDIN_URN is only a fallback: a stale or placeholder value there used to
+// make every post fail with a 422 on /author.
+const _urnByToken = new Map();
+
+async function resolveAuthorUrn() {
+  const st = readLinkedinState();
+  if (st.accessToken && _urnByToken.has(st.accessToken)) return _urnByToken.get(st.accessToken);
+
+  const res = await linkedinRequest('get', `${LINKEDIN_API}/userinfo`);
+  if (res.status < 400 && res.data?.sub) {
+    const urn = makeUrn(res.data.sub);
+    // Key on the token actually used — linkedinRequest may have refreshed it.
+    _urnByToken.set(readLinkedinState().accessToken || st.accessToken, urn);
+    return urn;
+  }
+
+  if (/^[A-Za-z0-9_-]+$/.test(st.userUrn) && !/your|example|placeholder/i.test(st.userUrn)) {
+    console.error(`LinkedIn /userinfo failed (${res.status}); falling back to LINKEDIN_URN`);
+    return makeUrn(st.userUrn);
+  }
+  throw new Error(`Cannot resolve LinkedIn author: /userinfo returned ${res.status} and LINKEDIN_URN is not set to a real id`);
+}
+
 // MCP Server
 const server = new Server(
   {
@@ -206,8 +231,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'post_to_linkedin': {
-        const st = readLinkedinState();
-        const author = makeUrn(st.userUrn);
+        const author = await resolveAuthorUrn();
 
         const shareCommentary = { text: args.text };
         // NOTE: Attributes (hashtag/mention entities) intentionally omitted.
