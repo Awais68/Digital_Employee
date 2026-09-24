@@ -52,7 +52,7 @@ Jab post ya email show karo:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CURRENT DASHBOARD DATA:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${JSON.stringify(context, null, 2)}
+${JSON.stringify(context)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ANSWER EXAMPLES (follow exactly):
@@ -180,8 +180,41 @@ function getOpenRouterKey() {
 // AI provider chain: primary first, fallbacks after. A provider is only
 // included if its key is present. All endpoints are OpenAI-compatible SSE
 // (choices[].delta.content), including Groq, so one parser serves all.
-function getProviderChain() {
+// DeepSeek peak/off-peak rule is shared with vault-control (ESM, so loaded via
+// dynamic import). If it can't load, treat DeepSeek as primary.
+async function getDeepSeekMode() {
+  try {
+    const { deepSeekMode } = await import('../vault-control/server/services/deepseekPeak.js');
+    return deepSeekMode();
+  } catch (err) {
+    console.error(`[Chatbot] deepseekPeak unavailable: ${err.message}`);
+    return 'primary';
+  }
+}
+
+function getDeepSeekProvider() {
+  const key = process.env.DEEPSEEK_API_KEY;
+  if (!key || !key.startsWith('sk-')) return null;
+  const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+  return {
+    name: 'DeepSeek',
+    url: `${base}/chat/completions`,
+    key,
+    model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
+    // V4 models reason by default: 2-3x output tokens and empty content with a
+    // small max_tokens. Chat doesn't need it.
+    extraBody: { thinking: { type: process.env.DEEPSEEK_THINKING || 'disabled' } },
+  };
+}
+
+// Peak-hours rule (peak-hours.md): off-peak DeepSeek goes first; in peak
+// (2x price) it goes last or is dropped, per DEEPSEEK_PEAK_POLICY.
+async function getProviderChain() {
   const chain = [];
+  const deepseek = getDeepSeekProvider();
+  const dsMode = deepseek ? await getDeepSeekMode() : null;
+  if (deepseek && dsMode === 'primary') chain.push(deepseek);
+  else if (deepseek) console.log(`[Chatbot] DeepSeek peak hours — policy: ${dsMode}`);
 
   const orKey = getOpenRouterKey();
   if (orKey) {
@@ -205,6 +238,8 @@ function getProviderChain() {
       model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
     });
   }
+
+  if (deepseek && dsMode === 'last_resort') chain.push(deepseek);
 
   return chain;
 }
@@ -243,6 +278,7 @@ async function* streamFromProvider(provider, messages, context) {
       max_tokens: 2048,
       stream: true,
       messages: withLanguageDirective(messages, context),
+      ...provider.extraBody,
     }),
   });
 
@@ -277,14 +313,14 @@ async function* streamFromProvider(provider, messages, context) {
 }
 
 async function* streamChatResponse(messages, context) {
-  const chain = getProviderChain();
+  const chain = await getProviderChain();
   if (chain.length === 0) {
-    throw new Error('No AI provider configured (set OPENROUTER_API_KEY or GROQ_API_KEY)');
+    throw new Error('No AI provider configured (set DEEPSEEK_API_KEY, OPENROUTER_API_KEY or GROQ_API_KEY)');
   }
 
   let lastErr;
   for (const provider of chain) {
-    console.log(`[Chatbot] Trying ${provider.name} (model: ${provider.model}, key: ${provider.key.slice(0, 12)}...)`);
+    console.log(`[Chatbot] Trying ${provider.name} (model: ${provider.model})`);
     let yielded = false;
     try {
       for await (const text of streamFromProvider(provider, messages, context)) {

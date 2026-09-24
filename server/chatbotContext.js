@@ -53,6 +53,32 @@ const QUERIES = {
   ],
 };
 
+// Long text fields are cut to a preview. The bot only quotes a snippet plus a
+// [see more](posts/<id>) link, and full draft bodies pushed the prompt past
+// Groq's 8k TPM limit (10.9k tokens, every fallback request 413'd).
+const PREVIEW_LIMITS = {
+  drafts: { content: 200 },
+  publishedPosts: { content: 400 },
+  notifications: { message: 200 },
+  emails: { snippet: 200 },
+  pendingApprovals: { summary: 200 },
+};
+
+function truncate(text, max) {
+  if (typeof text !== "string" || text.length <= max) return text;
+  return text.slice(0, max).trimEnd() + "…";
+}
+
+function previewRows(key, rows) {
+  const limits = PREVIEW_LIMITS[key];
+  if (!limits) return rows;
+  return rows.map((row) => {
+    const out = { ...row };
+    for (const [field, max] of Object.entries(limits)) out[field] = truncate(out[field], max);
+    return out;
+  });
+}
+
 async function getDashboardContext() {
   const context = {
     timestamp: new Date().toISOString(),
@@ -91,7 +117,7 @@ async function getDashboardContext() {
         publishedPosts: Number(c.published_posts || 0),
       };
     } else {
-      context[key] = rows;
+      context[key] = previewRows(key, rows);
     }
   });
 

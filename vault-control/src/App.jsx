@@ -7,7 +7,7 @@ import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import ChatbotPanel from "./components/Chatbot/ChatbotPanel";
 import ChatbotButton from "./components/Chatbot/ChatbotButton";
-import { Loader2, Lock, AlertCircle } from "lucide-react";
+import { Loader2, Lock, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { usePageRoute } from "./hooks/usePageRoute";
 
 // Lazy load page components to reduce initial bundle size (bundle-dynamic-imports)
@@ -34,6 +34,7 @@ const PageLoader = () => (
 function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -132,16 +133,27 @@ function LoginPage() {
               <label htmlFor="password-input" className="block text-xs dark:text-[#7A7A85] text-gray-600 mb-1 font-semibold">
                 PASSWORD
               </label>
-              <input
-                id="password-input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-gray-900"
-                placeholder="Enter password"
-                required
-                minLength={6}
-              />
+              <div className="relative">
+                <input
+                  id="password-input"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-4 pr-12 py-3 rounded-lg dark:bg-[#1A1A24] dark:text-[#E0E0E6] bg-gray-50 text-gray-900"
+                  placeholder="Enter password"
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 dark:text-[#7A7A85] text-gray-500 hover:text-gray-700 dark:hover:text-[#E0E0E6]"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             <button

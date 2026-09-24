@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'vault-control/server/**'
+      - 'server/**'
       - 'vault-control/src/**'
       - 'vault-control/package.json'
       - 'vault-control/package-lock.json'
@@ -42,7 +43,8 @@ jobs:
       - name: Syntax-check server JS
         working-directory: vault-control
         run: |
-          for f in $(find server -name "*.js"); do
+          # ../server is the chatbot backend vault-control loads via require()
+          for f in $(find server ../server -name "*.js"); do
             node --check "$f" || exit 1
           done
           echo "✅ All server JS files OK"
@@ -86,7 +88,9 @@ jobs:
             --exclude='vault-control/dist' \
             --exclude='node_modules' \
             --exclude='.git' \
+            --exclude='*.bak*' \
             vault-control/server \
+            server \
             vault-control/package.json \
             vault-control/package-lock.json \
             mcp_servers \
