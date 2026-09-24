@@ -103,6 +103,11 @@ app.use((req, res, next) => {
 })
 
 // Rate limiting (global)
+// Same files under /api/: the API host's nginx only proxies /api, and <img>
+// tags carry no Bearer token, so these mount ahead of the auth middleware.
+app.use('/api/uploads', express.static(join(__dirname, '../public/uploads'), { maxAge: '7d' }))
+app.use('/api/generated', express.static(join(__dirname, '../public/generated'), { maxAge: '7d' }))
+
 app.use('/api', rateLimiter({ windowMs: 15 * 60 * 1000, max: 1000 }))
 
 // ─── AUTH-FREE ROUTES (registered before auth middleware) ──────

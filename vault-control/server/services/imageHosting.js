@@ -23,6 +23,8 @@ fs.mkdirSync(PUBLIC_DIR, { recursive: true })
 const LOCAL_SERVE_DIRS = {
   '/uploads/':   path.resolve(__dirname, '../../public/uploads'),
   '/generated/': path.resolve(__dirname, '../../public/generated'),
+  '/api/uploads/':   path.resolve(__dirname, '../../public/uploads'),
+  '/api/generated/': path.resolve(__dirname, '../../public/generated'),
 }
 
 function resolveLocalFile(source) {

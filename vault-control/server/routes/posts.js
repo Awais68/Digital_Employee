@@ -25,7 +25,9 @@ const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } })
 function toClientImageUrl(url) {
   if (typeof url !== 'string') return url
   const m = url.match(/^https?:\/\/[^/]+(\/(?:generated|uploads)\/.+)$/)
-  return m ? m[1] : url
+  // /api/ prefix: the API host's nginx only proxies /api, and the frontend
+  // prefixes /api/ paths with its API base (utils/axios.js assetUrl).
+  return m ? `/api${m[1]}` : url
 }
 
 const memoryUpload = multer({

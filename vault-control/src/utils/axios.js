@@ -2,6 +2,13 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 axios.defaults.baseURL = API_URL
+
+// Server-relative asset paths (/api/generated/..., /api/uploads/...) point at
+// the API host. On the deployed site the page is on a different origin, so an
+// <img> or fetch() with the bare path would hit the frontend host and 404.
+export function assetUrl(url) {
+  return typeof url === 'string' && url.startsWith('/api/') ? API_URL + url : url
+}
 axios.defaults.timeout = 30000
 
 const TOKEN_KEYS = ['token', 'auth_token', 'jwt', 'admin_token']

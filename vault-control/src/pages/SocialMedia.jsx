@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import axios from 'axios'
 import { useToast } from '../context/ToastContext'
+import { assetUrl } from '../utils/axios'
 
 const platforms = [
   { id: 'linkedin',  name: 'LinkedIn',  limit: 3000,  color: '#0A66C2', icon: Linkedin,  hashtagMax: 5,  hashtagMin: 3, minWords: 40, maxWords: 500,  requireImage: true },
@@ -234,12 +235,13 @@ export default function SocialMedia() {
 
       if (res.data.imageUrl) {
         // Download the generated image
-        const imgRes = await fetch(res.data.imageUrl)
+        const url = assetUrl(res.data.imageUrl)
+        const imgRes = await fetch(url)
         const blob = await imgRes.blob()
         const file = new File([blob], `generated_${Date.now()}.png`, { type: 'image/png' })
         
         setImageFile(file)
-        setImagePreview(res.data.imageUrl)
+        setImagePreview(url)
         success('Image generated automatically!')
       } else {
         toastError('Image generation failed')
@@ -527,7 +529,7 @@ export default function SocialMedia() {
           const workflow = {}
           const variants = {}
           for (const [platform, platformPosts] of Object.entries(res.data.posts)) {
-            images[platform] = platformPosts.map(p => p.imageUrl)
+            images[platform] = platformPosts.map(p => assetUrl(p.imageUrl))
             if (platformPosts[0]?.workflow) {
               workflow[platform] = platformPosts[0].workflow
             }
@@ -553,9 +555,10 @@ export default function SocialMedia() {
                 content: firstPost.content || topic.trim()
               }, { timeout: 300000 })
               if (imgRes.data.imageUrl) {
-                setImagePreview(imgRes.data.imageUrl)
+                const url = assetUrl(imgRes.data.imageUrl)
+                setImagePreview(url)
                 // Convert URL to File for publishing
-                const fetchRes = await fetch(imgRes.data.imageUrl)
+                const fetchRes = await fetch(url)
                 const blob = await fetchRes.blob()
                 const file = new File([blob], `ai_generated_${Date.now()}.jpg`, { type: 'image/jpeg' })
                 setImageFile(file)
@@ -996,7 +999,7 @@ export default function SocialMedia() {
 
                     <div className="space-y-3">
                       {(Array.isArray(posts) ? posts : [posts]).map((post, idx) => {
-                        const imageUrl = generatedImages[p.id] || generatedImages[p.id]?.[idx]
+                        const imageUrl = generatedImages[p.id]?.[idx]
                         return (
                           <div key={idx} className="p-4 rounded-lg dark:bg-[#1A1A24] bg-gray-50 border dark:border-[#1A1A24] border-gray-200">
                             {imageUrl && <img src={imageUrl} alt={`Generated for ${p.name}`} className="w-full h-40 object-cover rounded-lg mb-3" />}
