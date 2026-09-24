@@ -54,6 +54,10 @@ let serverReady = false
 let dbConnected = false
 
 const app = express()
+// nginx on the VM forwards X-Forwarded-For / X-Real-IP; trusting only the
+// loopback proxy makes req.ip the real client so the rate limiters (login
+// brute-force guard included) bucket per client instead of all-as-127.0.0.1.
+app.set('trust proxy', 'loopback')
 app.use(compression({
   filter: (req, res) => {
     // SSE streams must not be buffered by compression
