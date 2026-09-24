@@ -29,7 +29,14 @@ const common = {
   // Without this an unexpected exit-loop burns CPU until max_restarts is hit.
   min_uptime: 20000,
   kill_timeout: 10000,
+  // The production host is a 1 GB Oracle Always-Free VM. Without a cap a single
+  // leaking process pushes everything into swap, load climbs past 40 and sshd
+  // stops answering. Per-app caps below keep the total under ~600 MB.
+  max_memory_restart: '200M',
 };
+
+// V8 heap cap for the node apps; the RSS cap above is the backstop.
+const NODE_ARGS = '--max-old-space-size=192';
 
 module.exports = {
   apps: [
@@ -38,6 +45,10 @@ module.exports = {
       name: 'vault-control',
       script: 'vault-control/server/index.js',
       interpreter: 'node',
+      node_args: NODE_ARGS,
+      // Largest resident: express + pg pool + schedulers (+ WhatsApp Chrome
+      // when ENABLE_WHATSAPP=true, which the VM keeps off).
+      max_memory_restart: '350M',
       env: {
         NODE_ENV: 'production',
         // vault-control owns WhatsApp (whatsapp-web.js + LocalAuth). Hardcoding
@@ -56,6 +67,7 @@ module.exports = {
       script: 'gmail_watcher.py',
       args: '--continuous',
       interpreter: 'python3',
+      max_memory_restart: '150M',
       // No DRY_RUN override here: gmail_watcher.py loads .env itself, and the
       // old `process.env.DRY_RUN || 'true'` silently forced dry-run under
       // systemd (where DRY_RUN is not exported) so no email was ever sent.
@@ -67,6 +79,8 @@ module.exports = {
       name: 'email-mcp',
       script: 'email_mcp.js',
       interpreter: 'node',
+      node_args: NODE_ARGS,
+      max_memory_restart: '150M',
       env: {
         NODE_ENV: 'production',
         GMAIL_CREDENTIALS_PATH: path.join(__dirname, 'credentials/credentials.json'),
